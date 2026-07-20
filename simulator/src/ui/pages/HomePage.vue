@@ -113,6 +113,18 @@
               ? t("common:vue.home.profileStatusImported", "Imported")
               : t("common:vue.home.profileStatusNotImported", "Not imported") }}
           </p>
+          <label v-if="importedLoadoutOptions.length > 0" class="mt-2 block">
+            <span class="field-label">{{ t("common:vue.home.loadoutSelectorLabel", "Combat Loadout") }}</span>
+            <select v-model="selectedImportedLoadoutId" class="field-select" @change="handleImportedLoadoutChange">
+              <option value="">{{ t("common:vue.home.loadoutSelectorPlaceholder", "Apply a loadout…") }}</option>
+              <option v-for="entry in importedLoadoutOptions" :key="entry.loadoutId" :value="String(entry.loadoutId)">
+                {{ entry.loadoutName }}
+              </option>
+            </select>
+            <span class="mt-1 block text-xs text-slate-400">
+              {{ t("common:vue.home.loadoutSelectorHint", "Applies the selected loadout to the current player slot.") }}
+            </span>
+          </label>
         </div>
 
         <div class="mb-3 grid gap-3 sm:grid-cols-2" v-if="simulator.simulationSettings.mode === 'zone' && simulator.simulationSettings.runScope === 'single'">
@@ -1140,7 +1152,11 @@ import {
   guildShrineDetailIndex,
   normalizeGuildBuffLevels,
 } from "../../shared/guildBuffs.js";
-import { applyTampermonkeyImportMessage } from "../../services/tampermonkeyImportBridge.js";
+import {
+  applyTampermonkeyImportMessage,
+  applyTampermonkeyLoadoutCollectionMessage,
+  isTampermonkeyLoadoutCollectionMessage,
+} from "../../services/tampermonkeyImportBridge.js";
 import { useSimulatorStore } from "../../stores/simulatorStore.js";
 import { buildCombatPreviewData } from "../../services/playerMapper.js";
 import { calcCombatLevel, EQUIPMENT_SLOT_KEYS, LEVEL_KEYS } from "../../shared/playerConfig.js";
@@ -1821,6 +1837,15 @@ const profileSelectorPlayerId = computed({
   },
 });
 const activeProfileImported = computed(() => simulator.queue?.importedProfileByPlayer?.[simulator.activePlayerId] === true);
+const importedLoadoutOptions = computed(() => simulator.importedCombatLoadouts || []);
+const selectedImportedLoadoutId = ref("");
+function handleImportedLoadoutChange() {
+  const rawValue = String(selectedImportedLoadoutId.value || "");
+  if (!rawValue) {
+    return;
+  }
+  simulator.applyImportedCombatLoadout(Number(rawValue));
+}
 const baselineSnapshot = computed(() => simulator.activeQueueState?.baseline?.snapshot || null);
 const importedBaselineSnapshot = computed(() => simulator.activeImportedBaselineSnapshot || null);
 const levelComparisonBaselineSnapshot = computed(() => importedBaselineSnapshot.value || baselineSnapshot.value || null);
@@ -2681,12 +2706,16 @@ function handleTampermonkeyImportWindowMessage(event) {
   }
 
   try {
-    const result = applyTampermonkeyImportMessage(simulator, data);
+    const result = isTampermonkeyLoadoutCollectionMessage(data)
+      ? applyTampermonkeyLoadoutCollectionMessage(simulator, data)
+      : applyTampermonkeyImportMessage(simulator, data);
     postTampermonkeyImportResult({
       type: "mwi-tm-import-result",
       requestId,
       ok: true,
       detectedFormat: result?.detectedFormat || "",
+      storedCount: result?.storedCount || 0,
+      appliedLoadoutName: result?.appliedLoadoutName || "",
       message: result?.message || "",
     });
   } catch (error) {

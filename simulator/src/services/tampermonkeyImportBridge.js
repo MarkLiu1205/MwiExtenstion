@@ -84,6 +84,44 @@ export function applyTampermonkeyImportMessage(simulator, message) {
     };
 }
 
+export function isTampermonkeyLoadoutCollectionMessage(message) {
+    return Array.isArray(message?.payload?.loadouts);
+}
+
+/**
+ * Store an imported combat-loadout collection and apply the first loadout to
+ * the target player. Loadouts are alternative gear sets for one character, so
+ * only a single player slot is written; the rest stay untouched and the user
+ * switches between loadouts via the loadout selector.
+ */
+export function applyTampermonkeyLoadoutCollectionMessage(simulator, message) {
+    const safeMessage = message && typeof message === "object" ? message : {};
+    const rawLoadouts = Array.isArray(safeMessage.payload?.loadouts) ? safeMessage.payload.loadouts : [];
+    const storedCount = simulator.setImportedCombatLoadouts(rawLoadouts);
+    if (storedCount <= 0) {
+        throw new Error("No combat loadouts were found in the main-site payload.");
+    }
+
+    const candidatePlayerId = String(safeMessage.targetPlayerId || "").trim();
+    const resolvedPlayerId = candidatePlayerId && simulator.players.some((player) => player.id === candidatePlayerId)
+        ? candidatePlayerId
+        : simulator.activePlayerId;
+    const firstLoadout = simulator.importedCombatLoadouts[0];
+    simulator.applyImportedCombatLoadout(firstLoadout.loadoutId, resolvedPlayerId);
+
+    if (resolveActivateAfterImport(safeMessage)) {
+        simulator.setActivePlayer(resolvedPlayerId);
+    }
+
+    return {
+        resolvedPlayerId,
+        detectedFormat: "main-site-combat-loadouts",
+        storedCount,
+        appliedLoadoutName: firstLoadout.loadoutName,
+        message: `Imported ${storedCount} combat loadouts; applied "${firstLoadout.loadoutName}" to player ${resolvedPlayerId}.`,
+    };
+}
+
 /**
  * Apply current main-site character bonuses to the enhancement simulator.
  * Target item, price overrides, and risk settings remain unchanged.

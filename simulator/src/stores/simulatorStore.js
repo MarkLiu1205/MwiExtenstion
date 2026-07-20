@@ -94,6 +94,8 @@ const PLAYER_DATA_SNAPSHOT_STORAGE_KEY = "mwi.player.data.snapshot.v1";
 const PLAYER_DATA_SNAPSHOT_STORAGE_VERSION = 1;
 const PLAYER_ACHIEVEMENTS_STORAGE_KEY = "mwi.player.achievements.v1";
 const PLAYER_ACHIEVEMENTS_STORAGE_VERSION = 1;
+const COMBAT_LOADOUT_IMPORTS_STORAGE_KEY = "mwi.combatLoadoutImports.v1";
+const COMBAT_LOADOUT_IMPORTS_STORAGE_VERSION = 1;
 const QUEUE_PLAYER_IDS = ["1", "2", "3", "4", "5"];
 const QUEUE_PARALLEL_WORKER_LIMIT_MIN = 1;
 const QUEUE_PARALLEL_WORKER_LIMIT_MAX = 64;
@@ -1434,6 +1436,38 @@ function clearPlayerDataSnapshotFromStorage() {
         throw new Error("localStorage unavailable");
     }
     localStorage.removeItem(PLAYER_DATA_SNAPSHOT_STORAGE_KEY);
+}
+
+function sanitizeImportedCombatLoadouts(rawEntries) {
+    if (!Array.isArray(rawEntries)) {
+        return [];
+    }
+    return rawEntries
+        .filter((entry) => entry && typeof entry === "object" && isPlainObject(entry.payload))
+        .map((entry) => ({
+            loadoutId: toFiniteNumber(entry.loadoutId, 0),
+            loadoutName: String(entry.loadoutName || "").trim() || `Loadout ${toFiniteNumber(entry.loadoutId, 0)}`,
+            payload: entry.payload,
+        }));
+}
+
+function loadCombatLoadoutImportsFromStorage() {
+    if (typeof localStorage === "undefined") {
+        return [];
+    }
+    try {
+        const rawValue = localStorage.getItem(COMBAT_LOADOUT_IMPORTS_STORAGE_KEY);
+        if (!rawValue) {
+            return [];
+        }
+        const parsed = JSON.parse(rawValue);
+        if (!isPlainObject(parsed) || parsed.version !== COMBAT_LOADOUT_IMPORTS_STORAGE_VERSION) {
+            return [];
+        }
+        return sanitizeImportedCombatLoadouts(parsed.loadouts);
+    } catch (error) {
+        return [];
+    }
 }
 
 function loadPlayerDataSnapshotFromStorage() {
@@ -4509,6 +4543,7 @@ export const useSimulatorStore = defineStore("simulator", {
         return {
             players: playerList,
             activePlayerId: "1",
+            importedCombatLoadouts: loadCombatLoadoutImportsFromStorage(),
             options: {
                 equipmentBySlot: getEquipmentOptionsBySlot(),
                 food: getConsumableOptions("/item_categories/food"),
@@ -6617,6 +6652,29 @@ export const useSimulatorStore = defineStore("simulator", {
             this.normalizeRunScope();
             this.normalizeDifficulty();
             return result;
+        },
+        setImportedCombatLoadouts(rawEntries) {
+            const loadouts = sanitizeImportedCombatLoadouts(rawEntries);
+            this.importedCombatLoadouts = loadouts;
+            if (typeof localStorage !== "undefined") {
+                try {
+                    localStorage.setItem(COMBAT_LOADOUT_IMPORTS_STORAGE_KEY, JSON.stringify({
+                        version: COMBAT_LOADOUT_IMPORTS_STORAGE_VERSION,
+                        loadouts,
+                    }));
+                } catch (error) {
+                    // 儲存空間不足時僅保留記憶體內的清單，功能仍可用
+                }
+            }
+            return loadouts.length;
+        },
+        applyImportedCombatLoadout(loadoutId, playerId) {
+            const numericLoadoutId = toFiniteNumber(loadoutId, Number.NaN);
+            const entry = this.importedCombatLoadouts.find((loadout) => loadout.loadoutId === numericLoadoutId);
+            if (!entry) {
+                return null;
+            }
+            return this.importSoloConfig(JSON.stringify(entry.payload), playerId || this.activePlayerId);
         },
         setSimulationMode(mode) {
             this.simulationSettings.mode = mode === "labyrinth" ? "labyrinth" : "zone";

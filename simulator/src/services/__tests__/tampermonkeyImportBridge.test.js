@@ -5,6 +5,7 @@ import { createMainSiteShareProfileFixture } from "./fixtures/mainSiteShareProfi
 import {
     applyTampermonkeyEnhancementImportMessage,
     applyTampermonkeyImportMessage,
+    applyTampermonkeyLoadoutCollectionMessage,
     applyTampermonkeySkillingImportMessage,
 } from "../tampermonkeyImportBridge.js";
 import { useSimulatorStore } from "../../stores/simulatorStore.js";
@@ -36,10 +37,72 @@ function createImportMessage(overrides = {}) {
     };
 }
 
+function createLoadoutPayloadFixture(loadoutName) {
+    return {
+        character: { name: loadoutName },
+        characterSkills: [{ skillHrid: "/skills/attack", level: 80, experience: 0 }],
+        characterItems: [
+            { itemHrid: "/items/cheese_sword", itemLocationHrid: "/item_locations/main_hand", enhancementLevel: 5, count: 1 },
+        ],
+    };
+}
+
 describe("tampermonkeyImportBridge", () => {
     beforeEach(() => {
         setActivePinia(createPinia());
         global.localStorage = createLocalStorageMock();
+    });
+
+    it("stores combat loadout collections and applies only the first loadout", () => {
+        const simulator = useSimulatorStore();
+        const result = applyTampermonkeyLoadoutCollectionMessage(simulator, {
+            requestId: "loadouts-1",
+            activateAfterImport: true,
+            payload: {
+                characterName: "Hero",
+                loadouts: [
+                    { loadoutId: 1, loadoutName: "Boss Set", payload: createLoadoutPayloadFixture("Boss Set") },
+                    { loadoutId: 2, loadoutName: "Farm Set", payload: createLoadoutPayloadFixture("Farm Set") },
+                ],
+            },
+        });
+
+        expect(result.storedCount).toBe(2);
+        expect(result.appliedLoadoutName).toBe("Boss Set");
+        expect(result.detectedFormat).toBe("main-site-combat-loadouts");
+        expect(simulator.importedCombatLoadouts).toHaveLength(2);
+        // 只套用到目前玩家欄位，其他欄位不受影響
+        expect(simulator.players[0].name).toBe("Boss Set");
+        expect(simulator.players[1].name).not.toBe("Farm Set");
+
+        // 切換配裝會覆寫同一個玩家欄位
+        simulator.applyImportedCombatLoadout(2);
+        expect(simulator.players[0].name).toBe("Farm Set");
+    });
+
+    it("persists imported loadout collections across store instances", () => {
+        const simulator = useSimulatorStore();
+        applyTampermonkeyLoadoutCollectionMessage(simulator, {
+            requestId: "loadouts-persist",
+            payload: {
+                loadouts: [
+                    { loadoutId: 7, loadoutName: "Saved Set", payload: createLoadoutPayloadFixture("Saved Set") },
+                ],
+            },
+        });
+
+        setActivePinia(createPinia());
+        const reloadedSimulator = useSimulatorStore();
+        expect(reloadedSimulator.importedCombatLoadouts).toHaveLength(1);
+        expect(reloadedSimulator.importedCombatLoadouts[0].loadoutName).toBe("Saved Set");
+    });
+
+    it("rejects loadout collections without any usable loadout", () => {
+        const simulator = useSimulatorStore();
+        expect(() => applyTampermonkeyLoadoutCollectionMessage(simulator, {
+            requestId: "loadouts-empty",
+            payload: { loadouts: [] },
+        })).toThrow();
     });
 
     it("keeps the original active player during multi-slot team imports", () => {

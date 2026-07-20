@@ -1144,9 +1144,8 @@
             payload.character.name = loadoutName;
         }
 
-        // 裝備：移除快照中目前穿戴的裝備，換成配裝 wearableMap 的內容
-        const baseItems = Array.isArray(basePayload.characterItems) ? basePayload.characterItems : [];
-        const inventoryItems = baseItems.filter((item) => String(item?.itemLocationHrid || "") === "/item_locations/inventory");
+        // 裝備：只保留配裝 wearableMap 合成的穿戴清單（模擬器只讀裝備位置的項目，
+        // 不夾帶整個背包可大幅縮小 payload，方便存進 localStorage 供切換）
         const wearableItems = [];
         for (const [slotKey, rawReference] of toPlainEntries(loadout?.wearableMap)) {
             const itemLocationHrid = String(slotKey || "");
@@ -1172,7 +1171,7 @@
                 count: 1,
             });
         }
-        payload.characterItems = [...inventoryItems, ...wearableItems];
+        payload.characterItems = wearableItems;
 
         // 技能：以配裝 abilityMap 取代目前裝備的技能，等級從角色技能資料查詢
         const combatAbilities = [];
@@ -2642,64 +2641,25 @@
 
             setStatusKey("importingSimulator", "idle");
 
-            // 沿用隊伍匯入模式：逐一填入玩家欄位 1~5，超過的略過並提示
-            const targetPlayerIds = [...TEAM_IMPORT_PLAYER_IDS];
-            const importableEntries = loadoutEntries.slice(0, targetPlayerIds.length);
-            const skippedCount = loadoutEntries.length - importableEntries.length;
-            const failureEntries = [];
-            let importedCount = 0;
-            let didClearSlots = false;
-            let didResetSelection = false;
+            // 配裝是同一角色的替換方案，一次只會穿一套：整批交給模擬器儲存，
+            // 只把第一套套用到目前玩家欄位，其餘用頁面上的「戰鬥配裝」下拉選單切換
+            const appRequestId = createRequestId();
+            const appResponse = await importPayloadIntoSimulator(appRequestId, mainSiteResponse.payload, {
+                activateAfterImport: true,
+                format: COMBAT_LOADOUT_IMPORT_FORMAT,
+            });
 
-            for (const entry of importableEntries) {
-                const targetPlayerId = targetPlayerIds[importedCount] || String(importedCount + 1);
-                const appRequestId = createRequestId();
-
-                // eslint-disable-next-line no-await-in-loop
-                const appResponse = await importPayloadIntoSimulator(appRequestId, entry.payload, {
-                    targetPlayerId,
-                    clearPlayerIds: didClearSlots ? [] : targetPlayerIds,
-                    resetTeamSelection: !didResetSelection,
-                    selectAfterImport: true,
-                    activateAfterImport: importedCount === 0,
-                    format: String(entry.format || "main-site-current-character"),
-                });
-
-                if (!appResponse || appResponse.ok !== true) {
-                    failureEntries.push({
-                        name: String(entry.loadoutName || "").trim() || `Loadout ${targetPlayerId}`,
-                        message: String(appResponse?.message || "").trim() || getUiText("simulatorImportFailed", state.uiLanguage),
-                    });
-                    continue;
-                }
-
-                didClearSlots = true;
-                didResetSelection = true;
-                importedCount += 1;
+            if (!appResponse || appResponse.ok !== true) {
+                throw new Error(String(appResponse?.message || "").trim() || getUiText("simulatorImportFailed", state.uiLanguage));
             }
 
-            if (importedCount <= 0) {
-                const firstFailure = failureEntries[0];
-                throw new Error(firstFailure ? `${firstFailure.name}: ${firstFailure.message}` : getUiText("importFailed", state.uiLanguage));
-            }
-
-            const messageParts = [];
+            const storedCount = Number(appResponse.storedCount) || loadoutEntries.length;
+            const appliedLoadoutName = String(appResponse.appliedLoadoutName || loadoutEntries[0]?.loadoutName || "").trim();
             if (state.uiLanguage === "zh") {
-                messageParts.push(`已匯入 ${importedCount} 個配裝。`);
-                if (skippedCount > 0) {
-                    messageParts.push(`（配裝超過 ${targetPlayerIds.length} 個，略過 ${skippedCount} 個）`);
-                }
+                setStatus(`已匯入 ${storedCount} 個配裝，已套用「${appliedLoadoutName}」；可用角色欄位旁的「戰鬥配裝」下拉選單切換。`, "success");
             } else {
-                messageParts.push(`Imported ${importedCount} loadout${importedCount === 1 ? "" : "s"}.`);
-                if (skippedCount > 0) {
-                    messageParts.push(`(${skippedCount} skipped beyond ${targetPlayerIds.length} player slots)`);
-                }
+                setStatus(`Imported ${storedCount} loadouts; applied "${appliedLoadoutName}". Switch via the Combat Loadout selector.`, "success");
             }
-            const failureSummary = formatTeamImportSummary(importedCount, failureEntries);
-            if (failureSummary) {
-                messageParts.push(failureSummary);
-            }
-            setStatus(messageParts.join(" "), failureEntries.length > 0 ? "error" : "success");
         }
 
         async function handleLoadoutButtonClick() {
