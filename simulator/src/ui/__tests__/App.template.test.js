@@ -41,15 +41,10 @@ describe("App header support links", () => {
         expect(appSource).not.toContain('{{ t("common:controls.darkMode", "Dark Mode") }}: {{ themeLabel }}');
     });
 
-    it("renders the language switcher as a single compact button", () => {
-        expect(appSource).toContain('class="action-button-muted header-compact-button"');
-        expect(appSource).toContain(':aria-label="languageToggleAriaLabel"');
-        expect(appSource).toContain(':title="languageToggleAriaLabel"');
-        expect(appSource).toContain('{{ languageToggleLabel }}');
-        expect(appSource).toContain('t("common:vue.app.switchToEnglish", "Switch to English")');
-        expect(appSource).toContain('t("common:vue.app.switchToChinese", "Switch to Chinese")');
-        expect(appSource).not.toContain("@click=\"switchLanguage('en')\"");
-        expect(appSource).not.toContain("@click=\"switchLanguage('zh')\"");
+    it("does not render a language switcher (site is locked to Traditional Chinese)", () => {
+        expect(appSource).not.toContain("languageToggleLabel");
+        expect(appSource).not.toContain("languageToggleAriaLabel");
+        expect(appSource).not.toContain("switchLanguage");
     });
 
     it("renders a baseline reminder modal before running topbar baseline", () => {

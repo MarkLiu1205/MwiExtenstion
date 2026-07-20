@@ -16,7 +16,7 @@ afterAll(() => {
 });
 
 describe("official i18n snapshot integration", () => {
-    it("initializes both namespaces and switches between exact official names", async () => {
+    it("initializes both namespaces with Traditional Chinese as the only locale", async () => {
         const { initI18n } = await import("../i18n.js");
         const i18next = await initI18n();
 
@@ -24,9 +24,5 @@ describe("official i18n snapshot integration", () => {
         expect(i18next.t("translation:itemNames./items/gatherer_cape")).toBe("採集者披風");
         expect(i18next.t("translation:itemNames./items/gatherer_cape_refined")).toBe("採集者披風 ★");
         expect(i18next.t("common:menu.enhancement")).toBe("強化模擬");
-
-        await i18next.changeLanguage("en");
-        expect(i18next.t("translation:itemNames./items/gatherer_cape")).toBe("Gatherer Cape");
-        expect(i18next.t("common:menu.enhancement")).toBe("Enhancement");
     });
 });

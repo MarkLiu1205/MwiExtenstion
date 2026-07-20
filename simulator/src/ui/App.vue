@@ -85,15 +85,6 @@
               </svg>
               <span class="sr-only">{{ themeToggleAriaLabel }}</span>
             </button>
-            <button
-              type="button"
-              class="action-button-muted header-compact-button"
-              :aria-label="languageToggleAriaLabel"
-              :title="languageToggleAriaLabel"
-              @click="switchLanguage(languageToggleTarget)"
-            >
-              {{ languageToggleLabel }}
-            </button>
           </div>
         </div>
 
@@ -428,7 +419,7 @@ const topQueueActionStatus = ref({
   tone: "secondary",
   text: "",
 });
-const { language, setLanguage, t } = useI18nText();
+const { language, t } = useI18nText();
 const {
   getAbilityName,
   getActionName,
@@ -448,17 +439,6 @@ const themeToggleAriaLabel = computed(() => (
   theme.value === "dark"
     ? t("common:vue.app.switchToLightTheme", "Switch to light mode")
     : t("common:vue.app.switchToDarkTheme", "Switch to dark mode")
-));
-const languageToggleTarget = computed(() => (
-  language.value === "zh" ? "en" : "zh"
-));
-const languageToggleLabel = computed(() => (
-  language.value === "zh" ? "EN" : "中文"
-));
-const languageToggleAriaLabel = computed(() => (
-  language.value === "zh"
-    ? t("common:vue.app.switchToEnglish", "Switch to English")
-    : t("common:vue.app.switchToChinese", "Switch to Chinese")
 ));
 
 const activeQueueState = computed(() => simulator.activeQueueState || null);
@@ -944,8 +924,4 @@ watch(
   },
 );
 
-async function switchLanguage(nextLanguage) {
-  await setLanguage(nextLanguage);
-  simulator.setLanguage(nextLanguage);
-}
 </script>

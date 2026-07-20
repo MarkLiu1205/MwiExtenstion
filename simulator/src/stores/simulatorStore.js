@@ -4608,7 +4608,7 @@ export const useSimulatorStore = defineStore("simulator", {
             pricing: createPricingState(),
             abilityUpgradeReferenceVersion: 0,
             ui: {
-                language: localStorage.getItem("i18nextLng") || "en",
+                language: "zh",
             },
         };
     },

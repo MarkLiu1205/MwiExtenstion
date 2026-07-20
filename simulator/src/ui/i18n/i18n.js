@@ -1,6 +1,4 @@
 import i18next from "i18next";
-import enCommon from "../../../locales/en/common.json";
-import enTranslation from "../../../locales/en/translation.official.generated.json";
 import zhCommon from "../../../locales/zh/common.json";
 import zhTranslation from "../../../locales/zh/translation.official.generated.json";
 
@@ -11,13 +9,11 @@ export async function initI18n() {
         return i18next;
     }
 
-    const storedLanguage = localStorage.getItem("i18nextLng");
-    // 預設繁體中文（zh 語系檔已在本地轉為繁體）；使用者切換過語言則尊重其選擇
-    const initialLanguage = storedLanguage === "zh" || storedLanguage === "en" ? storedLanguage : "zh";
-
+    // 網站鎖定繁體中文，只打包 zh 資源；
+    // locales/en/ 檔案保留在 repo 供上游同步工具與鍵名對照測試使用，不會進入網站
     await i18next.init({
-        lng: initialLanguage,
-        fallbackLng: "en",
+        lng: "zh",
+        fallbackLng: "zh",
         debug: false,
         showSupportNotice: false,
         interpolation: {
@@ -27,10 +23,6 @@ export async function initI18n() {
         defaultNS: "common",
         fallbackNS: ["translation"],
         resources: {
-            en: {
-                common: enCommon,
-                translation: enTranslation,
-            },
             zh: {
                 common: zhCommon,
                 translation: zhTranslation,
