@@ -747,6 +747,12 @@
     "advisor": {
         "eyebrow": "Advisor",
         "title": "Farm Advisor",
+        "tierMin": "Min Difficulty Tier",
+        "tierMax": "Max Difficulty Tier",
+        "zoneFilterTitle": "Zone filter",
+        "zoneFilterHint": "No zones checked = scan all zones.",
+        "zoneFilterClear": "Clear selection",
+        "zoneFilterGroupTag": "Group",
         "desc": "Use your current team, buffs, achievements, housing, pricing, and run duration to rank the best farming targets across solo zones and group zones.",
         "scoreExplainTitle": "How the Composite Score and Confidence are computed",
         "scoreExplainCompositeHeading": "How is the composite score computed?",

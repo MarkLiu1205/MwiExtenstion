@@ -2160,9 +2160,20 @@ function createQueuePartySnapshot(players = [], activePlayerId = "1") {
 
 function normalizeAdvisorFilters(rawFilters = {}) {
     const source = isPlainObject(rawFilters) ? rawFilters : {};
+    const minDifficultyTier = clamp(Math.floor(toFiniteNumber(source.minDifficultyTier, 0)), 0, 5);
+    const maxDifficultyTier = Math.max(
+        minDifficultyTier,
+        clamp(Math.floor(toFiniteNumber(source.maxDifficultyTier, 5)), 0, 5)
+    );
     return {
         includeGroupZones: source.includeGroupZones !== false,
         includeSoloZones: Boolean(source.includeSoloZones),
+        minDifficultyTier,
+        maxDifficultyTier,
+        // 空陣列＝不限制區域（掃描全部）
+        selectedZoneHrids: Array.isArray(source.selectedZoneHrids)
+            ? Array.from(new Set(source.selectedZoneHrids.map((hrid) => String(hrid || "")).filter(Boolean)))
+            : [],
         refineTopEnabled: source.refineTopEnabled !== false,
         refineTopCount: clamp(
             Math.floor(toFiniteNumber(source.refineTopCount, ADVISOR_REFINE_TOP_COUNT_DEFAULT)),
@@ -2291,17 +2302,28 @@ function buildAdvisorCandidates(filters = {}) {
     const candidates = [];
     let order = 0;
 
+    const isTierAllowed = (zoneTarget) => {
+        const tier = Math.max(0, Math.floor(toFiniteNumber(zoneTarget?.difficultyTier, 0)));
+        return tier >= normalizedFilters.minDifficultyTier && tier <= normalizedFilters.maxDifficultyTier;
+    };
+
     if (normalizedFilters.includeSoloZones) {
-        const soloTargets = buildZoneTargetsByScope(RUN_SCOPE_ALL_SOLO_ZONES);
+        const soloTargets = buildZoneTargetsByScope(RUN_SCOPE_ALL_SOLO_ZONES, normalizedFilters.selectedZoneHrids);
         for (const zoneTarget of soloTargets) {
+            if (!isTierAllowed(zoneTarget)) {
+                continue;
+            }
             candidates.push(createAdvisorZoneCandidate(zoneTarget, "solo_zone", order));
             order += 1;
         }
     }
 
     if (normalizedFilters.includeGroupZones) {
-        const groupTargets = buildZoneTargetsByScope(RUN_SCOPE_ALL_GROUP_ZONES);
+        const groupTargets = buildZoneTargetsByScope(RUN_SCOPE_ALL_GROUP_ZONES, normalizedFilters.selectedZoneHrids);
         for (const zoneTarget of groupTargets) {
+            if (!isTierAllowed(zoneTarget)) {
+                continue;
+            }
             candidates.push(createAdvisorZoneCandidate(zoneTarget, "group_zone", order));
             order += 1;
         }

@@ -150,7 +150,49 @@
                 <span class="field-label">{{ t("common:advisor.quickRounds", "Quick Rounds") }}</span>
                 <input v-model.number="filterDraft.quickRounds" type="number" min="1" max="10" class="field-input" />
               </label>
+              <label class="block">
+                <span class="field-label">{{ t("common:advisor.tierMin", "Min Difficulty Tier") }}</span>
+                <input v-model.number="filterDraft.minDifficultyTier" type="number" min="0" max="5" class="field-input" />
+              </label>
+              <label class="block">
+                <span class="field-label">{{ t("common:advisor.tierMax", "Max Difficulty Tier") }}</span>
+                <input v-model.number="filterDraft.maxDifficultyTier" type="number" min="0" max="5" class="field-input" />
+              </label>
             </div>
+
+            <DisclosurePanel :title="`${t('common:advisor.zoneFilterTitle', 'Zone filter')}${selectedZoneCount > 0 ? ` (${selectedZoneCount})` : ''}`">
+              <div class="space-y-2 text-xs text-slate-300">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <span class="text-slate-400">{{ t("common:advisor.zoneFilterHint", "No zones checked = scan all zones.") }}</span>
+                  <button
+                    type="button"
+                    class="action-button-muted !px-2 !py-1"
+                    :disabled="selectedZoneCount === 0"
+                    @click="clearZoneSelection"
+                  >
+                    {{ t("common:advisor.zoneFilterClear", "Clear selection") }}
+                  </button>
+                </div>
+                <div class="grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
+                  <label
+                    v-for="zone in zoneFilterOptions"
+                    :key="zone.hrid"
+                    class="flex items-center gap-2 rounded-lg border border-white/5 bg-slate-950/30 px-2 py-1.5"
+                  >
+                    <input
+                      type="checkbox"
+                      class="accent-amber-300"
+                      :checked="isZoneSelected(zone.hrid)"
+                      @change="toggleZoneSelection(zone.hrid)"
+                    />
+                    <span class="truncate">{{ zone.label }}</span>
+                    <span v-if="zone.isGroup" class="ml-auto shrink-0 rounded-full border border-amber-300/30 bg-amber-300/10 px-1.5 text-[10px] text-amber-200">
+                      {{ t("common:advisor.zoneFilterGroupTag", "Group") }}
+                    </span>
+                  </label>
+                </div>
+              </div>
+            </DisclosurePanel>
           </div>
         </div>
 
@@ -312,7 +354,7 @@
 <script setup>
  import { computed, reactive, ref, watch } from "vue";
  import { useRouter } from "vue-router";
- import { actionDetailIndex as actionDetailMap } from "../../shared/gameDataIndex.js";
+ import { actionDetailIndex as actionDetailMap, groupZoneHrids, zoneOptions } from "../../shared/gameDataIndex.js";
 import { formatAdvisorCompactValue, formatAdvisorDailyProfitValue } from "../../services/advisorFormatting.js";
 import { useSimulatorStore } from "../../stores/simulatorStore.js";
 import {
@@ -400,7 +442,38 @@ const filterDraft = reactive({
   refineTopCount: 8,
   refineRounds: 20,
   quickRounds: 3,
+  minDifficultyTier: 0,
+  maxDifficultyTier: 5,
+  selectedZoneHrids: [],
 });
+
+const groupZoneHridSet = new Set(groupZoneHrids);
+const zoneFilterOptions = computed(() => zoneOptions
+  .slice()
+  .sort((a, b) => Number(a.sortIndex ?? 0) - Number(b.sortIndex ?? 0))
+  .map((zone) => ({
+    hrid: zone.hrid,
+    label: getActionName(zone.hrid, zone.name),
+    isGroup: groupZoneHridSet.has(zone.hrid),
+  })));
+const selectedZoneCount = computed(() => filterDraft.selectedZoneHrids.length);
+
+function isZoneSelected(zoneHrid) {
+  return filterDraft.selectedZoneHrids.includes(zoneHrid);
+}
+
+function toggleZoneSelection(zoneHrid) {
+  const index = filterDraft.selectedZoneHrids.indexOf(zoneHrid);
+  if (index >= 0) {
+    filterDraft.selectedZoneHrids.splice(index, 1);
+  } else {
+    filterDraft.selectedZoneHrids.push(zoneHrid);
+  }
+}
+
+function clearZoneSelection() {
+  filterDraft.selectedZoneHrids.splice(0, filterDraft.selectedZoneHrids.length);
+}
 
  const customWeightDraft = reactive({
    profitPerHour: 0.484615,
@@ -432,6 +505,11 @@ function syncFilterDraft(source) {
   filterDraft.refineTopCount = Number(safeSource.refineTopCount ?? filterDraft.refineTopCount);
   filterDraft.refineRounds = Number(safeSource.refineRounds ?? filterDraft.refineRounds);
   filterDraft.quickRounds = Number(safeSource.quickRounds ?? filterDraft.quickRounds);
+  filterDraft.minDifficultyTier = Number(safeSource.minDifficultyTier ?? filterDraft.minDifficultyTier ?? 0);
+  filterDraft.maxDifficultyTier = Number(safeSource.maxDifficultyTier ?? filterDraft.maxDifficultyTier ?? 5);
+  if (Array.isArray(safeSource.selectedZoneHrids)) {
+    filterDraft.selectedZoneHrids.splice(0, filterDraft.selectedZoneHrids.length, ...safeSource.selectedZoneHrids);
+  }
 }
 
  watch(

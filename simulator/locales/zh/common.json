@@ -746,6 +746,12 @@
     "advisor": {
         "eyebrow": "推薦器",
         "title": "刷圖推薦器",
+        "tierMin": "最低難度階級",
+        "tierMax": "最高難度階級",
+        "zoneFilterTitle": "區域過濾",
+        "zoneFilterHint": "不勾選任何區域＝掃描全部區域。",
+        "zoneFilterClear": "清除勾選",
+        "zoneFilterGroupTag": "組隊",
         "desc": "基於當前隊伍、Buff、成就、房屋、價格與模擬時長，自動對單刷區域和星球區域進行刷圖推薦排序。",
         "scoreExplainTitle": "評分說明：綜合分與置信度怎麼算",
         "scoreExplainCompositeHeading": "綜合分怎麼算？",
