@@ -1,0 +1,8 @@
+# 殼腳本內含機器絕對路徑，由 GenerateStubs.js 產生，不進版控
+tampermonkey-stubs/
+
+# 上 git 前的手動備份，已由 git 歷史取代
+backup-*/
+
+.DS_Store
+node_modules/
