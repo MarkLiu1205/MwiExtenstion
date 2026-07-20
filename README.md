@@ -2,6 +2,12 @@
 
 [MilkyWayIdle](https://www.milkywayidle.com/) 的 Tampermonkey 腳本集合，基於上游版本加上本地補丁（效能優化、繁體相容、錯誤修復）。
 
+> ## ⚠️ 原始專案聲明
+>
+> 本 repo 的**戰鬥模擬器（`simulator/`）基於開源專案 [azhu949/MWICombatSimulator](https://github.com/azhu949/MWICombatSimulator)**（其上游為 [AmVoidGuy/MWICombatSimulator](https://github.com/AmVoidGuy/MWICombatSimulator)，MIT 授權）。
+> 本 repo 僅做繁體中文化與個人化功能調整，模擬器核心邏輯的功勞歸原作者所有。
+> 各 Tampermonkey 腳本亦源自各自的上游作者（見各腳本標頭的 `@author` 與 GreasyFork 連結）。
+
 ## 腳本一覽
 
 | 檔案 | 用途 |

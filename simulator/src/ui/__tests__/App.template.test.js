@@ -16,20 +16,14 @@ describe("App header support links", () => {
         expect(appSource).toContain("common:menu.skilling");
     });
 
-    it("renders GitHub and feedback entry points in the header", () => {
-        expect(appSource).toContain("https://github.com/azhu949/MWICombatSimulator");
+    it("renders the fork's GitHub link and no feedback entry point", () => {
+        expect(appSource).toContain("https://github.com/MarkLiu1205/MwiExtenstion");
+        expect(appSource).not.toContain("https://github.com/azhu949/MWICombatSimulator");
         expect(appSource).not.toContain("__REPOSITORY_URL__");
-        expect(appSource).toContain('t("common:vue.app.feedback", "Feedback")');
         expect(appSource).toContain('t("common:vue.app.feedbackGitHubAriaLabel", "GitHub Repository")');
-    });
-
-    it("renders feedback modal contact details", () => {
-        expect(appSource).toContain("993488247");
-        expect(appSource).toContain("mailto:596846069@qq.com");
-        expect(appSource).toContain("copyFeedbackContact");
-        expect(appSource).toContain('t("common:vue.app.feedbackHint", "Use the following channels for feedback, bug reports, or suggestions.")');
-        expect(appSource).toContain('t("common:vue.app.feedbackQqLabel", "QQ Group")');
-        expect(appSource).toContain('t("common:vue.app.feedbackEmailLabel", "QQ Email")');
+        expect(appSource).not.toContain("openFeedbackModal");
+        expect(appSource).not.toContain("copyFeedbackContact");
+        expect(appSource).not.toContain("993488247");
     });
 
     it("renders the theme toggle as an icon button with accessible labels", () => {

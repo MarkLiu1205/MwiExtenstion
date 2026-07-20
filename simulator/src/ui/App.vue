@@ -32,7 +32,7 @@
               </span>
             </button>
             <a
-              href="https://github.com/azhu949/MWICombatSimulator"
+              href="https://github.com/MarkLiu1205/MwiExtenstion"
               class="action-button-muted header-icon-link"
               :aria-label="t('common:vue.app.feedbackGitHubAriaLabel', 'GitHub Repository')"
               :title="t('common:vue.app.feedbackGitHubAriaLabel', 'GitHub Repository')"
@@ -46,9 +46,6 @@
               </svg>
               <span class="sr-only">{{ t("common:vue.app.feedbackGitHubAriaLabel", "GitHub Repository") }}</span>
             </a>
-            <button type="button" class="action-button-muted" @click="openFeedbackModal">
-              {{ t("common:vue.app.feedback", "Feedback") }}
-            </button>
             <button
               type="button"
               class="action-button-muted header-icon-button"
@@ -221,43 +218,6 @@
     </BaseModal>
 
     <BaseModal
-      :open="feedbackModalOpen"
-      :title="t('common:vue.app.feedback', 'Feedback')"
-      initial-focus-selector="[data-feedback-copy]"
-      @close="closeFeedbackModal"
-    >
-      <div class="space-y-3">
-        <p class="text-sm text-slate-300">
-          {{ t("common:vue.app.feedbackHint", "Use the following channels for feedback, bug reports, or suggestions.") }}
-        </p>
-
-        <div class="feedback-contact-list">
-          <div class="feedback-contact-row">
-            <div class="min-w-0">
-              <p class="feedback-contact-label">{{ t("common:vue.app.feedbackQqLabel", "QQ Group") }}</p>
-              <p class="feedback-contact-value">993488247</p>
-            </div>
-            <button type="button" class="action-button-muted text-xs" data-feedback-copy @click="copyFeedbackContact('993488247')">
-              {{ t("common:vue.common.copy", "Copy") }}
-            </button>
-          </div>
-
-          <div class="feedback-contact-row">
-            <div class="min-w-0">
-              <p class="feedback-contact-label">{{ t("common:vue.app.feedbackEmailLabel", "QQ Email") }}</p>
-              <a class="feedback-contact-link" href="mailto:596846069@qq.com">596846069@qq.com</a>
-            </div>
-            <button type="button" class="action-button-muted text-xs" @click="copyFeedbackContact('596846069@qq.com')">
-              {{ t("common:vue.common.copy", "Copy") }}
-            </button>
-          </div>
-        </div>
-
-        <p class="text-xs text-slate-400">{{ feedbackCopyStatus }}</p>
-      </div>
-    </BaseModal>
-
-    <BaseModal
       :open="patchNotesModalOpen"
       :title="t('common:patchNotes', 'Patch Notes')"
       panel-class="max-w-[96vw] xl:max-w-[1100px]"
@@ -415,8 +375,6 @@ let deferredInitHandle = null;
 const globalErrorModalOpen = ref(false);
 const globalErrorText = ref("");
 const errorCopyStatus = ref("");
-const feedbackModalOpen = ref(false);
-const feedbackCopyStatus = ref("");
 const simulationCompleteModalOpen = ref(false);
 const queueCompleteModalOpen = ref(false);
 const baselineReminderModalOpen = ref(false);
@@ -771,30 +729,6 @@ async function copyGlobalError() {
     errorCopyStatus.value = t("common:vue.app.globalErrorCopied", "Copied.");
   } catch (error) {
     errorCopyStatus.value = t("common:vue.app.globalErrorCopyFailed", "Copy failed.");
-  }
-}
-
-function openFeedbackModal() {
-  feedbackModalOpen.value = true;
-  feedbackCopyStatus.value = "";
-}
-
-function closeFeedbackModal() {
-  feedbackModalOpen.value = false;
-  feedbackCopyStatus.value = "";
-}
-
-async function copyFeedbackContact(value) {
-  const text = String(value || "").trim();
-  if (!text) {
-    return;
-  }
-
-  try {
-    await navigator.clipboard.writeText(text);
-    feedbackCopyStatus.value = t("common:vue.app.globalErrorCopied", "Copied.");
-  } catch (error) {
-    feedbackCopyStatus.value = t("common:vue.app.globalErrorCopyFailed", "Copy failed.");
   }
 }
 
