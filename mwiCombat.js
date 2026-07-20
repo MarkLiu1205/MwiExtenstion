@@ -37,6 +37,9 @@
     const LOADOUT_BUTTON_ID = "mwi-tm-import-loadouts-button";
     const CONTROL_ID = "mwi-tm-import-control";
     const STATUS_ID = "mwi-tm-import-status";
+    const SKILLING_CONTROL_ID = "mwi-tm-skilling-import-control";
+    const SKILLING_BUTTON_ID = "mwi-tm-skilling-import-button";
+    const SKILLING_STATUS_ID = "mwi-tm-skilling-import-status";
     const TEAM_ROSTER_CACHE_KEY = "mwi.tm.import.teamRosterCache.v1";
     const PROFILE_CACHE_KEY = "mwi.tm.import.profileCache.v1";
     const DEBUG_STORAGE_KEY = "mwi.tm.import.debug";
@@ -137,6 +140,14 @@
         "actionTypeDrinkSlotsMap",
         "consumableCombatTriggersMap",
         "abilityCombatTriggersMap",
+        // 生活技能推薦器匯入需要的加成資料（訊息裡存在才會被擷取，缺少不影響戰鬥匯入）
+        "houseActionTypeBuffsMap",
+        "communityActionTypeBuffsMap",
+        "achievementActionTypeBuffsMap",
+        "personalActionTypeBuffsMap",
+        "mooPassActionTypeBuffsMap",
+        "characterGuildBuffMap",
+        "guildBuildingLevelMap",
     ];
     const REQUIRED_CURRENT_CHARACTER_SNAPSHOT_KEYS = [
         "character",
@@ -2374,6 +2385,24 @@
                 loadoutButton.textContent = getUiText("loadoutButton", state.uiLanguage);
                 loadoutButton.disabled = state.isRequestPending;
             }
+            renderSkillingControlState();
+        }
+
+        function renderSkillingControlState() {
+            const skillingButton = document.getElementById(SKILLING_BUTTON_ID);
+            const skillingStatus = document.getElementById(SKILLING_STATUS_ID);
+            if (!skillingButton || !skillingStatus) {
+                return;
+            }
+
+            skillingButton.textContent = getUiText("button", state.uiLanguage);
+            skillingButton.disabled = state.isRequestPending;
+            skillingStatus.textContent = state.statusTextKey
+                ? getUiText(state.statusTextKey, state.uiLanguage)
+                : String(state.statusText || "");
+            skillingStatus.className = state.statusTone === "error"
+                ? "text-xs text-rose-300"
+                : (state.statusTone === "success" ? "text-xs text-teal-200" : "text-xs text-cyan-200");
         }
 
         function setStatus(text, tone = "idle") {
@@ -2406,6 +2435,18 @@
                 requestId,
                 createdAt: Date.now(),
                 target: "auto",
+                language: state.uiLanguage,
+            });
+
+            return waitForSharedValue(RESPONSE_KEY, requestId, REQUEST_TIMEOUT_MS);
+        }
+
+        async function requestMainSiteCurrentCharacter(requestId) {
+            GM_setValue(REQUEST_KEY, {
+                version: 2,
+                requestId,
+                createdAt: Date.now(),
+                target: "current",
                 language: state.uiLanguage,
             });
 
@@ -2682,6 +2723,69 @@
             }
         }
 
+        // 生活技能推薦器頁：匯入完整角色資料（技能、全部裝備、每技能茶飲與各項加成）。
+        // 推薦器把所有持有裝備當成裝備池自動為每個技能挑選，因此不需要逐配裝匯入
+        async function handleSkillingImportButtonClick() {
+            if (state.isRequestPending) {
+                return;
+            }
+
+            const requestId = createRequestId();
+            state.isRequestPending = true;
+            setStatusKey("waitingMainSite", "idle");
+
+            try {
+                const mainSiteResponse = await requestMainSiteCurrentCharacter(requestId);
+                if (!mainSiteResponse || mainSiteResponse.ok !== true || !mainSiteResponse.payload) {
+                    throw new Error(mainSiteResponse?.message || getUiText("noMainSiteData", state.uiLanguage));
+                }
+
+                setStatusKey("importingSimulator", "idle");
+                const appResponse = await importPayloadIntoSimulator(requestId, mainSiteResponse.payload, {
+                    importTarget: "skilling",
+                    format: String(mainSiteResponse?.format || "main-site-current-character"),
+                });
+                if (!appResponse || appResponse.ok !== true) {
+                    throw new Error(appResponse?.message || getUiText("simulatorImportFailed", state.uiLanguage));
+                }
+
+                setStatusKey("importSuccess", "success");
+            } catch (error) {
+                setStatus(normalizeErrorMessage(error, getUiText("importFailed", state.uiLanguage)), "error");
+            } finally {
+                state.isRequestPending = false;
+                renderControlState();
+            }
+        }
+
+        function mountSkillingImportControl() {
+            const actionBar = document.querySelector('[data-tm-import-anchor="skilling-actions"]');
+            if (!actionBar || document.getElementById(SKILLING_CONTROL_ID)) {
+                return;
+            }
+
+            const wrapper = document.createElement("span");
+            wrapper.id = SKILLING_CONTROL_ID;
+            wrapper.className = "inline-flex items-center gap-2";
+
+            const button = document.createElement("button");
+            button.id = SKILLING_BUTTON_ID;
+            button.type = "button";
+            button.textContent = getUiText("button", state.uiLanguage);
+            button.className = "action-button-tool";
+            button.addEventListener("click", handleSkillingImportButtonClick);
+
+            const status = document.createElement("span");
+            status.id = SKILLING_STATUS_ID;
+            status.className = "text-xs text-cyan-200";
+            status.textContent = "";
+
+            wrapper.appendChild(button);
+            wrapper.appendChild(status);
+            actionBar.appendChild(wrapper);
+            renderSkillingControlState();
+        }
+
         function mountImportControl() {
             const actionBar = document.querySelector('[data-tm-import-anchor="simulator-home-actions"]');
             if (!actionBar) {
@@ -2733,10 +2837,12 @@
         function startObserving() {
             const observer = new MutationObserver(() => {
                 mountImportControl();
+                mountSkillingImportControl();
             });
 
             function attachObserver() {
                 mountImportControl();
+                mountSkillingImportControl();
                 window.setInterval(() => {
                     syncControlLanguage();
                 }, 500);

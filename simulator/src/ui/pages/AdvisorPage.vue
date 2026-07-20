@@ -56,6 +56,18 @@
             >
               {{ t("common:advisor.stop", "Stop Advisor") }}
             </button>
+            <label v-if="importedLoadoutOptions.length > 0" class="block">
+              <span class="field-label">{{ t("common:vue.home.loadoutSelectorLabel", "Combat Loadout") }}</span>
+              <select v-model="selectedImportedLoadoutId" class="field-select" :disabled="isRunning" @change="handleImportedLoadoutChange">
+                <option value="">{{ t("common:vue.home.loadoutSelectorPlaceholder", "Apply a loadout…") }}</option>
+                <option v-for="entry in importedLoadoutOptions" :key="entry.loadoutId" :value="String(entry.loadoutId)">
+                  {{ entry.loadoutName }}
+                </option>
+              </select>
+              <span class="mt-1 block text-xs text-slate-400">
+                {{ t("common:vue.home.loadoutSelectorHint", "Applies the selected loadout to the current player slot.") }}
+              </span>
+            </label>
             <div class="rounded-2xl border border-amber-300/20 bg-gradient-to-br from-amber-300/15 via-amber-300/5 to-transparent p-3 text-xs text-slate-300">
               <div class="flex items-center justify-between gap-2">
                 <span class="uppercase tracking-[0.14em] text-amber-200">{{ t("common:advisor.progress", "Progress") }}</span>
@@ -320,6 +332,16 @@ import DisclosurePanel from "../components/DisclosurePanel.vue";
  const { t } = useI18nText();
  const { getActionName } = useGameDataText();
  const applyStatus = ref("");
+
+const importedLoadoutOptions = computed(() => simulator.importedCombatLoadouts || []);
+const selectedImportedLoadoutId = ref("");
+function handleImportedLoadoutChange() {
+  const rawValue = String(selectedImportedLoadoutId.value || "");
+  if (!rawValue) {
+    return;
+  }
+  simulator.applyImportedCombatLoadout(Number(rawValue));
+}
 
 const metricValueClass = "inline-flex items-center rounded-full border border-transparent px-2.5 py-1 tabular-nums";
 
