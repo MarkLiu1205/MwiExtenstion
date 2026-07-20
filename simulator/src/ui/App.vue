@@ -186,7 +186,15 @@
                 <div class="h-full bg-gradient-to-r from-teal-400 to-amber-300 transition-all" :style="{ width: `${Math.floor(simulator.runtime.progress * 100)}%` }"></div>
               </div>
               <div v-if="simulator.runtime.error" class="flex flex-wrap items-center gap-2">
-                <p class="text-sm text-rose-300">{{ simulator.runtime.error }}</p>
+                <p class="text-sm text-rose-300">{{ runtimeErrorText }}</p>
+                <button
+                  v-if="isAdvisorRunningError"
+                  type="button"
+                  class="action-button-danger text-xs"
+                  @click="forceStopAdvisorScan"
+                >
+                  {{ t("common:vue.app.forceStopAdvisor", "Force stop advisor scan") }}
+                </button>
                 <button type="button" class="action-button-muted text-xs" @click="openGlobalError('runtime', simulator.runtime.error)">
                   {{ t("common:vue.app.viewErrorDetails", "Details") }}
                 </button>
@@ -476,6 +484,18 @@ const baselineReminderCurrentRoundsText = computed(() => (
   )
 ));
 const showRuntimeSummary = computed(() => Boolean(simulator.runtime.isRunning || simulator.runtime.error));
+// store 端的守衛訊息是固定英文字串，用完整比對辨識後在畫面上以繁中顯示並附上強制停止按鈕
+const ADVISOR_RUNNING_ERROR_TEXT = "Advisor scan is in progress. Stop the advisor scan before starting a manual simulation.";
+const isAdvisorRunningError = computed(() => String(simulator.runtime.error || "").trim() === ADVISOR_RUNNING_ERROR_TEXT);
+const runtimeErrorText = computed(() => (
+  isAdvisorRunningError.value
+    ? t("common:vue.app.advisorRunningError", "Advisor scan is in progress. Force-stop it or wait for it to finish before starting a manual simulation.")
+    : simulator.runtime.error
+));
+function forceStopAdvisorScan() {
+  simulator.stopAdvisorScan();
+  simulator.runtime.error = "";
+}
 const activeQueueProgressText = computed(() => {
   const progress = Number(activeQueueState.value?.progress || 0);
   if (!Number.isFinite(progress)) {

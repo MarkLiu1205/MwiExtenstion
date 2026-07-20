@@ -2158,6 +2158,10 @@ function createQueuePartySnapshot(players = [], activePlayerId = "1") {
     };
 }
 
+function getAllAdvisorZoneHrids() {
+    return zoneOptions.map((zone) => String(zone?.hrid || "")).filter(Boolean);
+}
+
 function normalizeAdvisorFilters(rawFilters = {}) {
     const source = isPlainObject(rawFilters) ? rawFilters : {};
     const minDifficultyTier = clamp(Math.floor(toFiniteNumber(source.minDifficultyTier, 0)), 0, 5);
@@ -2170,10 +2174,10 @@ function normalizeAdvisorFilters(rawFilters = {}) {
         includeSoloZones: Boolean(source.includeSoloZones),
         minDifficultyTier,
         maxDifficultyTier,
-        // 空陣列＝不限制區域（掃描全部）
+        // 預設全部勾選；勾選的區域才會掃描，全部取消勾選＝沒有掃描目標
         selectedZoneHrids: Array.isArray(source.selectedZoneHrids)
             ? Array.from(new Set(source.selectedZoneHrids.map((hrid) => String(hrid || "")).filter(Boolean)))
-            : [],
+            : getAllAdvisorZoneHrids(),
         refineTopEnabled: source.refineTopEnabled !== false,
         refineTopCount: clamp(
             Math.floor(toFiniteNumber(source.refineTopCount, ADVISOR_REFINE_TOP_COUNT_DEFAULT)),
@@ -2301,6 +2305,10 @@ function buildAdvisorCandidates(filters = {}) {
     const normalizedFilters = normalizeAdvisorFilters(filters);
     const candidates = [];
     let order = 0;
+
+    if (normalizedFilters.selectedZoneHrids.length === 0) {
+        return candidates;
+    }
 
     const isTierAllowed = (zoneTarget) => {
         const tier = Math.max(0, Math.floor(toFiniteNumber(zoneTarget?.difficultyTier, 0)));
@@ -6907,6 +6915,9 @@ export const useSimulatorStore = defineStore("simulator", {
 
             this.advisor.runtime.runId = runId;
             this.advisor.runtime.cancelRequested = false;
+            // 進入終態（完成/取消/錯誤）後設為 true，讓晚到的進度回呼不再改動 runtime，
+            // 避免 isRunning 被重新設回 true 造成永久卡住
+            let runFinalized = false;
 
             const isCurrentAdvisorRun = () => Number(this.advisor.runtime?.runId || 0) === runId;
             const isActiveAdvisorRun = () => isCurrentAdvisorRun() && this.advisor.runtime?.cancelRequested !== true;
@@ -6922,7 +6933,7 @@ export const useSimulatorStore = defineStore("simulator", {
             };
 
             const updateAdvisorRuntime = (phase, quickFraction = 0, refineFraction = 0) => {
-                if (!isActiveAdvisorRun()) {
+                if (runFinalized || !isActiveAdvisorRun()) {
                     return;
                 }
 
@@ -7184,6 +7195,7 @@ export const useSimulatorStore = defineStore("simulator", {
                 }
 
                 ensureActiveAdvisorRun();
+                runFinalized = true;
                 this.advisor.error = errorMessages.join(" ").trim();
                 this.advisor.runtime.isRunning = false;
                 this.advisor.runtime.phase = "done";
@@ -7202,6 +7214,7 @@ export const useSimulatorStore = defineStore("simulator", {
                 }
 
                 if (isWorkerRunCancelledError(error) || this.advisor.runtime?.cancelRequested === true) {
+                    runFinalized = true;
                     this.advisor.error = "";
                     this.advisor.runtime.isRunning = false;
                     this.advisor.runtime.phase = "cancelled";
@@ -7213,6 +7226,7 @@ export const useSimulatorStore = defineStore("simulator", {
                     return getAdvisorRowsForReturn();
                 }
 
+                runFinalized = true;
                 this.advisor.error = typeof error === "string"
                     ? error
                     : (error?.message || JSON.stringify(error));

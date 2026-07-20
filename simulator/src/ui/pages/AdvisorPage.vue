@@ -163,15 +163,24 @@
             <DisclosurePanel :title="`${t('common:advisor.zoneFilterTitle', 'Zone filter')}${selectedZoneCount > 0 ? ` (${selectedZoneCount})` : ''}`">
               <div class="space-y-2 text-xs text-slate-300">
                 <div class="flex flex-wrap items-center justify-between gap-2">
-                  <span class="text-slate-400">{{ t("common:advisor.zoneFilterHint", "No zones checked = scan all zones.") }}</span>
-                  <button
-                    type="button"
-                    class="action-button-muted !px-2 !py-1"
-                    :disabled="selectedZoneCount === 0"
-                    @click="clearZoneSelection"
-                  >
-                    {{ t("common:advisor.zoneFilterClear", "Clear selection") }}
-                  </button>
+                  <span class="text-slate-400">{{ t("common:advisor.zoneFilterHint", "Only checked zones are scanned.") }}</span>
+                  <div class="flex items-center gap-2">
+                    <button
+                      type="button"
+                      class="action-button-muted !px-2 !py-1"
+                      @click="selectAllZones"
+                    >
+                      {{ t("common:advisor.zoneFilterSelectAll", "Select all") }}
+                    </button>
+                    <button
+                      type="button"
+                      class="action-button-muted !px-2 !py-1"
+                      :disabled="selectedZoneCount === 0"
+                      @click="clearZoneSelection"
+                    >
+                      {{ t("common:advisor.zoneFilterClear", "Clear selection") }}
+                    </button>
+                  </div>
                 </div>
                 <div class="grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
                   <label
@@ -435,6 +444,9 @@ const summaryWeightFields = computed(() => [
   { key: "safety", label: t("common:advisor.safety", "Safety") },
 ]);
 
+const groupZoneHridSet = new Set(groupZoneHrids);
+const allZoneHrids = zoneOptions.map((zone) => String(zone.hrid || "")).filter(Boolean);
+
 const filterDraft = reactive({
   includeSoloZones: false,
   includeGroupZones: true,
@@ -444,19 +456,22 @@ const filterDraft = reactive({
   quickRounds: 3,
   minDifficultyTier: 0,
   maxDifficultyTier: 5,
-  selectedZoneHrids: [],
+  selectedZoneHrids: [...allZoneHrids],
 });
 
-const groupZoneHridSet = new Set(groupZoneHrids);
+// 只列出目前掃描範圍（單人/組隊勾選）內的區域，避免清單被用不到的區域塞滿
 const zoneFilterOptions = computed(() => zoneOptions
   .slice()
   .sort((a, b) => Number(a.sortIndex ?? 0) - Number(b.sortIndex ?? 0))
+  .filter((zone) => (groupZoneHridSet.has(zone.hrid) ? filterDraft.includeGroupZones : filterDraft.includeSoloZones))
   .map((zone) => ({
     hrid: zone.hrid,
     label: getActionName(zone.hrid, zone.name),
     isGroup: groupZoneHridSet.has(zone.hrid),
   })));
-const selectedZoneCount = computed(() => filterDraft.selectedZoneHrids.length);
+const selectedZoneCount = computed(() => (
+  zoneFilterOptions.value.filter((zone) => filterDraft.selectedZoneHrids.includes(zone.hrid)).length
+));
 
 function isZoneSelected(zoneHrid) {
   return filterDraft.selectedZoneHrids.includes(zoneHrid);
@@ -469,6 +484,10 @@ function toggleZoneSelection(zoneHrid) {
   } else {
     filterDraft.selectedZoneHrids.push(zoneHrid);
   }
+}
+
+function selectAllZones() {
+  filterDraft.selectedZoneHrids.splice(0, filterDraft.selectedZoneHrids.length, ...allZoneHrids);
 }
 
 function clearZoneSelection() {
