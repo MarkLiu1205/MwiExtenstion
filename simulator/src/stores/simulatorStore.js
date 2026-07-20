@@ -2215,8 +2215,10 @@ function createAdvisorState() {
             elapsedSeconds: 0,
             quickCompleted: 0,
             quickTotal: 0,
+            quickTargetCount: 0,
             refineCompleted: 0,
             refineTotal: 0,
+            refineTargetCount: 0,
             lastRunAt: 0,
             runId: 0,
             cancelRequested: false,
@@ -6916,6 +6918,9 @@ export const useSimulatorStore = defineStore("simulator", {
 
             this.advisor.runtime.runId = runId;
             this.advisor.runtime.cancelRequested = false;
+            // 進度顯示用：快掃/複核的「目標數」（totals 是輪數，兩者單位不同）
+            this.advisor.runtime.quickTargetCount = candidates.length;
+            this.advisor.runtime.refineTargetCount = refineTopCount;
             // 進入終態（完成/取消/錯誤）後設為 true，讓晚到的進度回呼不再改動 runtime，
             // 避免 isRunning 被重新設回 true 造成永久卡住
             let runFinalized = false;
@@ -7125,6 +7130,7 @@ export const useSimulatorStore = defineStore("simulator", {
                 if (normalizedFilters.refineTopEnabled && refineTopCount > 0) {
                     updateAdvisorRuntime("refine_top", 0, 0);
                     const quickRowsForRefine = this.advisor.quickRows.slice(0, refineTopCount);
+                    this.advisor.runtime.refineTargetCount = quickRowsForRefine.length;
                     const roundMetricsById = new Map(quickRowsForRefine.map((row) => [row.id, []]));
                     const refineParallelWorkerLimit = Math.max(
                         1,

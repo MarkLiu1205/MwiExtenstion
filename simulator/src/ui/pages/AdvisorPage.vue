@@ -650,10 +650,18 @@ const runtimeStatusText = computed(() => {
 const runtimePhaseText = computed(() => {
   const phase = String(runtime.value?.phase || "idle");
   if (phase === "quick_scan") {
-    return t("common:advisor.phaseQuick", "Quick scan in progress") + ` · ${runtime.value.quickCompleted || 0}/${runtime.value.quickTotal || 0}`;
+    const quickTargets = Number(runtime.value.quickTargetCount || 0);
+    const quickPrefix = quickTargets > 0
+      ? t("common:advisor.phaseQuickDetail", "Quick scan · {{targets}} targets", { targets: quickTargets })
+      : t("common:advisor.phaseQuick", "Quick scan in progress");
+    return `${quickPrefix} · ${runtime.value.quickCompleted || 0}/${runtime.value.quickTotal || 0} ${t("common:advisor.roundsUnit", "rounds")}`;
   }
   if (phase === "refine_top") {
-    return t("common:advisor.phaseRefine", "Refining top picks") + ` · ${runtime.value.refineCompleted || 0}/${runtime.value.refineTotal || 0}`;
+    const refineTargets = Number(runtime.value.refineTargetCount || 0);
+    const refinePrefix = refineTargets > 0
+      ? t("common:advisor.phaseRefineDetail", "Refining top {{targets}}", { targets: refineTargets })
+      : t("common:advisor.phaseRefine", "Refining top picks");
+    return `${refinePrefix} · ${runtime.value.refineCompleted || 0}/${runtime.value.refineTotal || 0} ${t("common:advisor.roundsUnit", "rounds")}`;
   }
   if (phase === "done") {
     return t("common:advisor.phaseDone", "Scan complete");
