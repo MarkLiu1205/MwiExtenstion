@@ -748,8 +748,7 @@
     "advisor": {
         "eyebrow": "推薦器",
         "title": "刷圖推薦器",
-        "tierMin": "最低難度階級",
-        "tierMax": "最高難度階級",
+        "tierFilterLabel": "難度階級（勾選的才掃描）",
         "zoneFilterTitle": "區域過濾",
         "zoneFilterHint": "只掃描勾選的區域（預設全部勾選）。",
         "zoneFilterSelectAll": "全選",

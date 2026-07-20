@@ -150,14 +150,24 @@
                 <span class="field-label">{{ t("common:advisor.quickRounds", "Quick Rounds") }}</span>
                 <input v-model.number="filterDraft.quickRounds" type="number" min="1" max="10" class="field-input" />
               </label>
-              <label class="block">
-                <span class="field-label">{{ t("common:advisor.tierMin", "Min Difficulty Tier") }}</span>
-                <input v-model.number="filterDraft.minDifficultyTier" type="number" min="0" max="5" class="field-input" />
-              </label>
-              <label class="block">
-                <span class="field-label">{{ t("common:advisor.tierMax", "Max Difficulty Tier") }}</span>
-                <input v-model.number="filterDraft.maxDifficultyTier" type="number" min="0" max="5" class="field-input" />
-              </label>
+              <div class="block sm:col-span-2">
+                <span class="field-label">{{ t("common:advisor.tierFilterLabel", "Difficulty tiers (checked = scanned)") }}</span>
+                <div class="flex flex-wrap gap-2">
+                  <label
+                    v-for="tier in DIFFICULTY_TIER_OPTIONS"
+                    :key="tier"
+                    class="flex items-center gap-1.5 rounded-lg border border-white/10 bg-slate-950/40 px-2.5 py-1.5 text-sm text-slate-200"
+                  >
+                    <input
+                      type="checkbox"
+                      class="accent-amber-300"
+                      :checked="isTierSelected(tier)"
+                      @change="toggleTierSelection(tier)"
+                    />
+                    <span>T{{ tier }}</span>
+                  </label>
+                </div>
+              </div>
             </div>
 
             <DisclosurePanel :title="`${t('common:advisor.zoneFilterTitle', 'Zone filter')}${selectedZoneCount > 0 ? ` (${selectedZoneCount})` : ''}`">
@@ -454,10 +464,24 @@ const filterDraft = reactive({
   refineTopCount: 8,
   refineRounds: 20,
   quickRounds: 3,
-  minDifficultyTier: 0,
-  maxDifficultyTier: 5,
+  selectedDifficultyTiers: [0, 1, 2, 3, 4, 5],
   selectedZoneHrids: [...allZoneHrids],
 });
+
+const DIFFICULTY_TIER_OPTIONS = [0, 1, 2, 3, 4, 5];
+
+function isTierSelected(tier) {
+  return filterDraft.selectedDifficultyTiers.includes(tier);
+}
+
+function toggleTierSelection(tier) {
+  const index = filterDraft.selectedDifficultyTiers.indexOf(tier);
+  if (index >= 0) {
+    filterDraft.selectedDifficultyTiers.splice(index, 1);
+  } else {
+    filterDraft.selectedDifficultyTiers.push(tier);
+  }
+}
 
 // 只列出目前掃描範圍（單人/組隊勾選）內的區域，避免清單被用不到的區域塞滿
 const zoneFilterOptions = computed(() => zoneOptions
@@ -524,8 +548,9 @@ function syncFilterDraft(source) {
   filterDraft.refineTopCount = Number(safeSource.refineTopCount ?? filterDraft.refineTopCount);
   filterDraft.refineRounds = Number(safeSource.refineRounds ?? filterDraft.refineRounds);
   filterDraft.quickRounds = Number(safeSource.quickRounds ?? filterDraft.quickRounds);
-  filterDraft.minDifficultyTier = Number(safeSource.minDifficultyTier ?? filterDraft.minDifficultyTier ?? 0);
-  filterDraft.maxDifficultyTier = Number(safeSource.maxDifficultyTier ?? filterDraft.maxDifficultyTier ?? 5);
+  if (Array.isArray(safeSource.selectedDifficultyTiers)) {
+    filterDraft.selectedDifficultyTiers.splice(0, filterDraft.selectedDifficultyTiers.length, ...safeSource.selectedDifficultyTiers);
+  }
   if (Array.isArray(safeSource.selectedZoneHrids)) {
     filterDraft.selectedZoneHrids.splice(0, filterDraft.selectedZoneHrids.length, ...safeSource.selectedZoneHrids);
   }

@@ -749,8 +749,7 @@
     "advisor": {
         "eyebrow": "Advisor",
         "title": "Farm Advisor",
-        "tierMin": "Min Difficulty Tier",
-        "tierMax": "Max Difficulty Tier",
+        "tierFilterLabel": "Difficulty tiers (checked = scanned)",
         "zoneFilterTitle": "Zone filter",
         "zoneFilterHint": "Only checked zones are scanned (all checked by default).",
         "zoneFilterSelectAll": "Select all",

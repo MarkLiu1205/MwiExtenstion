@@ -2164,16 +2164,16 @@ function getAllAdvisorZoneHrids() {
 
 function normalizeAdvisorFilters(rawFilters = {}) {
     const source = isPlainObject(rawFilters) ? rawFilters : {};
-    const minDifficultyTier = clamp(Math.floor(toFiniteNumber(source.minDifficultyTier, 0)), 0, 5);
-    const maxDifficultyTier = Math.max(
-        minDifficultyTier,
-        clamp(Math.floor(toFiniteNumber(source.maxDifficultyTier, 5)), 0, 5)
-    );
     return {
         includeGroupZones: source.includeGroupZones !== false,
         includeSoloZones: Boolean(source.includeSoloZones),
-        minDifficultyTier,
-        maxDifficultyTier,
+        // 逐難度勾選（可跳過中間任一難度）；預設全部勾選
+        selectedDifficultyTiers: Array.isArray(source.selectedDifficultyTiers)
+            ? Array.from(new Set(source.selectedDifficultyTiers
+                .map((tier) => Math.floor(toFiniteNumber(tier, Number.NaN)))
+                .filter((tier) => Number.isFinite(tier) && tier >= 0 && tier <= 5)))
+                .sort((left, right) => left - right)
+            : [0, 1, 2, 3, 4, 5],
         // 預設全部勾選；勾選的區域才會掃描，全部取消勾選＝沒有掃描目標
         selectedZoneHrids: Array.isArray(source.selectedZoneHrids)
             ? Array.from(new Set(source.selectedZoneHrids.map((hrid) => String(hrid || "")).filter(Boolean)))
@@ -2306,13 +2306,14 @@ function buildAdvisorCandidates(filters = {}) {
     const candidates = [];
     let order = 0;
 
-    if (normalizedFilters.selectedZoneHrids.length === 0) {
+    if (normalizedFilters.selectedZoneHrids.length === 0 || normalizedFilters.selectedDifficultyTiers.length === 0) {
         return candidates;
     }
 
+    const allowedTierSet = new Set(normalizedFilters.selectedDifficultyTiers);
     const isTierAllowed = (zoneTarget) => {
         const tier = Math.max(0, Math.floor(toFiniteNumber(zoneTarget?.difficultyTier, 0)));
-        return tier >= normalizedFilters.minDifficultyTier && tier <= normalizedFilters.maxDifficultyTier;
+        return allowedTierSet.has(tier);
     };
 
     if (normalizedFilters.includeSoloZones) {
