@@ -21,9 +21,9 @@ describe("official i18n snapshot integration", () => {
         const i18next = await initI18n();
 
         expect(i18next.language).toBe("zh");
-        expect(i18next.t("translation:itemNames./items/gatherer_cape")).toBe("采集者披风");
-        expect(i18next.t("translation:itemNames./items/gatherer_cape_refined")).toBe("采集者披风 ★");
-        expect(i18next.t("common:menu.enhancement")).toBe("强化模拟");
+        expect(i18next.t("translation:itemNames./items/gatherer_cape")).toBe("採集者披風");
+        expect(i18next.t("translation:itemNames./items/gatherer_cape_refined")).toBe("採集者披風 ★");
+        expect(i18next.t("common:menu.enhancement")).toBe("強化模擬");
 
         await i18next.changeLanguage("en");
         expect(i18next.t("translation:itemNames./items/gatherer_cape")).toBe("Gatherer Cape");

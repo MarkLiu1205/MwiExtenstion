@@ -34,6 +34,7 @@
     const RESPONSE_KEY = "mwi.tm.import.response.v1";
     const APP_BRIDGE_CHANNEL = "mwi-tm-bridge";
     const BUTTON_ID = "mwi-tm-import-button";
+    const LOADOUT_BUTTON_ID = "mwi-tm-import-loadouts-button";
     const CONTROL_ID = "mwi-tm-import-control";
     const STATUS_ID = "mwi-tm-import-status";
     const TEAM_ROSTER_CACHE_KEY = "mwi.tm.import.teamRosterCache.v1";
@@ -76,6 +77,9 @@
             mirrorModalCloudflare: "Global (Cloudflare)",
             mirrorModalSelfHosted: "Self-hosted (MwiExtenstion)",
             mirrorModalCancel: "Cancel",
+            loadoutButton: "Import All Loadouts",
+            noCombatLoadouts: "No combat loadouts found on the main site.",
+            loadoutStateUnavailable: "Unable to read loadout data from the game page. Refresh the main-site tab once.",
         },
         zh: {
             button: "從主站匯入",
@@ -98,6 +102,9 @@
             mirrorModalCloudflare: "全球網址（Cloudflare）",
             mirrorModalSelfHosted: "自架網址（MwiExtenstion）",
             mirrorModalCancel: "取消",
+            loadoutButton: "匯入全部配裝",
+            noCombatLoadouts: "主站找不到任何戰鬥配裝。",
+            loadoutStateUnavailable: "無法從遊戲頁面讀取配裝資料，請重新整理一次主站標籤頁。",
         },
     };
     const pageWindow = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
@@ -1042,6 +1049,203 @@
             difficultyTier: normalizeDifficultyTier(mainSiteState.currentCombatAction.difficultyTier),
         } : null;
         return snapshot;
+    }
+
+    // ===== 匯入所有戰鬥配裝 =====
+
+    const COMBAT_LOADOUT_IMPORT_FORMAT = "main-site-combat-loadouts";
+
+    function getMainSiteGameStateWithFallback() {
+        const state = getMainSiteGameState();
+        if (state) {
+            return state;
+        }
+        // 後備：直接走 React fiber 讀遊戲狀態，不依賴其他腳本提供的 window.mwi
+        try {
+            const gamePageElement = pageWindow?.document?.querySelector('[class^="GamePage"]');
+            if (!gamePageElement) {
+                return null;
+            }
+            const fiberKeys = Reflect.ownKeys(gamePageElement).filter((key) => String(key).startsWith("__reactFiber$"));
+            for (const fiberKey of fiberKeys) {
+                const stateNode = gamePageElement[fiberKey]?.return?.stateNode;
+                if (stateNode?.state && typeof stateNode.state === "object") {
+                    return stateNode.state;
+                }
+            }
+        } catch (error) {
+            // 讀取失敗時走無配裝資料的錯誤回應
+        }
+        return null;
+    }
+
+    // 配裝 wearableMap 的值格式為 "characterId::itemId::itemHrid::enhancementLevel"
+    function parseLoadoutWearableReference(rawValue) {
+        if (!rawValue) {
+            return null;
+        }
+        const parts = String(rawValue).split("::");
+        if (parts.length < 4) {
+            return null;
+        }
+        const itemHrid = String(parts[2] || "").trim();
+        if (!itemHrid) {
+            return null;
+        }
+        const enhancementLevel = Number(parts[3]);
+        return {
+            itemHrid,
+            enhancementLevel: Number.isFinite(enhancementLevel) ? Math.max(0, Math.floor(enhancementLevel)) : 0,
+        };
+    }
+
+    function buildMaxOwnedEnhancementMap(characterItems) {
+        const maxByItemHrid = new Map();
+        for (const item of Array.isArray(characterItems) ? characterItems : []) {
+            const itemHrid = String(item?.itemHrid || "");
+            if (!itemHrid) {
+                continue;
+            }
+            const count = Number(item?.count);
+            if (!Number.isFinite(count) || count <= 0) {
+                continue;
+            }
+            const enhancementLevel = Math.max(0, Math.floor(Number(item?.enhancementLevel) || 0));
+            const existing = maxByItemHrid.get(itemHrid);
+            if (!Number.isFinite(existing) || enhancementLevel > existing) {
+                maxByItemHrid.set(itemHrid, enhancementLevel);
+            }
+        }
+        return maxByItemHrid;
+    }
+
+    function listMainSiteCombatLoadouts(gameState) {
+        const loadouts = readCollectionEntries(gameState?.characterLoadoutDict)
+            .filter((loadout) => loadout && loadout.actionTypeHrid === COMBAT_ACTION_TYPE_HRID);
+        loadouts.sort((left, right) => Number(left?.id || 0) - Number(right?.id || 0));
+        return loadouts;
+    }
+
+    function toPlainEntries(container) {
+        if (container instanceof Map) {
+            return Array.from(container.entries());
+        }
+        if (container && typeof container === "object" && !Array.isArray(container)) {
+            return Object.entries(container);
+        }
+        return [];
+    }
+
+    function buildLoadoutCharacterPayload(basePayload, gameState, loadout, maxOwnedEnhancementMap) {
+        const payload = clonePlainObject(basePayload);
+        const loadoutName = normalizeCharacterName(loadout?.name || "") || `Loadout ${Number(loadout?.id || 0)}`;
+        if (payload.character && typeof payload.character === "object") {
+            // 模擬器的玩家欄位名稱取自 character.name，改成配裝名方便辨識
+            payload.character.name = loadoutName;
+        }
+
+        // 裝備：移除快照中目前穿戴的裝備，換成配裝 wearableMap 的內容
+        const baseItems = Array.isArray(basePayload.characterItems) ? basePayload.characterItems : [];
+        const inventoryItems = baseItems.filter((item) => String(item?.itemLocationHrid || "") === "/item_locations/inventory");
+        const wearableItems = [];
+        for (const [slotKey, rawReference] of toPlainEntries(loadout?.wearableMap)) {
+            const itemLocationHrid = String(slotKey || "");
+            if (!itemLocationHrid.startsWith("/item_locations/")) {
+                continue;
+            }
+            const reference = parseLoadoutWearableReference(rawReference);
+            if (!reference) {
+                continue;
+            }
+            // useExactEnhancement 為精確等級；否則取背包中該物品的最高強化等級
+            let enhancementLevel = reference.enhancementLevel;
+            if (!loadout?.useExactEnhancement) {
+                const highestOwned = maxOwnedEnhancementMap.get(reference.itemHrid);
+                if (Number.isFinite(highestOwned)) {
+                    enhancementLevel = highestOwned;
+                }
+            }
+            wearableItems.push({
+                itemHrid: reference.itemHrid,
+                itemLocationHrid,
+                enhancementLevel,
+                count: 1,
+            });
+        }
+        payload.characterItems = [...inventoryItems, ...wearableItems];
+
+        // 技能：以配裝 abilityMap 取代目前裝備的技能，等級從角色技能資料查詢
+        const combatAbilities = [];
+        for (const [slotKey, abilityValue] of toPlainEntries(loadout?.abilityMap)) {
+            const abilityHrid = String(abilityValue || "");
+            if (!abilityHrid) {
+                continue;
+            }
+            const slotNumber = Math.floor(Number(slotKey));
+            const abilityDetail = readCollectionValue(gameState?.characterAbilityMap, abilityHrid);
+            const abilityEntry = {
+                abilityHrid,
+                level: Math.max(1, Math.floor(Number(abilityDetail?.level) || 1)),
+            };
+            if (Number.isFinite(slotNumber)) {
+                abilityEntry.slotNumber = slotNumber;
+            }
+            combatAbilities.push(abilityEntry);
+        }
+        payload.combatUnit = payload.combatUnit && typeof payload.combatUnit === "object" ? payload.combatUnit : {};
+        payload.combatUnit.combatAbilities = combatAbilities;
+
+        // 觸發設定：配裝有自訂設定就整組取代，否則沿用目前角色的設定
+        const loadoutTriggerEntries = toPlainEntries(loadout?.abilityCombatTriggersMap);
+        if (loadoutTriggerEntries.length > 0) {
+            payload.abilityCombatTriggersMap = clonePlainObject(Object.fromEntries(loadoutTriggerEntries));
+        }
+
+        return payload;
+    }
+
+    function buildCombatLoadoutsResponse(preferredLanguage) {
+        const basePayload = buildCurrentCharacterPayload();
+        if (!basePayload) {
+            return {
+                ok: false,
+                message: getUiText("unableToReadCurrentProfile", preferredLanguage),
+            };
+        }
+
+        const gameState = getMainSiteGameStateWithFallback();
+        if (!gameState) {
+            return {
+                ok: false,
+                message: getUiText("loadoutStateUnavailable", preferredLanguage),
+            };
+        }
+
+        const combatLoadouts = listMainSiteCombatLoadouts(gameState);
+        if (combatLoadouts.length === 0) {
+            return {
+                ok: false,
+                message: getUiText("noCombatLoadouts", preferredLanguage),
+            };
+        }
+
+        const maxOwnedEnhancementMap = buildMaxOwnedEnhancementMap(basePayload.characterItems);
+        const loadoutEntries = combatLoadouts.map((loadout) => ({
+            ok: true,
+            loadoutId: Number(loadout?.id || 0),
+            loadoutName: normalizeCharacterName(loadout?.name || "") || `Loadout ${Number(loadout?.id || 0)}`,
+            format: "main-site-current-character",
+            payload: buildLoadoutCharacterPayload(basePayload, gameState, loadout, maxOwnedEnhancementMap),
+        }));
+
+        return {
+            ok: true,
+            characterName: String(basePayload?.character?.name || ""),
+            payload: {
+                characterName: String(basePayload?.character?.name || ""),
+                loadouts: loadoutEntries,
+            },
+        };
     }
 
     function buildCachedProfilePayload(profile, includeCurrentCombat = true) {
@@ -2099,6 +2303,16 @@
             const preferredLanguage = resolveUiLanguage(request?.language);
             const target = String(request?.target || "active-player").trim().toLowerCase();
 
+            if (target === "combat-loadouts") {
+                writeMainSiteImportResponse(
+                    requestId,
+                    COMBAT_LOADOUT_IMPORT_FORMAT,
+                    buildCombatLoadoutsResponse(preferredLanguage),
+                    preferredLanguage
+                );
+                return true;
+            }
+
             if (target === "auto") {
                 requestTeamProfiles(requestId, preferredLanguage)
                     .then((teamResponse) => {
@@ -2138,12 +2352,13 @@
 
         function getControlElements() {
             const button = document.getElementById(BUTTON_ID);
+            const loadoutButton = document.getElementById(LOADOUT_BUTTON_ID);
             const status = document.getElementById(STATUS_ID);
-            return { button, status };
+            return { button, loadoutButton, status };
         }
 
         function renderControlState() {
-            const { button, status } = getControlElements();
+            const { button, loadoutButton, status } = getControlElements();
             if (!status || !button) {
                 return;
             }
@@ -2156,6 +2371,10 @@
                 ? "text-xs text-rose-300"
                 : (state.statusTone === "success" ? "text-xs text-teal-200" : "text-xs text-cyan-200");
             button.disabled = state.isRequestPending;
+            if (loadoutButton) {
+                loadoutButton.textContent = getUiText("loadoutButton", state.uiLanguage);
+                loadoutButton.disabled = state.isRequestPending;
+            }
         }
 
         function setStatus(text, tone = "idle") {
@@ -2188,6 +2407,18 @@
                 requestId,
                 createdAt: Date.now(),
                 target: "auto",
+                language: state.uiLanguage,
+            });
+
+            return waitForSharedValue(RESPONSE_KEY, requestId, REQUEST_TIMEOUT_MS);
+        }
+
+        async function requestMainSiteCombatLoadouts(requestId) {
+            GM_setValue(REQUEST_KEY, {
+                version: 2,
+                requestId,
+                createdAt: Date.now(),
+                target: "combat-loadouts",
                 language: state.uiLanguage,
             });
 
@@ -2392,6 +2623,105 @@
             }
         }
 
+        function isCombatLoadoutsResponse(response) {
+            return String(response?.format || "") === COMBAT_LOADOUT_IMPORT_FORMAT
+                && response?.payload
+                && typeof response.payload === "object";
+        }
+
+        async function importCombatLoadoutsResponse(mainSiteResponse) {
+            if (!mainSiteResponse || mainSiteResponse.ok !== true || !isCombatLoadoutsResponse(mainSiteResponse)) {
+                throw new Error(mainSiteResponse?.message || getUiText("noMainSiteData", state.uiLanguage));
+            }
+
+            const loadoutEntries = (Array.isArray(mainSiteResponse.payload.loadouts) ? mainSiteResponse.payload.loadouts : [])
+                .filter((entry) => entry && typeof entry === "object" && entry.ok === true && entry.payload && typeof entry.payload === "object");
+            if (loadoutEntries.length === 0) {
+                throw new Error(getUiText("noCombatLoadouts", state.uiLanguage));
+            }
+
+            setStatusKey("importingSimulator", "idle");
+
+            // 沿用隊伍匯入模式：逐一填入玩家欄位 1~5，超過的略過並提示
+            const targetPlayerIds = [...TEAM_IMPORT_PLAYER_IDS];
+            const importableEntries = loadoutEntries.slice(0, targetPlayerIds.length);
+            const skippedCount = loadoutEntries.length - importableEntries.length;
+            const failureEntries = [];
+            let importedCount = 0;
+            let didClearSlots = false;
+            let didResetSelection = false;
+
+            for (const entry of importableEntries) {
+                const targetPlayerId = targetPlayerIds[importedCount] || String(importedCount + 1);
+                const appRequestId = createRequestId();
+
+                // eslint-disable-next-line no-await-in-loop
+                const appResponse = await importPayloadIntoSimulator(appRequestId, entry.payload, {
+                    targetPlayerId,
+                    clearPlayerIds: didClearSlots ? [] : targetPlayerIds,
+                    resetTeamSelection: !didResetSelection,
+                    selectAfterImport: true,
+                    activateAfterImport: importedCount === 0,
+                    format: String(entry.format || "main-site-current-character"),
+                });
+
+                if (!appResponse || appResponse.ok !== true) {
+                    failureEntries.push({
+                        name: String(entry.loadoutName || "").trim() || `Loadout ${targetPlayerId}`,
+                        message: String(appResponse?.message || "").trim() || getUiText("simulatorImportFailed", state.uiLanguage),
+                    });
+                    continue;
+                }
+
+                didClearSlots = true;
+                didResetSelection = true;
+                importedCount += 1;
+            }
+
+            if (importedCount <= 0) {
+                const firstFailure = failureEntries[0];
+                throw new Error(firstFailure ? `${firstFailure.name}: ${firstFailure.message}` : getUiText("importFailed", state.uiLanguage));
+            }
+
+            const messageParts = [];
+            if (state.uiLanguage === "zh") {
+                messageParts.push(`已匯入 ${importedCount} 個配裝。`);
+                if (skippedCount > 0) {
+                    messageParts.push(`（配裝超過 ${targetPlayerIds.length} 個，略過 ${skippedCount} 個）`);
+                }
+            } else {
+                messageParts.push(`Imported ${importedCount} loadout${importedCount === 1 ? "" : "s"}.`);
+                if (skippedCount > 0) {
+                    messageParts.push(`(${skippedCount} skipped beyond ${targetPlayerIds.length} player slots)`);
+                }
+            }
+            const failureSummary = formatTeamImportSummary(importedCount, failureEntries);
+            if (failureSummary) {
+                messageParts.push(failureSummary);
+            }
+            setStatus(messageParts.join(" "), failureEntries.length > 0 ? "error" : "success");
+        }
+
+        async function handleLoadoutButtonClick() {
+            if (state.isRequestPending) {
+                return;
+            }
+
+            const requestId = createRequestId();
+            state.isRequestPending = true;
+            setStatusKey("waitingMainSite", "idle");
+
+            try {
+                const mainSiteResponse = await requestMainSiteCombatLoadouts(requestId);
+                await importCombatLoadoutsResponse(mainSiteResponse);
+            } catch (error) {
+                setStatus(normalizeErrorMessage(error, getUiText("importFailed", state.uiLanguage)), "error");
+            } finally {
+                state.isRequestPending = false;
+                renderControlState();
+            }
+        }
+
         function mountImportControl() {
             const actionBar = document.querySelector('[data-tm-import-anchor="simulator-home-actions"]');
             if (!actionBar) {
@@ -2414,12 +2744,20 @@
             button.className = "action-button-tool";
             button.addEventListener("click", handleImportButtonClick);
 
+            const loadoutButton = document.createElement("button");
+            loadoutButton.id = LOADOUT_BUTTON_ID;
+            loadoutButton.type = "button";
+            loadoutButton.textContent = getUiText("loadoutButton", state.uiLanguage);
+            loadoutButton.className = "action-button-tool";
+            loadoutButton.addEventListener("click", handleLoadoutButtonClick);
+
             const status = document.createElement("span");
             status.id = STATUS_ID;
             status.className = "text-xs text-cyan-200";
             status.textContent = "";
 
             wrapper.appendChild(button);
+            wrapper.appendChild(loadoutButton);
             wrapper.appendChild(status);
 
             if (referenceButton && referenceButton.nextSibling) {

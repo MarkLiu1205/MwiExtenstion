@@ -12,7 +12,8 @@ export async function initI18n() {
     }
 
     const storedLanguage = localStorage.getItem("i18nextLng");
-    const initialLanguage = storedLanguage === "zh" || storedLanguage === "en" ? storedLanguage : "en";
+    // 預設繁體中文（zh 語系檔已在本地轉為繁體）；使用者切換過語言則尊重其選擇
+    const initialLanguage = storedLanguage === "zh" || storedLanguage === "en" ? storedLanguage : "zh";
 
     await i18next.init({
         lng: initialLanguage,

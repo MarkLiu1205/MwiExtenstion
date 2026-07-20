@@ -40,18 +40,18 @@ describe("official translation snapshots", () => {
         const zhTranslation = readJson(zhTranslationPath);
 
         expect(zhTranslation.itemNames).toMatchObject({
-            "/items/labyrinth_essence": "迷宫精华",
-            "/items/gatherer_cape": "采集者披风",
-            "/items/gatherer_cape_refined": "采集者披风 ★",
-            "/items/artificer_cape": "工匠披风",
-            "/items/artificer_cape_refined": "工匠披风 ★",
-            "/items/culinary_cape": "厨师披风",
-            "/items/culinary_cape_refined": "厨师披风 ★",
-            "/items/chance_cape": "机缘披风",
-            "/items/chance_cape_refined": "机缘披风 ★",
+            "/items/labyrinth_essence": "迷宮精華",
+            "/items/gatherer_cape": "採集者披風",
+            "/items/gatherer_cape_refined": "採集者披風 ★",
+            "/items/artificer_cape": "工匠披風",
+            "/items/artificer_cape_refined": "工匠披風 ★",
+            "/items/culinary_cape": "廚師披風",
+            "/items/culinary_cape_refined": "廚師披風 ★",
+            "/items/chance_cape": "機緣披風",
+            "/items/chance_cape_refined": "機緣披風 ★",
         });
-        expect(Object.values(zhTranslation.itemNames)).not.toContain("采集者斗篷");
-        expect(Object.values(zhTranslation.itemNames)).not.toContain("采集者斗篷（精）");
+        expect(Object.values(zhTranslation.itemNames)).not.toContain("採集者斗篷");
+        expect(Object.values(zhTranslation.itemNames)).not.toContain("採集者斗篷（精）");
     });
 
     it("matches every tracked HRID and the recorded resource hashes", async () => {
