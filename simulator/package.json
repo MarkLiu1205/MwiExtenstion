@@ -1,0 +1,49 @@
+{
+    "name": "mwicombatsimulator",
+    "version": "1.0.28",
+    "description": "",
+    "scripts": {
+        "dev": "vite",
+        "build": "vite build",
+        "build-game-data-index": "node scripts/build-game-data-index.mjs",
+        "sync-official-translations": "node scripts/sync-official-translations.mjs",
+        "check-official-translations": "node scripts/sync-official-translations.mjs --check",
+        "verify-pages-build": "node scripts/verify-pages-build.js",
+        "preview": "vite preview",
+        "start": "vite",
+        "test": "vitest run",
+        "extract-game-data": "node scripts/extract-game-data.js",
+        "extract-game-data:official": "node scripts/extract-game-data-from-official.js"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/AmVoidGuy/MWICombatSimulator.git"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "MIT",
+    "bugs": {
+        "url": "https://github.com/AmVoidGuy/MWICombatSimulator/issues"
+    },
+    "homepage": "https://github.com/AmVoidGuy/MWICombatSimulator#readme",
+    "devDependencies": {
+        "@vitejs/plugin-vue": "^5.2.4",
+        "acorn": "^8.12.1",
+        "autoprefixer": "^10.4.21",
+        "postcss": "^8.5.6",
+        "tailwindcss": "^3.4.17",
+        "vite": "^5.4.21",
+        "vitest": "^2.1.9",
+        "ws": "^8.18.0"
+    },
+    "dependencies": {
+        "chart.js": "^4.5.1",
+        "exceljs": "^4.4.0",
+        "heap-js": "^2.2.0",
+        "i18next": "^25.6.3",
+        "jstat": "^1.9.6",
+        "pinia": "^2.3.1",
+        "vue": "^3.5.22",
+        "vue-router": "^4.6.3"
+    }
+}

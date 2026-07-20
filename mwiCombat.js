@@ -14,6 +14,7 @@
 // @match        https://milkywayidlecn.com/*
 // @match        https://azhu949.github.io/MWICombatSimulator/*
 // @match        https://mwi-combatsi-mulator.pages.dev/*
+// @match        https://markliu1205.github.io/MwiExtenstion/*
 // @match        http://localhost:5173/*
 // @match        http://127.0.0.1:5173/*
 // @grant        GM_getValue
@@ -42,7 +43,9 @@
     const MAIN_SITE_SHORTCUT_ID = "mwi-tm-main-site-simulator-link";
     const SIMULATOR_GITHUB_PAGES_URL = "https://azhu949.github.io/MWICombatSimulator/";
     const SIMULATOR_CLOUDFLARE_URL = "https://mwi-combatsi-mulator.pages.dev/";
-    const SIMULATOR_FALLBACK_URL = SIMULATOR_GITHUB_PAGES_URL;
+    // 自架版：MwiExtenstion repo 的 simulator/ 經 GitHub Actions 建置部署
+    const SIMULATOR_SELF_HOSTED_URL = "https://markliu1205.github.io/MwiExtenstion/";
+    const SIMULATOR_FALLBACK_URL = SIMULATOR_SELF_HOSTED_URL;
     const SIMULATOR_MIRROR_MODAL_ID = "mwi-tm-simulator-mirror-modal";
     const REQUEST_TIMEOUT_MS = 12000;
     const APP_IMPORT_TIMEOUT_MS = 8000;
@@ -71,6 +74,7 @@
             mirrorModalDescription: "Choose which address you want to open.",
             mirrorModalGithub: "GitHub Pages",
             mirrorModalCloudflare: "Global (Cloudflare)",
+            mirrorModalSelfHosted: "Self-hosted (MwiExtenstion)",
             mirrorModalCancel: "Cancel",
         },
         zh: {
@@ -92,6 +96,7 @@
             mirrorModalDescription: "請選擇要跳轉的網址。",
             mirrorModalGithub: "GitHub Pages",
             mirrorModalCloudflare: "全球網址（Cloudflare）",
+            mirrorModalSelfHosted: "自架網址（MwiExtenstion）",
             mirrorModalCancel: "取消",
         },
     };
@@ -1206,6 +1211,7 @@
         const origin = window.location.origin;
         return origin === "https://azhu949.github.io"
             || origin === "https://mwi-combatsi-mulator.pages.dev"
+            || origin === "https://markliu1205.github.io"
             || origin === "http://localhost:5173"
             || origin === "http://127.0.0.1:5173";
     }
@@ -1463,6 +1469,13 @@
             return button;
         }
 
+        const selfHostedButton = createOptionButton({
+            id: "selfHosted",
+            label: getUiText("mirrorModalSelfHosted", preferredLanguage),
+            url: SIMULATOR_SELF_HOSTED_URL,
+            accentColor: "rgba(74, 222, 128, 0.78)",
+        });
+
         const cloudflareButton = createOptionButton({
             id: "cloudflare",
             label: getUiText("mirrorModalCloudflare", preferredLanguage),
@@ -1499,6 +1512,7 @@
         header.appendChild(title);
         header.appendChild(closeButton);
 
+        options.appendChild(selfHostedButton);
         options.appendChild(cloudflareButton);
         options.appendChild(githubButton);
 

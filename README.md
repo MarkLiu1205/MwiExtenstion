@@ -29,6 +29,14 @@
 
 之後修改本資料夾內的腳本，重新整理遊戲頁面即生效。
 
+## 自架戰鬥模擬器
+
+`simulator/` 是 [azhu949/MWICombatSimulator](https://github.com/azhu949/MWICombatSimulator)（MIT）的副本，
+推送到 main 且 `simulator/**` 有變動時，GitHub Actions 會自動建置並部署到
+<https://markliu1205.github.io/MwiExtenstion/>。mwiCombat.js 的跳轉選單已內建此自架網址（預設選項）。
+本地開發：`cd simulator && npm ci && npm run dev`（跑在 localhost:5173，mwiCombat 也支援）。
+上游同步方式見 `simulator/UPSTREAM.md`。
+
 ## 更新上游版本
 
 殼腳本已移除 `@updateURL`/`@downloadURL`，不會被自動更新蓋掉本地補丁。要同步上游新版時，把新版下載進本資料夾後用 git diff 對照、重新套用本地補丁。
