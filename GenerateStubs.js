@@ -8,7 +8,7 @@ const sourceDirectory = __dirname;
 const outputDirectory = path.join(sourceDirectory, "tampermonkey-stubs");
 fs.mkdirSync(outputDirectory, { recursive: true });
 
-const scriptFiles = ["level.js", "maze.js", "mooket2.js", "mwiCombat.js", "mwiTools.js", "profit.js", "uiEnhace.js"];
+const scriptFiles = ["level.js", "mate.js", "maze.js", "mooket2.js", "mwiCombat.js", "mwiTools.js", "profit.js", "uiEnhace.js"];
 
 for (const scriptFile of scriptFiles) {
     const source = fs.readFileSync(path.join(sourceDirectory, scriptFile), "utf8");

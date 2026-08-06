@@ -16,6 +16,7 @@
 | profit.js | 利潤面板（收益計算、掉落追蹤、多來源市價合併） |
 | maze.js | 迷宮勝率計算器 |
 | mooket2.js | 市場歷史價格圖表 |
+| mate.js | 市場伴侶（製作/房屋缺料計算、購物清單、市場高亮、採購導航、WS 精確庫存） |
 | mwiCombat.js | 角色/隊伍一鍵匯入戰鬥模擬器 |
 | uiEnhace.js | UI 美化 |
 | level.js | 戰鬥技能升級所需時間 |
@@ -30,7 +31,7 @@
    node GenerateStubs.js
    ```
 
-4. 安裝 `tampermonkey-stubs/` 內的 7 個 `.stub.user.js`（名稱帶 `(local)` 後綴）。
+4. 安裝 `tampermonkey-stubs/` 內的 8 個 `.stub.user.js`（名稱帶 `(local)` 後綴）。
 5. 停用或刪除原本從 GreasyFork 安裝的同名腳本，避免重複執行。
 
 之後修改本資料夾內的腳本，重新整理遊戲頁面即生效。
