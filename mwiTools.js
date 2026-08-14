@@ -5095,7 +5095,7 @@
             const extraFreeItemPerHour = (itemPerHour * teaBuffs.quantity) / 100;
 
             // 出售市场税
-            const bidAfterTax = bid * 0.98;
+            const bidAfterTax = bid * 0.95;
 
             // 每小时利润
             const profitPerHour =
@@ -5596,7 +5596,7 @@
             const extraFreeItemPerHour = (itemPerHour * teaBuffs.quantity) / 100;
 
             // 出售市场税
-            const bidAfterTax = virtualItemBid * 0.98;
+            const bidAfterTax = virtualItemBid * 0.95;
 
             // 每小时利润
             const profitPerHour = itemPerHour * bidAfterTax + extraFreeItemPerHour * bidAfterTax - drinksConsumedPerHourAskPrice;

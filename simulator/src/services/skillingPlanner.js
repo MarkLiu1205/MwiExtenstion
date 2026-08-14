@@ -1,6 +1,6 @@
 import { levelExperienceTable, skillingData as defaultSkillingData } from "../shared/gameDataIndex.js";
 
-export const SKILLING_MARKET_FEE_RATE = 0.02;
+export const SKILLING_MARKET_FEE_RATE = 0.05;   // 2026-08 遊戲更新:市場稅 2% -> 5%
 export const SKILLING_MIN_ACTION_SECONDS = 3;
 export const SKILLING_MAX_LEVEL = levelExperienceTable.length - 1;
 export const SKILLING_OPTIMIZATION_MODE_COST = "cost";
