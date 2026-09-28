@@ -26,12 +26,12 @@
   "resources": {
     "en": {
       "file": "locales/en/translation.official.generated.json",
-      "sha256": "e77c0607f71f8cd727c86bc1ed229219370dc94cf17b35acf0cd0d418d6c048d",
+      "sha256": "a1257bd067c1945ba26192226050aa22704b45e4439c4d4383da511aa0c69ae6",
       "topLevelKeyCount": 145
     },
     "zh": {
       "file": "locales/zh/translation.official.generated.json",
-      "sha256": "aedebf4939d7f6444c50b8f4c46fc7a7891cd2c232c1ad37f623b313dbaed731",
+      "sha256": "35120f4602bf56513413f7ade6acc5326c40bc071694f5e9517c680b8eab4e92",
       "topLevelKeyCount": 145
     }
   }
