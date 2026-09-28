@@ -3767,15 +3767,27 @@
                 itemEnNameToHridMap[value.name] = key;
             }
         } else if (obj && obj.type === "actions_updated") {
+            // 與遊戲本身一致：已完成的移除；未完成的依 id 取代（避免同一行動被重複 push），
+            // 再依「隊伍行動優先、其次 ordinal」排序，確保 [0] 是真正正在執行的行動
             for (const action of obj.endCharacterActions) {
                 if (action.isDone === false) {
-                    currentActionsHridList.push(action);
+                    const idx = currentActionsHridList.findIndex((o) => o.id === action.id);
+                    if (idx >= 0) {
+                        currentActionsHridList[idx] = action;
+                    } else {
+                        currentActionsHridList.push(action);
+                    }
                 } else {
                     currentActionsHridList = currentActionsHridList.filter((o) => {
                         return o.id !== action.id;
                     });
                 }
             }
+            currentActionsHridList.sort((a, b) => {
+                if (a.partyID && !b.partyID) return -1;
+                if (!a.partyID && b.partyID) return 1;
+                return (a.ordinal || 0) - (b.ordinal || 0);
+            });
             if (settingsMap.checkEquipment.isTrue) {
                 checkEquipment();
             }
@@ -4610,24 +4622,32 @@
     }
 
     /* 显示当前动作总时间 */
+    // 斷線重連/切角色時頁首會重新掛載，且 init_character_data 會比 React 重繪先到，
+    // 只綁一次會綁在即將被換掉的舊節點上 → 之後永遠不顯示。改為單一 observer + 定時巡檢：
+    // 節點換了就重綁，並順便補算（前一次因資料未就緒而失敗時也能自動恢復）
+    let totalTimeObserver = null;
+    let totalTimeObservedNode = null;
+    let totalTimeWatchdog = null;
     const showTotalActionTime = () => {
-        const targetNode = document.querySelector("div.Header_actionName__31-L2");
-        if (targetNode) {
-            console.log("start observe action progress bar");
-            calculateTotalTime(targetNode);
-            new MutationObserver((mutationsList) =>
-                mutationsList.forEach((mutation) => {
-                    calculateTotalTime();
-                })
-            ).observe(targetNode, { characterData: true, subtree: true, childList: true });
-        } else {
-            setTimeout(showTotalActionTime, 200);
+        const bindIfNeeded = () => {
+            const targetNode = document.querySelector("div.Header_actionName__31-L2");
+            if (targetNode && targetNode !== totalTimeObservedNode) {
+                totalTimeObserver?.disconnect();
+                totalTimeObservedNode = targetNode;
+                totalTimeObserver = new MutationObserver(() => calculateTotalTime());
+                totalTimeObserver.observe(targetNode, { characterData: true, subtree: true, childList: true });
+            }
+            calculateTotalTime();
+        };
+        bindIfNeeded();
+        if (!totalTimeWatchdog) {
+            totalTimeWatchdog = setInterval(bindIfNeeded, 1000);
         }
     };
 
     function calculateTotalTime() {
         const targetNode = document.querySelector("div.Header_actionName__31-L2 > div.Header_displayName__1hN09");
-        if (targetNode.textContent.includes("[")) {
+        if (!targetNode || targetNode.textContent.includes("[")) {
             return;
         }
 
@@ -4635,8 +4655,13 @@
         const content = targetNode.innerText;
         const match = content.match(/\((\d+)\)/);
         if (match) {
+            // 行動剛切換時進度條文字或行動列表可能還沒就緒：先不寫，交給下次變動/巡檢重試
+            const progressMatch = getOriTextFromElement(document.querySelector(".ProgressBar_text__102Yn")).match(/[\d\.]+/);
+            if (!progressMatch || !currentActionsHridList[0]) {
+                return;
+            }
             const numOfTimes = +match[1];
-            const timePerActionSec = +getOriTextFromElement(document.querySelector(".ProgressBar_text__102Yn")).match(/[\d\.]+/)[0];
+            const timePerActionSec = +progressMatch[0];
             const actionHrid = currentActionsHridList[0].actionHrid;
             let effBuff = 1 + getTotalEffiPercentage(actionHrid) / 100;
             if (actionHrid.includes("enhanc")) {
@@ -5095,7 +5120,7 @@
             const extraFreeItemPerHour = (itemPerHour * teaBuffs.quantity) / 100;
 
             // 出售市场税
-            const bidAfterTax = bid * 0.95;
+            const bidAfterTax = bid * 0.96;
 
             // 每小时利润
             const profitPerHour =
@@ -5596,7 +5621,7 @@
             const extraFreeItemPerHour = (itemPerHour * teaBuffs.quantity) / 100;
 
             // 出售市场税
-            const bidAfterTax = virtualItemBid * 0.95;
+            const bidAfterTax = virtualItemBid * 0.96;
 
             // 每小时利润
             const profitPerHour = itemPerHour * bidAfterTax + extraFreeItemPerHour * bidAfterTax - drinksConsumedPerHourAskPrice;
