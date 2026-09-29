@@ -36,6 +36,7 @@
                 initClientData_itemDetailMap: {},
                 initClientData_actionDetailMap: {},
                 initClientData_openableLootDropMap: {},
+                initClientData_personalBuffTypeDetailMap: {},
                 initCharacterData_characterSkills: [],
                 initCharacterData_actionTypeDrinkSlotsMap: {},
                 initCharacterData_characterHouseRoomMap: {},
@@ -899,12 +900,81 @@
         getMooPassBuff(actionTypeHrid) {
             return this.buffCache.mooPass.get(actionTypeHrid) || new Buff();
         }
+        // 模擬卷軸：沒勾任何卷軸時直接用快取，勾了才把卷軸加成合併進目前的個人加成重算
+        getSimulatedPersonalBuff(actionTypeHrid, enabledScrollKeys) {
+            if (!enabledScrollKeys?.length) return this.getPersonalBuff(actionTypeHrid);
+            const personalBuffList = globals.initCharacterData_personalActionTypeBuffsMap?.[actionTypeHrid];
+            const mergedBuffList = mergeSimulatedScrollBuffs(personalBuffList, actionTypeHrid, enabledScrollKeys, globals.initClientData_itemDetailMap, globals.initClientData_personalBuffTypeDetailMap);
+            return Buff.fromBuffs(mergedBuffList);
+        }
+    }
+
+    // 收益面板可模擬的卷軸（迷宮取得、不可交易，所以只算加成、不算成本）
+    const simulatedScrollOptions = [{
+        key: 'gourmet',
+        itemHrid: '/items/seal_of_gourmet',
+        zhLabel: '美食卷軸',
+        enLabel: 'Gourmet'
+    }, {
+        key: 'efficiency',
+        itemHrid: '/items/seal_of_efficiency',
+        zhLabel: '效率卷軸',
+        enLabel: 'Efficiency'
+    }, {
+        key: 'action_speed',
+        itemHrid: '/items/seal_of_action_speed',
+        zhLabel: '行動速度卷軸',
+        enLabel: 'Action Speed'
+    }, {
+        key: 'rare_find',
+        itemHrid: '/items/seal_of_rare_find',
+        zhLabel: '稀有發現卷軸',
+        enLabel: 'Rare Find'
+    }];
+    const simulatedScrollKeys = simulatedScrollOptions.map(option => option.key);
+
+    /**
+     * 查卷軸對應的個人加成定義（遊戲 init_client_data 的 personalBuffTypeDetailMap）
+     * @returns {Object|null} - { buff, usableInActionTypeMap, ... } 或 null
+     */
+    function getScrollPersonalBuffDetail(scrollKey, itemDetailMap, personalBuffTypeDetailMap) {
+        const option = simulatedScrollOptions.find(scrollOption => scrollOption.key === scrollKey);
+        if (!option) return null;
+        const personalBuffTypeHrid = itemDetailMap?.[option.itemHrid]?.scrollDetail?.personalBuffTypeHrid;
+        if (!personalBuffTypeHrid) return null;
+        return personalBuffTypeDetailMap?.[personalBuffTypeHrid] || null;
+    }
+
+    /**
+     * 把勾選的卷軸加成合併進目前的個人加成清單
+     * 只套用在卷軸可用的動作類型；同類加成已在生效中就不重複疊加
+     * @param {Array} personalBuffList - 目前該動作類型的個人加成
+     * @param {string} actionTypeHrid - 動作類型，如 "/action_types/cooking"
+     * @param {string[]} enabledScrollKeys - 勾選的卷軸 key，如 ['efficiency']
+     * @returns {Array} - 新的加成清單（不改動傳入的陣列）
+     */
+    function mergeSimulatedScrollBuffs(personalBuffList, actionTypeHrid, enabledScrollKeys, itemDetailMap, personalBuffTypeDetailMap) {
+        const mergedBuffList = Array.isArray(personalBuffList) ? [...personalBuffList] : [];
+        for (const scrollKey of enabledScrollKeys || []) {
+            const detail = getScrollPersonalBuffDetail(scrollKey, itemDetailMap, personalBuffTypeDetailMap);
+            if (!detail?.buff?.typeHrid || !detail.usableInActionTypeMap?.[actionTypeHrid]) continue;
+            let isAlreadyActive = false;
+            for (const buff of mergedBuffList) {
+                if (buff?.typeHrid === detail.buff.typeHrid) {
+                    isAlreadyActive = true;
+                    break;
+                }
+            }
+            if (!isAlreadyActive) mergedBuffList.push(detail.buff);
+        }
+        return mergedBuffList;
     }
 
     // "community_buffs_updated" === e.type ? this.handleMessageCommunityBuffsUpdated(e)
     var buffs = new BuffsProvider();
 
-    function ProfitCaculation(action, marketJson) {
+    // enabledScrollKeys：收益面板勾選的模擬卷軸；掉落紀錄的預期收益不傳，維持實際加成
+    function ProfitCaculation(action, marketJson, enabledScrollKeys = []) {
         const isProduction = action.inputItems?.length > 0;
         const actionHrid = action.hrid;
         const buyMode = globals.profitSettings.materialPriceMode || 'bid';
@@ -933,7 +1003,7 @@
         }
         const communityBuff = buffs.getCommunityBuff(action.type);
         const achievementBuff = buffs.getAchievementBuff(action.type);
-        const personalBuff = buffs.getPersonalBuff(action.type);
+        const personalBuff = buffs.getSimulatedPersonalBuff(action.type, enabledScrollKeys);
         const mooPassBuff = buffs.getMooPassBuff(action.type);
 
         // 原料支出计算
@@ -987,7 +1057,7 @@
         // 每小时动作数（包含工具缩减动作时间）
         const baseTimePerActionSec = action.baseTimeCost / 1000000000;
         // 游戏机制：动作时间最低只能到3秒
-        const actualTimePerActionSec = Math.max(3, baseTimePerActionSec / (1 + equipmentBuff.action_speed / 100));
+        const actualTimePerActionSec = Math.max(3, baseTimePerActionSec / (1 + (equipmentBuff.action_speed + personalBuff.action_speed) / 100));
         const actionPerHour = 3600 / actualTimePerActionSec * (1 + totalEffBuff / 100);
 
         // 总 Wisdom Buff 计算（用于经验值）
@@ -1110,7 +1180,7 @@
                 }
                 const levelEngouth = globals.initCharacterData_characterSkills.some(skill => skill.skillHrid === action.levelRequirement.skillHrid && skill.level >= action.levelRequirement.level);
                 const iconId = action.hrid.replace(`/actions/${actionType}/`, '');
-                const result = ProfitCaculation(action, marketJson);
+                const result = ProfitCaculation(action, marketJson, globals.profitSettings.enabledScrolls);
                 const actionHtml = `
                 <div class="Item_itemContainer__x7kH1" style="position: relative;">
                     <div>
@@ -1560,6 +1630,51 @@
         </label>
     `).join('');
     }
+
+    // 切換單一卷軸的勾選狀態（可複選），回傳新的勾選清單
+    function toggleScrollKey(enabledScrollKeys, scrollKey) {
+        const currentKeys = Array.isArray(enabledScrollKeys) ? enabledScrollKeys : [];
+        if (currentKeys.includes(scrollKey)) return currentKeys.filter(key => key !== scrollKey);
+        return [...currentKeys, scrollKey];
+    }
+    function getScrollBuffButtonStyle(isEnabled) {
+        return {
+            background: isEnabled ? '#28a745' : '#f8f9fa',
+            color: isEnabled ? 'white' : '#333',
+            borderColor: isEnabled ? '#28a745' : '#dee2e6'
+        };
+    }
+    // 滑鼠移上去顯示卷軸實際加成數值，例如 "+15%"
+    function getScrollBuffHint(scrollKey) {
+        const detail = getScrollPersonalBuffDetail(scrollKey, globals.initClientData_itemDetailMap, globals.initClientData_personalBuffTypeDetailMap);
+        if (!detail?.buff) return t('找不到卷軸資料，重新整理遊戲頁面後再試', 'Scroll data not found, reload the game page');
+        return `+${formatNumber(detail.buff.flatBoost * 100)}%`;
+    }
+
+    // 生成模擬卷軸按鈕組HTML（可複選）
+    function generateScrollBuffButtons() {
+        const enabledScrollKeys = globals.profitSettings.enabledScrolls || [];
+        return simulatedScrollOptions.map(option => {
+            const isEnabled = enabledScrollKeys.includes(option.key);
+            const buttonStyle = getScrollBuffButtonStyle(isEnabled);
+            return `
+        <span class="scroll-buff-option" role="button" data-scroll="${option.key}" aria-pressed="${isEnabled}" title="${getScrollBuffHint(option.key)}" style="
+            display: flex;
+            align-items: center;
+            margin-right: 6px;
+            padding: 3px 6px;
+            cursor: pointer;
+            font-size: 0.72em;
+            border-radius: 3px;
+            white-space: nowrap;
+            background: ${buttonStyle.background};
+            color: ${buttonStyle.color};
+            border: 1px solid ${buttonStyle.borderColor};
+            transition: all 0.2s ease;
+        ">${t(option.zhLabel, option.enLabel)}</span>
+    `;
+        }).join('');
+    }
     let waitForPannelsTimer = null;
     async function waitForPannels() {
         // 先清掉既有排程，避免多次呼叫（如重新登入）疊出多條並行的輪詢鏈
@@ -1604,6 +1719,10 @@
                     <div id="tradingModeContainer" style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
                         ${generateTradingModeButtons()}
                     </div>
+                </div>
+                <div class="scroll-buff-container" style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 0 10px 8px;">
+                    <span style="font-size: 0.72em; white-space: nowrap;">${t('模擬卷軸收益', 'Simulate Scrolls')}:</span>
+                    ${generateScrollBuffButtons()}
                 </div>
                 <div class="Inventory_items__6SXv0 script_buildScore_added script_invSort_added">
                 ${GenerateDom(globals.freshnessMarketJson)}
@@ -1673,6 +1792,15 @@
                 }
                 return;
             }
+            const scrollBuffButton = e.target.closest('.scroll-buff-option');
+            if (scrollBuffButton) {
+                // 設定一變就會觸發 subscribe 重算面板並存檔
+                globals.profitSettings = {
+                    ...globals.profitSettings,
+                    enabledScrolls: toggleScrollKey(globals.profitSettings.enabledScrolls, scrollBuffButton.dataset.scroll)
+                };
+                return;
+            }
             const settingsBtn = e.target.closest('.profit-settings-btn');
             if (settingsBtn) {
                 unsafeWindow["MWIProfitPanel_showSettingsModal"]?.();
@@ -1715,6 +1843,15 @@
                     radio.checked = isSelected;
                 });
             }
+            const enabledScrollKeys = globals.profitSettings.enabledScrolls || [];
+            panel.querySelectorAll('.scroll-buff-option').forEach(button => {
+                const isEnabled = enabledScrollKeys.includes(button.dataset.scroll);
+                const buttonStyle = getScrollBuffButtonStyle(isEnabled);
+                button.style.background = buttonStyle.background;
+                button.style.color = buttonStyle.color;
+                button.style.borderColor = buttonStyle.borderColor;
+                button.setAttribute('aria-pressed', String(isEnabled));
+            });
             if (force || globals.hasMarketItemUpdate) {
                 const itemsContainer = panel.querySelector('.Inventory_items__6SXv0');
                 if (itemsContainer) {
@@ -1856,6 +1993,13 @@
             if (settings.actionCategories.length === 0) {
                 settings.actionCategories = validCategories;
             }
+        }
+
+        // 驗證 enabledScrolls（模擬卷軸，可複選，預設全不勾）
+        if (!Array.isArray(settings.enabledScrolls)) {
+            settings.enabledScrolls = [];
+        } else {
+            settings.enabledScrolls = simulatedScrollKeys.filter(key => settings.enabledScrolls.includes(key));
         }
 
         // 验证 levelUpDisplayCount (1-10)
@@ -2132,6 +2276,7 @@
                 }
             });
             const newSettings = {
+                enabledScrolls: globals.profitSettings.enabledScrolls,
                 materialPriceMode,
                 productPriceMode,
                 actionCategories,
@@ -2200,6 +2345,7 @@
                     globals.initClientData_actionDetailMap = obj.actionDetailMap;
                     globals.initClientData_itemDetailMap = obj.itemDetailMap;
                     globals.initClientData_openableLootDropMap = obj.openableLootDropMap;
+                    globals.initClientData_personalBuffTypeDetailMap = obj.personalBuffTypeDetailMap || {};
                 } else if (obj.type === "market_item_order_books_updated") {
                     globals.hasMarketItemUpdate = true;
                     globals.freshnessMarketJson.updateDataFromMarket(obj?.marketItemOrderBooks);
@@ -2303,6 +2449,7 @@
         globals.initClientData_actionDetailMap = obj.actionDetailMap;
         globals.initClientData_itemDetailMap = obj.itemDetailMap;
         globals.initClientData_openableLootDropMap = obj.openableLootDropMap;
+        globals.initClientData_personalBuffTypeDetailMap = obj.personalBuffTypeDetailMap || {};
     }
     unsafeWindow["MWIProfitPanel_Globals"] = globals;
     hookWS();
