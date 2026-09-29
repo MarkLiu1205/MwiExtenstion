@@ -4653,14 +4653,13 @@
 
         let totalTimeStr = "Error";
         const content = targetNode.innerText;
-        const match = content.match(/\((\d+)\)/);
-        if (match) {
+        const numOfTimes = parseHeaderActionCount(content);
+        if (numOfTimes !== null) {
             // 行動剛切換時進度條文字或行動列表可能還沒就緒：先不寫，交給下次變動/巡檢重試
             const progressMatch = getOriTextFromElement(document.querySelector(".ProgressBar_text__102Yn")).match(/[\d\.]+/);
             if (!progressMatch || !currentActionsHridList[0]) {
                 return;
             }
-            const numOfTimes = +match[1];
             const timePerActionSec = +progressMatch[0];
             const actionHrid = currentActionsHridList[0].actionHrid;
             let effBuff = 1 + getTotalEffiPercentage(actionHrid) / 100;
@@ -4679,6 +4678,24 @@
         }
 
         targetNode.textContent += totalTimeStr;
+    }
+
+    /**
+     * 讀頁首動作名稱後面括號裡的次數，例如「桃子優格 (240K)」
+     * 遊戲在 10 萬次以上會縮寫成 K/M/B/T（無條件捨去），這裡還原成大約次數；
+     * 沒有括號或是遊戲顯示「Lots!」回傳 null（維持顯示 ∞）
+     * @param {string} headerText - 頁首動作名稱文字
+     * @returns {number|null}
+     */
+    function parseHeaderActionCount(headerText) {
+        const countUnitMap = { K: 1e3, M: 1e6, B: 1e9, T: 1e12 };
+        const matchList = [...(headerText || "").matchAll(/\((\d+(?:\.\d+)?)([KMBT])?\)/g)];
+        if (matchList.length === 0) {
+            return null;
+        }
+        // 動作名稱本身也可能有括號，次數一定在最後一組
+        const [, countText, unit] = matchList[matchList.length - 1];
+        return Number(countText) * (unit ? countUnitMap[unit] : 1);
     }
 
     function timeReadable(sec) {
