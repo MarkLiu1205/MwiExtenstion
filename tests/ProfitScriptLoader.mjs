@@ -13,6 +13,12 @@ const testHooksSource = `
         toggleScrollKey,
         validateProfitSettings,
         generateScrollBuffButtons,
+        calculateWisdomScrollExp,
+        findSkillActionDetailInstance,
+        collectCurrentActionBuffs,
+        formatWisdomScrollExpHint,
+        getWisdomScrollExpHint,
+        findActionHridByName,
         simulatedScrollOptions
     };
 })();`;

@@ -910,35 +910,54 @@
     }
 
     // 收益面板可模擬的卷軸（迷宮取得、不可交易，所以只算加成、不算成本）
+    // 排序：全技能通用 → 採集類（擠奶/採摘/伐木）→ 烹飪/沖泡
     const simulatedScrollOptions = [{
-        key: 'gourmet',
-        itemHrid: '/items/seal_of_gourmet',
-        zhLabel: '美食卷軸',
-        enLabel: 'Gourmet'
-    }, {
         key: 'efficiency',
         itemHrid: '/items/seal_of_efficiency',
-        zhLabel: '效率卷軸',
+        zhLabel: '效率',
         enLabel: 'Efficiency'
     }, {
         key: 'action_speed',
         itemHrid: '/items/seal_of_action_speed',
-        zhLabel: '行動速度卷軸',
+        zhLabel: '行動速度',
         enLabel: 'Action Speed'
     }, {
         key: 'rare_find',
         itemHrid: '/items/seal_of_rare_find',
-        zhLabel: '稀有發現卷軸',
+        zhLabel: '稀有發現',
         enLabel: 'Rare Find'
+    }, {
+        key: 'gathering',
+        itemHrid: '/items/seal_of_gathering',
+        zhLabel: '採集',
+        enLabel: 'Gathering'
+    }, {
+        key: 'processing',
+        itemHrid: '/items/seal_of_processing',
+        zhLabel: '加工',
+        enLabel: 'Processing'
+    }, {
+        key: 'gourmet',
+        itemHrid: '/items/seal_of_gourmet',
+        zhLabel: '美食',
+        enLabel: 'Gourmet'
     }];
     const simulatedScrollKeys = simulatedScrollOptions.map(option => option.key);
+    // 經驗卷軸不做面板開關，只在遊戲動作視窗的「產出」經驗值後面顯示開卷軸後的經驗
+    const wisdomScrollOption = {
+        key: 'wisdom',
+        itemHrid: '/items/seal_of_wisdom',
+        zhLabel: '經驗',
+        enLabel: 'Wisdom'
+    };
+    const allScrollOptions = [...simulatedScrollOptions, wisdomScrollOption];
 
     /**
      * 查卷軸對應的個人加成定義（遊戲 init_client_data 的 personalBuffTypeDetailMap）
      * @returns {Object|null} - { buff, usableInActionTypeMap, ... } 或 null
      */
     function getScrollPersonalBuffDetail(scrollKey, itemDetailMap, personalBuffTypeDetailMap) {
-        const option = simulatedScrollOptions.find(scrollOption => scrollOption.key === scrollKey);
+        const option = allScrollOptions.find(scrollOption => scrollOption.key === scrollKey);
         if (!option) return null;
         const personalBuffTypeHrid = itemDetailMap?.[option.itemHrid]?.scrollDetail?.personalBuffTypeHrid;
         if (!personalBuffTypeHrid) return null;
@@ -968,6 +987,185 @@
             if (!isAlreadyActive) mergedBuffList.push(detail.buff);
         }
         return mergedBuffList;
+    }
+
+    // 單次經驗值（四捨五入到小數一位，跟遊戲顯示一致）
+    function calculateExpPerAction(baseExpGain, totalWisdomBuff) {
+        return Math.round((1 + totalWisdomBuff / 100) * baseExpGain * 10) / 10;
+    }
+
+    // ── 遊戲動作視窗：「產出」經驗值下面補上開經驗卷軸後的經驗 ──
+    // 提示放在經驗格子「外面」（下一行）：mwiTools 會讀經驗格子的 textContent 算總時間，塞在裡面會害它讀成 NaN
+    const wisdomBuffTypeHrid = '/buff_types/wisdom';
+    const wisdomScrollExpHintClass = 'profit-wisdom-scroll-exp';
+    const wisdomScrollHintColor = '#66bb6a';
+    const wisdomScrollWarningColor = '#9e9e9e';
+    let actionHridByNameCache = null;
+    let hasReloadedPersonalBuffTypeDetailMap = false;
+
+    /**
+     * 從視窗內的元素往上找 React 元件實例（遊戲的 SkillActionDetail），拿 actionDetail 與 getBuffs
+     * @returns {Object|null} - 元件實例；找不到（遊戲改版等）回傳 null
+     */
+    function findSkillActionDetailInstance(element) {
+        if (!element) return null;
+        const fiberKey = Reflect.ownKeys(element).find(key => typeof key === 'string' && (key.startsWith('__reactFiber$') || key.startsWith('__reactInternalInstance$')));
+        let fiber = fiberKey ? element[fiberKey] : null;
+        for (let depth = 0; fiber && depth < 20; depth++) {
+            const instance = fiber.stateNode;
+            if (instance?.props?.actionDetail?.hrid) return instance;
+            fiber = fiber.return;
+        }
+        return null;
+    }
+
+    // 備用：用視窗標題的動作名稱（英文或中文）反查動作
+    function findActionHridByName(actionName) {
+        if (!actionName) return null;
+        if (!actionHridByNameCache) {
+            actionHridByNameCache = {};
+            for (const [actionHrid, actionDetail] of Object.entries(globals.initClientData_actionDetailMap || {})) {
+                if (actionDetail?.name) actionHridByNameCache[actionDetail.name] = actionHrid;
+                if (ZHActionNames[actionHrid]) actionHridByNameCache[ZHActionNames[actionHrid]] = actionHrid;
+            }
+        }
+        return actionHridByNameCache[actionName.trim()] || null;
+    }
+    function findActionDetailByPopupName(expGainElement) {
+        const popupElement = expGainElement?.closest?.('[class*="SkillActionDetail_regularComponent"]');
+        const nameElement = popupElement?.querySelector('[class*="SkillActionDetail_name"]');
+        // mwiTools 翻譯過的文字會把原文存在 script_translatedfrom
+        const actionName = nameElement?.getAttribute('script_translatedfrom') || nameElement?.textContent;
+        const actionHrid = findActionHridByName(actionName);
+        return actionHrid ? globals.initClientData_actionDetailMap[actionHrid] : null;
+    }
+
+    // 卷軸資料是空的（例如腳本啟動時遊戲還沒存好）就再從遊戲存檔讀一次，只讀一次避免每秒解壓大資料
+    function getWisdomScrollDetail() {
+        let wisdomScrollDetail = getScrollPersonalBuffDetail(wisdomScrollOption.key, globals.initClientData_itemDetailMap, globals.initClientData_personalBuffTypeDetailMap);
+        if (wisdomScrollDetail || hasReloadedPersonalBuffTypeDetailMap) return wisdomScrollDetail;
+        hasReloadedPersonalBuffTypeDetailMap = true;
+        try {
+            const clientData = JSON.parse(LZString.decompressFromUTF16(localStorage.getItem('initClientData')) || '{}');
+            if (clientData.personalBuffTypeDetailMap) globals.initClientData_personalBuffTypeDetailMap = clientData.personalBuffTypeDetailMap;
+            if (clientData.itemDetailMap && !globals.initClientData_itemDetailMap?.[wisdomScrollOption.itemHrid]) globals.initClientData_itemDetailMap = clientData.itemDetailMap;
+        } catch (e) {
+            console.error('[MWIProfitPanel] 重新讀取卷軸資料失敗:', e);
+        }
+        wisdomScrollDetail = getScrollPersonalBuffDetail(wisdomScrollOption.key, globals.initClientData_itemDetailMap, globals.initClientData_personalBuffTypeDetailMap);
+        return wisdomScrollDetail;
+    }
+
+    // 拿不到遊戲元件的 getBuffs 時，用腳本自己記錄的各來源加成湊出目前加成清單
+    function collectCurrentActionBuffs(actionTypeHrid) {
+        const buffSourceMaps = [
+            globals.initCharacterData_communityActionTypeBuffsMap,
+            globals.initCharacterData_consumableActionTypeBuffsMap,
+            globals.initCharacterData_houseActionTypeBuffsMap,
+            globals.initCharacterData_equipmentActionTypeBuffsMap,
+            globals.initCharacterData_achievementActionTypeBuffsMap,
+            globals.initCharacterData_personalActionTypeBuffsMap,
+            globals.initCharacterData_mooPassActionTypeBuffsMap
+        ];
+        const currentBuffList = [];
+        for (const buffSourceMap of buffSourceMaps) {
+            const buffList = buffSourceMap?.[actionTypeHrid];
+            if (Array.isArray(buffList)) currentBuffList.push(...buffList);
+        }
+        return currentBuffList;
+    }
+
+    /**
+     * 算開經驗卷軸後的單次經驗
+     * @param {Object} actionDetail - 遊戲動作資料（要 experienceGain、type）
+     * @param {Array} currentBuffList - 目前這個動作的全部加成（遊戲顯示的經驗就是用它算的）
+     * @param {Array} personalBuffList - 目前這個動作類型的個人加成（判斷經驗卷軸是否已生效）
+     * @param {Object} wisdomScrollDetail - 經驗卷軸的個人加成定義
+     * @returns {number|null} - 卷軸已生效、不適用、沒經驗或缺資料時回傳 null
+     */
+    function calculateWisdomScrollExp(actionDetail, currentBuffList, personalBuffList, wisdomScrollDetail) {
+        const baseExpGain = actionDetail?.experienceGain?.value || 0;
+        // 遊戲本身經驗小於 1 就不顯示經驗
+        if (baseExpGain < 1) return null;
+        if (!wisdomScrollDetail?.buff || !wisdomScrollDetail.usableInActionTypeMap?.[actionDetail.type]) return null;
+        for (const buff of personalBuffList || []) {
+            if (buff?.typeHrid === wisdomScrollDetail.buff.typeHrid) return null;
+        }
+        let currentWisdomFlatBoost = 0;
+        for (const buff of currentBuffList || []) {
+            if (buff?.typeHrid === wisdomBuffTypeHrid) currentWisdomFlatBoost += buff.flatBoost || 0;
+        }
+        return calculateExpPerAction(baseExpGain, (currentWisdomFlatBoost + wisdomScrollDetail.buff.flatBoost) * 100);
+    }
+
+    function formatWisdomScrollExpHint(expWithWisdomScroll) {
+        if (expWithWisdomScroll === null || expWithWisdomScroll === undefined) return '';
+        return `${t('開經驗卷軸', 'w/ Wisdom Scroll')}: ${expWithWisdomScroll.toLocaleString(undefined, { maximumFractionDigits: 1 })}`;
+    }
+
+    /**
+     * 決定經驗格子下面要顯示什麼
+     * @returns {{text: string, isWarning: boolean}|null} - null 表示不顯示（卷軸已生效或此技能不適用）
+     */
+    function getWisdomScrollExpHint(expGainElement) {
+        const instance = findSkillActionDetailInstance(expGainElement);
+        const actionDetail = instance?.props?.actionDetail || findActionDetailByPopupName(expGainElement);
+        if (!actionDetail) return { text: `${t('開經驗卷軸', 'w/ Wisdom Scroll')}: ${t('讀不到動作資料', 'action not found')}`, isWarning: true };
+        const wisdomScrollDetail = getWisdomScrollDetail();
+        if (!wisdomScrollDetail?.buff) return { text: `${t('開經驗卷軸', 'w/ Wisdom Scroll')}: ${t('找不到卷軸資料，請重新整理頁面', 'scroll data missing, reload the page')}`, isWarning: true };
+        let currentBuffList = null;
+        try {
+            if (typeof instance?.getBuffs === 'function') currentBuffList = instance.getBuffs();
+        } catch (e) {
+            currentBuffList = null;
+        }
+        if (!Array.isArray(currentBuffList)) currentBuffList = collectCurrentActionBuffs(actionDetail.type);
+        const personalBuffList = globals.initCharacterData_personalActionTypeBuffsMap?.[actionDetail.type];
+        const hintText = formatWisdomScrollExpHint(calculateWisdomScrollExp(actionDetail, currentBuffList, personalBuffList, wisdomScrollDetail));
+        return hintText ? { text: hintText, isWarning: false } : null;
+    }
+
+    // 只在內容有變時才動 DOM；不需要顯示時移除
+    function updateWisdomScrollExpHint(expGainElement) {
+        const hint = getWisdomScrollExpHint(expGainElement);
+        const nextElement = expGainElement.nextElementSibling;
+        let hintElement = nextElement?.classList?.contains(wisdomScrollExpHintClass) ? nextElement : null;
+        if (!hint) {
+            hintElement?.remove();
+            return;
+        }
+        if (!hintElement) {
+            hintElement = document.createElement('div');
+            hintElement.className = wisdomScrollExpHintClass;
+            hintElement.style.fontSize = '0.9em';
+            expGainElement.insertAdjacentElement('afterend', hintElement);
+        }
+        const color = hint.isWarning ? wisdomScrollWarningColor : wisdomScrollHintColor;
+        if (hintElement.textContent !== hint.text) hintElement.textContent = hint.text;
+        if (hintElement.style.color !== color) hintElement.style.color = color;
+    }
+
+    function refreshWisdomScrollExpHints() {
+        document.querySelectorAll('[class*="SkillActionDetail_expGain"]').forEach(expGainElement => updateWisdomScrollExpHint(expGainElement));
+    }
+
+    // 視窗一打開就補上（不用等每秒刷新）；加成變動由每秒刷新跟上
+    function handleWisdomScrollExpMutations(mutationList) {
+        for (const mutation of mutationList) {
+            for (const addedNode of mutation.addedNodes) {
+                if (addedNode.nodeType !== Node.ELEMENT_NODE) continue;
+                if (addedNode.matches('[class*="SkillActionDetail_expGain"]') || addedNode.querySelector('[class*="SkillActionDetail_expGain"]')) {
+                    refreshWisdomScrollExpHints();
+                    return;
+                }
+            }
+        }
+    }
+    function setupWisdomScrollExpObserver() {
+        new MutationObserver(handleWisdomScrollExpMutations).observe(document.body, {
+            childList: true,
+            subtree: true
+        });
     }
 
     // "community_buffs_updated" === e.type ? this.handleMessageCommunityBuffsUpdated(e)
@@ -1065,7 +1263,7 @@
 
         // 经验值计算
         const baseExpGain = action.experienceGain?.value || 0;
-        const expPerAction = Math.round((1 + totalWisdomBuff / 100) * baseExpGain * 10) / 10;
+        const expPerAction = calculateExpPerAction(baseExpGain, totalWisdomBuff);
         const expPerHour = expPerAction * actionPerHour;
 
         // 每小时支出
@@ -1088,7 +1286,11 @@
                 });
             }
         } else {
-            basicOutputValuationPerAction = getDropTableInfomation(action.dropTable, marketJson, teaBuffs);
+            // 加工機率 = 茶 + 個人加成（加工卷軸）
+            const processingBuffs = {
+                processing: teaBuffs.processing + personalBuff.processing
+            };
+            basicOutputValuationPerAction = getDropTableInfomation(action.dropTable, marketJson, processingBuffs);
             outputItems.push(...basicOutputValuationPerAction.dropItems);
         }
 
@@ -1614,7 +1816,6 @@
         <label class="trading-mode-option" style="
             display: flex; 
             align-items: center; 
-            margin-right: 6px; 
             padding: 3px 6px; 
             cursor: pointer; 
             font-size: 0.72em;
@@ -1641,17 +1842,31 @@
         return {
             background: isEnabled ? '#28a745' : '#f8f9fa',
             color: isEnabled ? 'white' : '#333',
-            borderColor: isEnabled ? '#28a745' : '#dee2e6'
+            borderColor: isEnabled ? '#28a745' : '#dee2e6',
+            checkVisibility: isEnabled ? 'visible' : 'hidden'
         };
     }
-    // 滑鼠移上去顯示卷軸實際加成數值，例如 "+15%"
+    // 刷新時同步按鈕外觀（左右兩個面板共用設定）
+    function applyScrollBuffButtonState(button, isEnabled) {
+        const buttonStyle = getScrollBuffButtonStyle(isEnabled);
+        button.style.background = buttonStyle.background;
+        button.style.color = buttonStyle.color;
+        button.style.borderColor = buttonStyle.borderColor;
+        button.setAttribute('aria-pressed', String(isEnabled));
+        const checkMark = button.querySelector('.scroll-buff-check');
+        if (checkMark) checkMark.style.visibility = buttonStyle.checkVisibility;
+    }
+    // 滑鼠移上去顯示卷軸加成數值與適用技能，例如 "+15%｜擠奶、採摘、伐木"
     function getScrollBuffHint(scrollKey) {
         const detail = getScrollPersonalBuffDetail(scrollKey, globals.initClientData_itemDetailMap, globals.initClientData_personalBuffTypeDetailMap);
         if (!detail?.buff) return t('找不到卷軸資料，重新整理遊戲頁面後再試', 'Scroll data not found, reload the game page');
-        return `+${formatNumber(detail.buff.flatBoost * 100)}%`;
+        const usableActionTypeNames = Object.keys(detail.usableInActionTypeMap || {})
+            .filter(actionTypeHrid => supportActionType.includes(actionTypeHrid))
+            .map(actionTypeHrid => getActionTypeName(actionTypeHrid.replace('/action_types/', '')));
+        return `+${formatNumber(detail.buff.flatBoost * 100)}%｜${usableActionTypeNames.join(t('、', ', '))}`;
     }
 
-    // 生成模擬卷軸按鈕組HTML（可複選）
+    // 生成模擬卷軸按鈕組HTML（可複選，三欄對齊）
     function generateScrollBuffButtons() {
         const enabledScrollKeys = globals.profitSettings.enabledScrolls || [];
         return simulatedScrollOptions.map(option => {
@@ -1661,17 +1876,20 @@
         <span class="scroll-buff-option" role="button" data-scroll="${option.key}" aria-pressed="${isEnabled}" title="${getScrollBuffHint(option.key)}" style="
             display: flex;
             align-items: center;
-            margin-right: 6px;
-            padding: 3px 6px;
+            justify-content: center;
+            gap: 2px;
+            min-width: 0;
+            padding: 3px 4px;
             cursor: pointer;
             font-size: 0.72em;
             border-radius: 3px;
             white-space: nowrap;
+            overflow: hidden;
             background: ${buttonStyle.background};
             color: ${buttonStyle.color};
             border: 1px solid ${buttonStyle.borderColor};
             transition: all 0.2s ease;
-        ">${t(option.zhLabel, option.enLabel)}</span>
+        "><span class="scroll-buff-check" style="visibility: ${buttonStyle.checkVisibility};">✓</span><span style="overflow: hidden; text-overflow: ellipsis;">${t(option.zhLabel, option.enLabel)}</span></span>
     `;
         }).join('');
     }
@@ -1714,15 +1932,20 @@
                     </div>
                 </div>
             </h1>
-                <div style="display: flex; align-items: center; justify-content: space-between; margin: 0 10px 8px; flex-wrap: wrap;">
-                    <span style="color: green; font-size: 0.8em; margin-bottom: 4px;">${t('數據更新於', 'Data updated')}: ${formatDuration(Date.now() - globals.freshnessMarketJson.time * 1000)}</span>
-                    <div id="tradingModeContainer" style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
-                        ${generateTradingModeButtons()}
+                <div style="display: flex; flex-direction: column; gap: 6px; margin: 0 10px 8px;">
+                    <span class="profit-data-time" style="color: green; font-size: 0.8em;">${t('數據更新於', 'Data updated')}: ${formatDuration(Date.now() - globals.freshnessMarketJson.time * 1000)}</span>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="flex: 0 0 4.5em; font-size: 0.72em; white-space: nowrap;">${t('交易模式', 'Price Mode')}</span>
+                        <div id="tradingModeContainer" style="display: flex; gap: 4px; align-items: center; flex-wrap: wrap;">
+                            ${generateTradingModeButtons()}
+                        </div>
                     </div>
-                </div>
-                <div class="scroll-buff-container" style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 0 10px 8px;">
-                    <span style="font-size: 0.72em; white-space: nowrap;">${t('模擬卷軸收益', 'Simulate Scrolls')}:</span>
-                    ${generateScrollBuffButtons()}
+                    <div style="display: flex; align-items: flex-start; gap: 8px;">
+                        <span style="flex: 0 0 4.5em; font-size: 0.72em; white-space: nowrap; padding-top: 4px;">${t('模擬卷軸', 'Scrolls')}</span>
+                        <div class="scroll-buff-container" style="flex: 1; min-width: 0; max-width: 320px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px;">
+                            ${generateScrollBuffButtons()}
+                        </div>
+                    </div>
                 </div>
                 <div class="Inventory_items__6SXv0 script_buildScore_added script_invSort_added">
                 ${GenerateDom(globals.freshnessMarketJson)}
@@ -1735,8 +1958,11 @@
             if (!initialized) {
                 createTooltip();
                 setupClickActions();
+                setupWisdomScrollExpObserver();
                 setInterval(() => {
-                    if (!document.hidden) refreshProfitPanel();
+                    if (document.hidden) return;
+                    refreshProfitPanel();
+                    refreshWisdomScrollExpHints();
                 }, 1000);
                 initialized = true;
             }
@@ -1824,7 +2050,7 @@
         if (!globals.freshnessMarketJson?.market) return;
         const inventoryPanels = document.querySelectorAll('.Inventory_inventory__17CH2.profit-pannel');
         inventoryPanels.forEach(panel => {
-            const timeSpan = panel.querySelector('span');
+            const timeSpan = panel.querySelector('.profit-data-time');
             if (timeSpan) {
                 timeSpan.textContent = globals.freshnessMarketJson.stat();
             }
@@ -1845,12 +2071,7 @@
             }
             const enabledScrollKeys = globals.profitSettings.enabledScrolls || [];
             panel.querySelectorAll('.scroll-buff-option').forEach(button => {
-                const isEnabled = enabledScrollKeys.includes(button.dataset.scroll);
-                const buttonStyle = getScrollBuffButtonStyle(isEnabled);
-                button.style.background = buttonStyle.background;
-                button.style.color = buttonStyle.color;
-                button.style.borderColor = buttonStyle.borderColor;
-                button.setAttribute('aria-pressed', String(isEnabled));
+                applyScrollBuffButtonState(button, enabledScrollKeys.includes(button.dataset.scroll));
             });
             if (force || globals.hasMarketItemUpdate) {
                 const itemsContainer = panel.querySelector('.Inventory_items__6SXv0');
@@ -2413,6 +2634,7 @@
     }
     globals.subscribe((key, value) => {
         if (key === "initClientData_actionDetailMap") {
+            actionHridByNameCache = null;
             const processingMap = {};
             for (const [actionHrid, actionDetail] of Object.entries(value)) {
                 const categorys = processingCategory[actionDetail.type];
