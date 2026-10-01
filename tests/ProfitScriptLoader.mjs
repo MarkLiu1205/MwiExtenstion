@@ -19,7 +19,9 @@ const testHooksSource = `
         formatWisdomScrollExpHint,
         getWisdomScrollExpHint,
         findActionHridByName,
-        simulatedScrollOptions
+        simulatedScrollOptions,
+        handleMessage,
+        renderBuffSourceRows
     };
 })();`;
 

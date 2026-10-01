@@ -48,7 +48,14 @@
                 initCharacterData_achievementActionTypeBuffsMap: {},
                 initCharacterData_personalActionTypeBuffsMap: {},
                 initCharacterData_mooPassActionTypeBuffsMap: {},
+                initCharacterData_guildActionTypeBuffsMap: {},
+                // 任務加速（任務徽章）：只對「進行中的隨機動作任務」的動作 hrid 生效，跟一般行動速度相乘
+                initCharacterData_equipmentTaskActionBuffs: [],
+                initCharacterData_characterQuests: [],
+                initCharacterData_onTaskActionHridSet: {},
                 initCharacterData_noncombatStats: {},
+                // 可用飲料槽數 = 1 + 袋子的 drinkSlots；null 表示還不知道（不截斷）
+                initCharacterData_drinkSlotCount: null,
                 hasMarketItemUpdate: false,
                 isZHInGameSetting: false,
                 freshnessMarketJson: {},
@@ -248,6 +255,8 @@
         "/action_types/crafting": ["/action_categories/crafting/lumber", "/action_categories/crafting/special", "/action_categories/crafting/labyrinth"],
         "/action_types/tailoring": ["/action_categories/tailoring/material", "/action_categories/tailoring/labyrinth"]
     };
+    // 加工茶真正會換算的分類：牛奶→乳酪、木頭→木板、纖維→布料（皮→皮革的原料來自戰鬥，採集掉落不會碰到）
+    const processingConversionCategories = ["/action_categories/cheesesmithing/material", "/action_categories/crafting/lumber", "/action_categories/tailoring/material"];
     const ZHActionTypeNames = {
         milking: "\u64e0\u5976",
         foraging: "\u63a1\u6458",
@@ -772,24 +781,53 @@
             this.efficiency = 0; // "Chance of repeating the action instantly"
             this.essence_find = 0; // "Increases drop rate of essences"
             this.enhancing_success = 0; // "Multiplicative bonus to success rate while enhancing",
-            this.gathering = 0; // "Increases gathering quantity"
+            this.gathering = 0; // "Increases gathering quantity"（只乘採集的 dropTable）
+            this.gourmet = 0; // "Chance to produce an additional item for free"（只乘生產的 outputItems）
             this.wisdom = 0; // "Increases experience gained"
             this.processing = 0; // "Chance to instantly convert gathered resource into processed material"
             this.rare_find = 0; // "Increases rare item drop rate"
+            this.task_action_speed = 0; // 任務加速：跟 action_speed 分開、相乘
+            // 等級類加成不直接折算成效率：遊戲是先算「加成後等級 − (需求等級 + action_level)」再取 0 下限
+            this.action_level = 0; // 提高動作的需求等級（工匠茶 +5），單位：級
+            this.skillLevelFlat = {}; // { "/buff_types/cooking_level": 級數 }
+            this.skillLevelRatio = {}; // { "/buff_types/cooking_level": 比例 }
+        }
+        // 照遊戲 sumBuffValue：同類型的各來源直接相加
+        // 每格收益都要加總 9 個來源，用固定的數字欄位清單（Object.entries 逐一展開在整個面板上會多花好幾毫秒）
+        static sum(buffList) {
+            const numericKeys = Buff.numericKeys || (Buff.numericKeys = Object.keys(new Buff()).filter(key => typeof new Buff()[key] === 'number'));
+            const total = new Buff();
+            for (const buff of buffList) {
+                if (!buff) continue;
+                for (let i = 0; i < numericKeys.length; i++) total[numericKeys[i]] += buff[numericKeys[i]] || 0;
+                for (const typeHrid in buff.skillLevelFlat) total.skillLevelFlat[typeHrid] = (total.skillLevelFlat[typeHrid] || 0) + buff.skillLevelFlat[typeHrid];
+                for (const typeHrid in buff.skillLevelRatio) total.skillLevelRatio[typeHrid] = (total.skillLevelRatio[typeHrid] || 0) + buff.skillLevelRatio[typeHrid];
+            }
+            return total;
+        }
+        // 計算結果裡的加成只給提示框顯示，而且每格都會 JSON 化塞進 data-tooltip：
+        // 轉成只含顯示欄位的一般物件（HTML 小很多；一般物件序列化也比自訂 toJSON 快）
+        static toDisplay(buff) {
+            const { action_speed, efficiency, gathering, gourmet, essence_find, rare_find, wisdom, artisan, task_action_speed } = buff;
+            return { action_speed, efficiency, gathering, gourmet, essence_find, rare_find, wisdom, artisan, task_action_speed };
         }
         static fromBuffs(buffs) {
             const buff = new Buff();
             if (!buffs) return buff;
             for (const {
                 typeHrid,
-                flatBoost
+                flatBoost = 0,
+                ratioBoost = 0
             } of buffs) {
                 switch (typeHrid) {
                     case "/buff_types/artisan":
                         buff.artisan += flatBoost * 100;
                         break;
                     case "/buff_types/action_level":
-                        buff.efficiency -= flatBoost;
+                        buff.action_level += flatBoost;
+                        break;
+                    case "/buff_types/task_action_speed":
+                        buff.task_action_speed += flatBoost * 100;
                         break;
                     case "/buff_types/action_speed":
                         buff.action_speed += flatBoost * 100;
@@ -813,8 +851,10 @@
                         buff.enhancing_success += flatBoost * 100;
                         break;
                     case "/buff_types/gathering":
-                    case "/buff_types/gourmet":
                         buff.gathering += flatBoost * 100;
+                        break;
+                    case "/buff_types/gourmet":
+                        buff.gourmet += flatBoost * 100;
                         break;
                     case "/buff_types/wisdom":
                         buff.wisdom += flatBoost * 100;
@@ -834,7 +874,13 @@
                         // 戰鬥相關加成，跟採集/生產收益計算無關，故意忽略不計入
                         break;
                     default:
-                        if (typeHrid.endsWith("_level")) buff.efficiency += flatBoost; else console.error(`unhandled buff type - ${typeHrid}`);
+                        // 技能等級加成（例如烹飪茶 +3 級）：記下來，算等級效率時再用；不直接加到效率
+                        if (typeHrid.endsWith("_level")) {
+                            buff.skillLevelFlat[typeHrid] = (buff.skillLevelFlat[typeHrid] || 0) + flatBoost;
+                            buff.skillLevelRatio[typeHrid] = (buff.skillLevelRatio[typeHrid] || 0) + ratioBoost;
+                        } else {
+                            console.error(`unhandled buff type - ${typeHrid}`);
+                        }
                         break;
                 }
             }
@@ -851,20 +897,28 @@
                 house: new Map(),
                 achievement: new Map(),
                 personal: new Map(),
-                mooPass: new Map()
+                mooPass: new Map(),
+                guild: new Map()
             };
 
+            // 遊戲把這 8 個來源依動作類型串成一份清單再依類型加總（calcSkillingActionTypeBuffsDict）
+            const sourceKeyByStateKey = {
+                initCharacterData_communityActionTypeBuffsMap: 'community',
+                initCharacterData_consumableActionTypeBuffsMap: 'tea',
+                initCharacterData_equipmentActionTypeBuffsMap: 'equipment',
+                initCharacterData_houseActionTypeBuffsMap: 'house',
+                initCharacterData_achievementActionTypeBuffsMap: 'achievement',
+                initCharacterData_personalActionTypeBuffsMap: 'personal',
+                initCharacterData_mooPassActionTypeBuffsMap: 'mooPass',
+                initCharacterData_guildActionTypeBuffsMap: 'guild'
+            };
             // 订阅全局数据变化
             globals.subscribe((key, value) => {
-                if (key === 'initCharacterData_communityActionTypeBuffsMap') this.updateBuffCache('community', value); else if (key === 'initCharacterData_consumableActionTypeBuffsMap') this.updateBuffCache('tea', value); else if (key === 'initCharacterData_equipmentActionTypeBuffsMap') this.updateBuffCache('equipment', value); else if (key === 'initCharacterData_houseActionTypeBuffsMap') this.updateBuffCache('house', value); else if (key === 'initCharacterData_achievementActionTypeBuffsMap') this.updateBuffCache('achievement', value); else if (key === 'initCharacterData_personalActionTypeBuffsMap') this.updateBuffCache('personal', value); else if (key === 'initCharacterData_mooPassActionTypeBuffsMap') this.updateBuffCache('mooPass', value);
+                if (sourceKeyByStateKey[key]) this.updateBuffCache(sourceKeyByStateKey[key], value);
             });
-            this.updateBuffCache('community', globals.initCharacterData_communityActionTypeBuffsMap);
-            this.updateBuffCache('tea', globals.initCharacterData_consumableActionTypeBuffsMap);
-            this.updateBuffCache('equipment', globals.initCharacterData_equipmentActionTypeBuffsMap);
-            this.updateBuffCache('house', globals.initCharacterData_houseActionTypeBuffsMap);
-            this.updateBuffCache('achievement', globals.initCharacterData_achievementActionTypeBuffsMap);
-            this.updateBuffCache('personal', globals.initCharacterData_personalActionTypeBuffsMap);
-            this.updateBuffCache('mooPass', globals.initCharacterData_mooPassActionTypeBuffsMap);
+            for (const [stateKey, sourceKey] of Object.entries(sourceKeyByStateKey)) {
+                this.updateBuffCache(sourceKey, globals[stateKey]);
+            }
         }
         updateBuffCache(type, data) {
             this.clearCache(type);
@@ -899,6 +953,9 @@
         }
         getMooPassBuff(actionTypeHrid) {
             return this.buffCache.mooPass.get(actionTypeHrid) || new Buff();
+        }
+        getGuildBuff(actionTypeHrid) {
+            return this.buffCache.guild.get(actionTypeHrid) || new Buff();
         }
         // 模擬卷軸：沒勾任何卷軸時直接用快取，勾了才把卷軸加成合併進目前的個人加成重算
         getSimulatedPersonalBuff(actionTypeHrid, enabledScrollKeys) {
@@ -1024,8 +1081,11 @@
         if (!actionName) return null;
         if (!actionHridByNameCache) {
             actionHridByNameCache = {};
+            // 遊戲官方中文是簡體（翠绿奶牛），ZHActionNames 是繁體（翠綠奶牛），兩種都收
+            const simplifiedActionNames = zhTranslation?.actionNames || {};
             for (const [actionHrid, actionDetail] of Object.entries(globals.initClientData_actionDetailMap || {})) {
                 if (actionDetail?.name) actionHridByNameCache[actionDetail.name] = actionHrid;
+                if (simplifiedActionNames[actionHrid]) actionHridByNameCache[simplifiedActionNames[actionHrid]] = actionHrid;
                 if (ZHActionNames[actionHrid]) actionHridByNameCache[ZHActionNames[actionHrid]] = actionHrid;
             }
         }
@@ -1065,7 +1125,8 @@
             globals.initCharacterData_equipmentActionTypeBuffsMap,
             globals.initCharacterData_achievementActionTypeBuffsMap,
             globals.initCharacterData_personalActionTypeBuffsMap,
-            globals.initCharacterData_mooPassActionTypeBuffsMap
+            globals.initCharacterData_mooPassActionTypeBuffsMap,
+            globals.initCharacterData_guildActionTypeBuffsMap
         ];
         const currentBuffList = [];
         for (const buffSourceMap of buffSourceMaps) {
@@ -1142,10 +1203,18 @@
         }
         const color = hint.isWarning ? wisdomScrollWarningColor : wisdomScrollHintColor;
         if (hintElement.textContent !== hint.text) hintElement.textContent = hint.text;
-        if (hintElement.style.color !== color) hintElement.style.color = color;
+        // 瀏覽器會把 style.color 正規化成 rgb(...)，直接比對永遠不相等；改記在 dataset 上比
+        if (hintElement.dataset.color !== color) {
+            hintElement.dataset.color = color;
+            hintElement.style.color = color;
+        }
     }
 
     function refreshWisdomScrollExpHints() {
+        // 經驗格子被 React 移除或重建後，原本的提示會留在原地變成孤兒（顯示過期數字，新格子又會再加一行），先清掉
+        document.querySelectorAll(`.${wisdomScrollExpHintClass}`).forEach(hintElement => {
+            if (!hintElement.previousElementSibling?.matches?.('[class*="SkillActionDetail_expGain"]')) hintElement.remove();
+        });
         document.querySelectorAll('[class*="SkillActionDetail_expGain"]').forEach(expGainElement => updateWisdomScrollExpHint(expGainElement));
     }
 
@@ -1186,7 +1255,9 @@
             ask: 0,
             bid: 0
         };
-        const drinksList = globals.initCharacterData_actionTypeDrinkSlotsMap[action.type];
+        // 只有前 drinkSlotCount 格（1 + 袋子的 drinkSlots）會喝；超出的格子遊戲不會用，不算成本
+        const drinkSlotCount = globals.initCharacterData_drinkSlotCount;
+        const drinksList = (globals.initCharacterData_actionTypeDrinkSlotsMap?.[action.type] || []).slice(0, drinkSlotCount > 0 ? drinkSlotCount : undefined);
         const drinkItems = [];
         for (const drink of drinksList) {
             if (!drink?.itemHrid) continue;
@@ -1203,6 +1274,13 @@
         const achievementBuff = buffs.getAchievementBuff(action.type);
         const personalBuff = buffs.getSimulatedPersonalBuff(action.type, enabledScrollKeys);
         const mooPassBuff = buffs.getMooPassBuff(action.type);
+        const houseBuff = buffs.getHouseBuff(action.type);
+        const equipmentBuff = buffs.getEquipmentBuff(action.type);
+        const guildBuff = buffs.getGuildBuff(action.type);
+        // 任務徽章的加成（equipmentTaskActionBuffs）只加在「進行中的隨機動作任務」的動作上
+        const taskBuff = globals.initCharacterData_onTaskActionHridSet?.[actionHrid] ? Buff.fromBuffs(globals.initCharacterData_equipmentTaskActionBuffs) : new Buff();
+        // 跟遊戲一樣：所有來源先合併，再依類型加總（各來源分開保留只是給表格顯示）
+        const totalBuff = Buff.sum([mooPassBuff, communityBuff, houseBuff, guildBuff, achievementBuff, teaBuffs, equipmentBuff, personalBuff, taskBuff]);
 
         // 原料支出计算
         let inputItems = [];
@@ -1215,8 +1293,8 @@
             for (const item of inputItems) {
                 item.name = getItemName(item.itemHrid);
                 Object.assign(item, getItemValuation(item.itemHrid, marketJson));
-                // 茶减少原料消耗
-                item.count *= 1 - teaBuffs.artisan / 100;
+                // 工匠減少原料消耗（升級用的本體不打折，見下方）
+                item.count *= 1 - totalBuff.artisan / 100;
                 totalResourcesPricePerAction.ask += item.ask * item.count;
                 totalResourcesPricePerAction.bid += item.bid * item.count;
             }
@@ -1235,31 +1313,29 @@
             }
         }
 
-        // 等级碾压提高效率（人物等级不及最低要求等级时，按最低要求等级计算）
+        // 等級效率（照遊戲 calculateBuffsForAction）：
+        //   加成後等級 = (1 + Σratio) × 技能等級 + Σflat（該技能的 *_level，例如技能茶 +3）
+        //   有效需求等級 = 需求等級 + Σaction_level（工匠茶 +5）
+        //   每高 1 級 +1% 效率，不取整；低於需求時為 0（不會變負）
         const requiredLevel = action.levelRequirement.level;
-        let currentLevel = requiredLevel;
-        for (const skill of globals.initCharacterData_characterSkills) {
-            if (skill.skillHrid === action.levelRequirement.skillHrid) {
-                currentLevel = skill.level;
-                break;
-            }
-        }
-        const levelEffBuff = Math.max(currentLevel - requiredLevel, 0);
-        // 房子效率
-        const houseBuff = buffs.getHouseBuff(action.type);
-        // 特殊装备效率
-        const equipmentBuff = buffs.getEquipmentBuff(action.type);
+        const characterSkill = globals.initCharacterData_characterSkills.find(skill => skill.skillHrid === action.levelRequirement.skillHrid);
+        const currentLevel = characterSkill ? characterSkill.level : requiredLevel; // 沒有技能資料時以需求等級計
+        const levelBuffTypeHrid = `/buff_types/${action.levelRequirement.skillHrid.split('/').pop()}_level`;
+        const boostedLevel = (1 + (totalBuff.skillLevelRatio[levelBuffTypeHrid] || 0)) * currentLevel + (totalBuff.skillLevelFlat[levelBuffTypeHrid] || 0);
+        const effectiveRequiredLevel = requiredLevel + totalBuff.action_level;
+        const levelEffBuff = boostedLevel >= effectiveRequiredLevel ? boostedLevel - effectiveRequiredLevel : 0;
+        // 能不能開始做：遊戲用 floor(加成後等級) ≥ 需求等級 + 取整的 action_level
+        const levelEnough = Boolean(characterSkill) && Math.floor(boostedLevel) >= requiredLevel + Math.trunc(totalBuff.action_level);
         // 总效率，影响动作数
-        const totalEffBuff = levelEffBuff + houseBuff.efficiency + teaBuffs.efficiency + equipmentBuff.efficiency + communityBuff.efficiency + achievementBuff.efficiency + personalBuff.efficiency;
+        const totalEffBuff = levelEffBuff + totalBuff.efficiency;
 
-        // 每小时动作数（包含工具缩减动作时间）
+        // 每小时动作数（照遊戲 getTimeCost）：base / (1 + Σaction_speed) / (1 + Σtask_action_speed)，最短 3 秒
         const baseTimePerActionSec = action.baseTimeCost / 1000000000;
-        // 游戏机制：动作时间最低只能到3秒
-        const actualTimePerActionSec = Math.max(3, baseTimePerActionSec / (1 + (equipmentBuff.action_speed + personalBuff.action_speed) / 100));
+        const actualTimePerActionSec = Math.max(3, baseTimePerActionSec / (1 + totalBuff.action_speed / 100) / (1 + totalBuff.task_action_speed / 100));
         const actionPerHour = 3600 / actualTimePerActionSec * (1 + totalEffBuff / 100);
 
         // 总 Wisdom Buff 计算（用于经验值）
-        const totalWisdomBuff = (teaBuffs.wisdom || 0) + (communityBuff.wisdom || 0) + (equipmentBuff.wisdom || 0) + (houseBuff.wisdom || 0) + (achievementBuff.wisdom || 0) + (personalBuff.wisdom || 0) + (mooPassBuff.wisdom || 0);
+        const totalWisdomBuff = totalBuff.wisdom;
 
         // 经验值计算
         const baseExpGain = action.experienceGain?.value || 0;
@@ -1286,16 +1362,17 @@
                 });
             }
         } else {
-            // 加工機率 = 茶 + 個人加成（加工卷軸）
+            // 加工機率：所有來源的 processing（加工茶、加工卷軸…）
             const processingBuffs = {
-                processing: teaBuffs.processing + personalBuff.processing
+                processing: totalBuff.processing
             };
             basicOutputValuationPerAction = getDropTableInfomation(action.dropTable, marketJson, processingBuffs);
             outputItems.push(...basicOutputValuationPerAction.dropItems);
         }
 
-        // 茶产量额外增益
-        const quantityBuf = (100 + teaBuffs.gathering + communityBuff.gathering + achievementBuff.gathering + personalBuff.gathering) / 100;
+        // 產量加成（照遊戲）：採集是 (1 + Σgathering) 乘 dropTable 數量（含裝備的採集首飾）；
+        // 生產是 (1 + Σgourmet) 乘 outputItems 數量。兩者都不影響精華、稀有
+        const quantityBuf = (100 + (isProduction ? totalBuff.gourmet : totalBuff.gathering)) / 100;
         basicOutputValuationPerAction.ask *= quantityBuf;
         basicOutputValuationPerAction.bid *= quantityBuf;
         outputItems.forEach(item => item.count *= quantityBuf);
@@ -1306,7 +1383,8 @@
             bid: 0
         };
         if (essenceOutputValuationPerAction.dropItems) {
-            const quantityBuf = (100 + equipmentBuff.essence_find) / 100;
+            // (1 + Σessence_find) 乘掉落機率：裝備、公會（Spirit 神殿）…
+            const quantityBuf = (100 + totalBuff.essence_find) / 100;
             essenceOutputValuationPerAction.ask *= quantityBuf;
             essenceOutputValuationPerAction.bid *= quantityBuf;
             essenceOutputValuationPerAction.dropItems.forEach(item => item.count *= quantityBuf);
@@ -1319,7 +1397,8 @@
             bid: 0
         };
         if (rareOutputValuationPerAction.dropItems) {
-            const quantityBuf = (100 + houseBuff.rare_find + equipmentBuff.rare_find + achievementBuff.rare_find + personalBuff.rare_find) / 100;
+            // (1 + Σrare_find) 乘掉落機率：房屋、裝備、成就、卷軸、公會（Rarity 神殿）…
+            const quantityBuf = (100 + totalBuff.rare_find) / 100;
             rareOutputValuationPerAction.ask *= quantityBuf;
             rareOutputValuationPerAction.bid *= quantityBuf;
             rareOutputValuationPerAction.dropItems.forEach(item => item.count *= quantityBuf);
@@ -1353,13 +1432,18 @@
             profitPerHour,
             baseTimePerActionSec,
             levelEffBuff,
-            teaBuffs,
-            communityBuff,
-            houseBuff,
-            equipmentBuff,
-            achievementBuff,
-            personalBuff,
-            mooPassBuff,
+            levelEnough,
+            isProduction,
+            teaBuffs: Buff.toDisplay(teaBuffs),
+            communityBuff: Buff.toDisplay(communityBuff),
+            houseBuff: Buff.toDisplay(houseBuff),
+            equipmentBuff: Buff.toDisplay(equipmentBuff),
+            achievementBuff: Buff.toDisplay(achievementBuff),
+            personalBuff: Buff.toDisplay(personalBuff),
+            mooPassBuff: Buff.toDisplay(mooPassBuff),
+            guildBuff: Buff.toDisplay(guildBuff),
+            taskBuff: Buff.toDisplay(taskBuff),
+            totalBuff: Buff.toDisplay(totalBuff),
             expPerAction,
             expPerHour,
             profitPerDay,
@@ -1380,9 +1464,10 @@
                     const categorys = processingCategory[action.type];
                     if (action?.category && categorys.indexOf(action.category) === -1) continue;
                 }
-                const levelEngouth = globals.initCharacterData_characterSkills.some(skill => skill.skillHrid === action.levelRequirement.skillHrid && skill.level >= action.levelRequirement.level);
                 const iconId = action.hrid.replace(`/actions/${actionType}/`, '');
                 const result = ProfitCaculation(action, marketJson, globals.profitSettings.enabledScrolls);
+                // 等級夠不夠：跟遊戲一樣算進技能茶等級與工匠茶提高的需求
+                const levelEngouth = result.levelEnough;
                 const actionHtml = `
                 <div class="Item_itemContainer__x7kH1" style="position: relative;">
                     <div>
@@ -1537,6 +1622,42 @@
             timeSec: totalTimeSec
         };
     }
+    // 加成來源表：每個來源一列，最後一列是合計（計算用的就是合計）
+    // 數量欄：採集顯示 gathering、生產顯示 gourmet；舊資料（沒有 isProduction / gourmet）照原本顯示 gathering
+    function renderBuffSourceRows(data) {
+        const quantityKey = data.isProduction ? 'gourmet' : 'gathering';
+        const cell = value => `<td style="text-align: right;"><b> ${value} </b></td>`;
+        const buffRow = (label, buff, isTotal = false) => {
+            if (!buff) return '';
+            const style = isTotal ? 'border-top: 2px solid #804600;' : 'border-bottom: 1px solid #804600;';
+            return `<tr style="${style}"><td style="text-align: right;"><b>${label}</b></td>${[
+                formatPercent(buff.action_speed || 0),
+                formatPercent((buff.efficiency || 0) + (isTotal ? data.levelEffBuff || 0 : 0)),
+                formatPercent(buff[quantityKey] || 0),
+                formatPercent(buff.essence_find || 0),
+                formatPercent(buff.rare_find || 0),
+                formatPercent(buff.wisdom || 0)
+            ].map(cell).join('')}</tr>`;
+        };
+        const levelRow = `<tr style="border-bottom: 1px solid #804600;"><td style="text-align: right;"><b>${t('等級', 'Level')}</b></td>${['-', formatPercent(data.levelEffBuff), '-', '-', '-', '-'].map(cell).join('')}</tr>`;
+        // 任務加速跟一般速度相乘，有生效才顯示一列
+        const taskRow = data.taskBuff?.task_action_speed > 0
+            ? `<tr style="border-bottom: 1px solid #804600;"><td style="text-align: right;"><b>${t('任務', 'Task')}</b></td>${[`×${formatPercent(data.taskBuff.task_action_speed)}`, '-', '-', '-', '-', '-'].map(cell).join('')}</tr>`
+            : '';
+        return [
+            buffRow(t('社區', 'Community'), data.communityBuff),
+            buffRow(t('茶', 'Tea'), data.teaBuffs),
+            buffRow(t('裝備', 'Equipment'), data.equipmentBuff),
+            levelRow,
+            buffRow(t('房子', 'House'), data.houseBuff),
+            buffRow(t('成就', 'Achievement'), data.achievementBuff),
+            buffRow(t('卷軸', 'Scroll'), data.personalBuff),
+            buffRow(t('MooPass', 'MooPass'), data.mooPassBuff),
+            buffRow(t('公會', 'Guild'), data.guildBuff),
+            taskRow,
+            buffRow(t('合計', 'Total'), data.totalBuff, true)
+        ].join('');
+    }
     function formatTooltipContent(data) {
         let totalInputAsk = 0,
             totalInputBid = 0;
@@ -1665,81 +1786,12 @@
                             <th style="text-align: right;">${t('稀有', 'Rare')}</th>
                             <th style="text-align: right;">${t('經驗', 'Exp')}</th>
                         </tr>
-                        <tr style="border-bottom: 1px solid #804600;">
-                            <td style="text-align: right;"><b>${t('社區', 'Community')}</b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.communityBuff.action_speed)} </b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.communityBuff.efficiency)} </b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.communityBuff.gathering)} </b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.communityBuff.essence_find)} </b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.communityBuff.rare_find)} </b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.communityBuff.wisdom)} </b></td>
-                        </tr>
-                        <tr style="border-bottom: 1px solid #804600;">
-                            <td style="text-align: right;"><b>${t('茶', 'Tea')}</b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.teaBuffs.action_speed)} </b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.teaBuffs.efficiency)} </b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.teaBuffs.gathering)} </b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.teaBuffs.essence_find)} </b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.teaBuffs.rare_find)} </b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.teaBuffs.wisdom)} </b></td>
-                        </tr>
-                        <tr style="border-bottom: 1px solid #804600;">
-                            <td style="text-align: right;"><b>${t('裝備', 'Equipment')}</b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.equipmentBuff.action_speed)} </b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.equipmentBuff.efficiency)} </b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.equipmentBuff.gathering)} </b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.equipmentBuff.essence_find)} </b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.equipmentBuff.rare_find)} </b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.equipmentBuff.wisdom)} </b></td>
-                        </tr>
-                        <tr style="border-bottom: 1px solid #804600;">
-                            <td style="text-align: right;"><b>${t('等級', 'Level')}</b></td>
-                            <td style="text-align: right;"><b> - </b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.levelEffBuff)} </b></td>
-                            <td style="text-align: right;"><b> - </b></td>
-                            <td style="text-align: right;"><b> - </b></td>
-                        </tr>
-                        <tr style="border-bottom: 1px solid #804600;">
-                            <td style="text-align: right;"><b>${t('房子', 'House')}</b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.houseBuff.action_speed)} </b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.houseBuff.efficiency)} </b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.houseBuff.gathering)} </b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.houseBuff.essence_find)} </b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.houseBuff.rare_find)} </b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.houseBuff.wisdom)} </b></td>
-                        </tr>
-                        <tr style="border-bottom: 1px solid #804600;">
-                            <td style="text-align: right;"><b>${t('成就', 'Achievement')}</b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.achievementBuff.action_speed)} </b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.achievementBuff.efficiency)} </b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.achievementBuff.gathering)} </b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.achievementBuff.essence_find)} </b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.achievementBuff.rare_find)} </b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.achievementBuff.wisdom)} </b></td>
-                        </tr>
-                        <tr style="border-bottom: 1px solid #804600;">
-                            <td style="text-align: right;"><b>${t('卷軸', 'Scroll')}</b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.personalBuff.action_speed)} </b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.personalBuff.efficiency)} </b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.personalBuff.gathering)} </b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.personalBuff.essence_find)} </b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.personalBuff.rare_find)} </b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.personalBuff.wisdom)} </b></td>
-                        </tr>
-                        <tr style="border-bottom: 1px solid #804600;">
-                            <td style="text-align: right;"><b>${t('MooPass', 'MooPass')}</b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.mooPassBuff.action_speed)} </b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.mooPassBuff.efficiency)} </b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.mooPassBuff.gathering)} </b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.mooPassBuff.essence_find)} </b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.mooPassBuff.rare_find)} </b></td>
-                            <td style="text-align: right;"><b> ${formatPercent(data.mooPassBuff.wisdom)} </b></td>
-                        </tr>
+                        ${renderBuffSourceRows(data)}
                     </tbody>
                 </table>
             </div>
             <div>${t('每小時動作', 'Actions/h')}: ${data.actionPerHour.toFixed(2)}${t('次', '')}</div>
-            <div>${t('茶減少消耗', 'Tea Reduction')}: ${data.teaBuffs.artisan.toFixed(2)}%</div>
+            <div>${t('茶減少消耗', 'Tea Reduction')}: ${(data.totalBuff?.artisan ?? data.teaBuffs.artisan).toFixed(2)}%</div>
             <div><strong>${t('單次經驗值', 'Exp/Action')}:</strong> ${formatNumber(data.expPerAction)}</div>
             <div><strong>${t('每小時經驗值', 'Exp/h')}:</strong> ${formatNumber(data.expPerHour)}</div>
             <div><strong>${t('每小時利潤', 'Hourly Profit')}(${t('稅後', 'after tax')}):</strong> ${formatNumber(data.profitPerHour)}</div>
@@ -2049,6 +2101,7 @@
     function refreshProfitPanel(force = false) {
         if (!globals.freshnessMarketJson?.market) return;
         const inventoryPanels = document.querySelectorAll('.Inventory_inventory__17CH2.profit-pannel');
+        const shouldRender = force || globals.hasMarketItemUpdate;
         inventoryPanels.forEach(panel => {
             const timeSpan = panel.querySelector('.profit-data-time');
             if (timeSpan) {
@@ -2073,14 +2126,19 @@
             panel.querySelectorAll('.scroll-buff-option').forEach(button => {
                 applyScrollBuffButtonState(button, enabledScrollKeys.includes(button.dataset.scroll));
             });
-            if (force || globals.hasMarketItemUpdate) {
+            if (shouldRender) {
                 const itemsContainer = panel.querySelector('.Inventory_items__6SXv0');
                 if (itemsContainer) {
                     itemsContainer.innerHTML = GenerateDom(globals.freshnessMarketJson);
-                    globals.hasMarketItemUpdate = false;
                 }
             }
         });
+        // 所有面板都重繪完才清旗標（以前在迴圈裡清，有兩個面板時第二個不會重繪）
+        if (shouldRender && inventoryPanels.length > 0) globals.hasMarketItemUpdate = false;
+    }
+    // 不急著重算的變動（換茶、換袋子、任務變動）：交給每秒刷新一起重繪，連續好幾則訊息只重繪一次
+    function scheduleProfitPanelRefresh() {
+        globals.hasMarketItemUpdate = true;
     }
 
     const supportActionType = ["/action_types/milking", "/action_types/foraging", "/action_types/woodcutting", "/action_types/cheesesmithing", "/action_types/crafting", "/action_types/tailoring", "/action_types/cooking", "/action_types/brewing"
@@ -2544,13 +2602,47 @@
             return handleMessage(message);
         }
     }
+    // 任務：照遊戲 updateCharacterQuests / getOnTaskActionHridSet
+    // 只有「進行中的隨機動作任務」的動作會吃到任務徽章的加成；已領取 / 已放棄的任務從清單移除
+    function computeOnTaskActionHridSet(characterQuests) {
+        const onTaskActionHridSet = {};
+        for (const quest of characterQuests || []) {
+            if (quest?.category === '/quest_category/random_task' && quest.type === '/quest_type/action' && quest.status === '/quest_status/in_progress' && quest.actionHrid) {
+                onTaskActionHridSet[quest.actionHrid] = true;
+            }
+        }
+        return onTaskActionHridSet;
+    }
+    function mergeCharacterQuests(characterQuests, updatedQuests) {
+        const questMap = new Map((characterQuests || []).map(quest => [quest.id, quest]));
+        for (const quest of updatedQuests || []) {
+            if (quest?.id === undefined) continue;
+            if (quest.status === '/quest_status/claimed' || quest.status === '/quest_status/discarded') questMap.delete(quest.id);
+            else questMap.set(quest.id, quest);
+        }
+        return [...questMap.values()];
+    }
+    // 存任務清單；回傳「任務中的動作」有沒有變（有變才需要重算面板，action_completed 很頻繁）
+    function updateCharacterQuests(characterQuests) {
+        globals.initCharacterData_characterQuests = characterQuests;
+        const nextSet = computeOnTaskActionHridSet(characterQuests);
+        const prevSet = globals.initCharacterData_onTaskActionHridSet || {};
+        const isChanged = Object.keys(nextSet).length !== Object.keys(prevSet).length || Object.keys(nextSet).some(actionHrid => !prevSet[actionHrid]);
+        if (isChanged) globals.initCharacterData_onTaskActionHridSet = nextSet;
+        return isChanged;
+    }
+    // 可用飲料槽數：遊戲是 1 + 袋子的 drinkSlots
+    function getDrinkSlotCount(combatUnit) {
+        if (!combatUnit) return null;
+        return 1 + (combatUnit.combatDetails?.combatStats?.drinkSlots || 0);
+    }
     function handleMessage(message) {
         try {
             let obj = JSON.parse(message);
             if (obj) {
                 if (obj.type === "init_character_data") {
                     globals.initCharacterData_characterSkills = obj.characterSkills;
-                    globals.initCharacterData_actionTypeDrinkSlotsMap = obj.actionTypeDrinkSlotsMap;
+                    globals.initCharacterData_actionTypeDrinkSlotsMap = obj.actionTypeDrinkSlotsMap || {};
                     globals.initCharacterData_characterHouseRoomMap = obj.characterHouseRoomMap;
                     globals.initCharacterData_characterItems = obj.characterItems;
                     globals.initCharacterData_communityActionTypeBuffsMap = obj.communityActionTypeBuffsMap;
@@ -2560,7 +2652,13 @@
                     globals.initCharacterData_achievementActionTypeBuffsMap = obj.achievementActionTypeBuffsMap;
                     globals.initCharacterData_personalActionTypeBuffsMap = obj.personalActionTypeBuffsMap;
                     globals.initCharacterData_mooPassActionTypeBuffsMap = obj.mooPassActionTypeBuffsMap;
+                    // 沒有公會時伺服器可能不帶這個欄位
+                    globals.initCharacterData_guildActionTypeBuffsMap = obj.guildActionTypeBuffsMap || {};
+                    globals.initCharacterData_equipmentTaskActionBuffs = obj.equipmentTaskActionBuffs || [];
+                    globals.initCharacterData_characterQuests = obj.characterQuests || [];
+                    globals.initCharacterData_onTaskActionHridSet = computeOnTaskActionHridSet(obj.characterQuests);
                     globals.initCharacterData_noncombatStats = obj.noncombatStats;
+                    globals.initCharacterData_drinkSlotCount = getDrinkSlotCount(obj.combatUnit);
                     waitForPannels();
                 } else if (obj.type === "init_client_data") {
                     globals.initClientData_actionDetailMap = obj.actionDetailMap;
@@ -2602,13 +2700,39 @@
                     refreshProfitPanel(true);
                 } else if (obj.type === "equipment_buffs_updated") {
                     globals.initCharacterData_equipmentActionTypeBuffsMap = obj.equipmentActionTypeBuffsMap;
+                    globals.initCharacterData_equipmentTaskActionBuffs = obj.equipmentTaskActionBuffs || [];
                     refreshProfitPanel(true);
                 } else if (obj.type === "house_rooms_updated") {
                     globals.initCharacterData_houseActionTypeBuffsMap = obj.houseActionTypeBuffsMap;
                     refreshProfitPanel(true);
-                } else if (obj.type === "achievements_updated") {
-                    globals.initCharacterData_achievementActionTypeBuffsMap = obj.achievementActionTypeBuffsMap;
+                } else if (obj.type === "achievement_buffs_updated") {
+                    // 成就加成走 achievement_buffs_updated；achievements_updated 只帶成就清單、沒有加成表，
+                    // 以前誤用它會把成就加成清成空的
+                    globals.initCharacterData_achievementActionTypeBuffsMap = obj.achievementActionTypeBuffsMap || {};
                     refreshProfitPanel(true);
+                } else if (obj.type === "guild_buffs_updated") {
+                    // 退出公會時這個欄位可能不存在
+                    globals.initCharacterData_guildActionTypeBuffsMap = obj.guildActionTypeBuffsMap || {};
+                    refreshProfitPanel(true);
+                } else if (obj.type === "action_type_consumable_slots_updated") {
+                    // 換茶：茶的加成由 consumable_buffs_updated 更新，這裡更新茶的成本
+                    if (obj.actionTypeDrinkSlotsMap) {
+                        globals.initCharacterData_actionTypeDrinkSlotsMap = obj.actionTypeDrinkSlotsMap;
+                        scheduleProfitPanelRefresh();
+                    }
+                } else if (obj.type === "character_stats_updated") {
+                    // 換袋子會改變飲料濃度（每小時喝幾杯）與可用飲料槽數；其他數值變動不必重算面板
+                    const previousDrinkConcentration = globals.initCharacterData_noncombatStats?.drinkConcentration || 0;
+                    const previousDrinkSlotCount = globals.initCharacterData_drinkSlotCount;
+                    if (obj.noncombatStats) globals.initCharacterData_noncombatStats = obj.noncombatStats;
+                    if (obj.combatUnit) globals.initCharacterData_drinkSlotCount = getDrinkSlotCount(obj.combatUnit);
+                    if ((globals.initCharacterData_noncombatStats?.drinkConcentration || 0) !== previousDrinkConcentration || globals.initCharacterData_drinkSlotCount !== previousDrinkSlotCount) {
+                        scheduleProfitPanelRefresh();
+                    }
+                } else if (obj.type === "quests_updated") {
+                    if (Array.isArray(obj.endCharacterQuests) && obj.endCharacterQuests.length > 0) {
+                        if (updateCharacterQuests(mergeCharacterQuests(globals.initCharacterData_characterQuests, obj.endCharacterQuests))) scheduleProfitPanelRefresh();
+                    }
                 } else if (obj.type === "personal_buffs_updated") {
                     globals.initCharacterData_personalActionTypeBuffsMap = obj.personalActionTypeBuffsMap;
                     refreshProfitPanel(true);
@@ -2616,6 +2740,10 @@
                     globals.initCharacterData_mooPassActionTypeBuffsMap = obj.mooPassActionTypeBuffsMap;
                     refreshProfitPanel(true);
                 } else if (obj.type === "action_completed") {
+                    // 任務進度也走 action_completed：任務完成後該動作就不再有任務加速
+                    if (Array.isArray(obj.endCharacterQuests) && obj.endCharacterQuests.length > 0) {
+                        if (updateCharacterQuests(mergeCharacterQuests(globals.initCharacterData_characterQuests, obj.endCharacterQuests))) scheduleProfitPanelRefresh();
+                    }
                     // 更新技能经验数据
                     if (obj.endCharacterSkills) {
                         for (const updatedSkill of obj.endCharacterSkills) {
@@ -2635,10 +2763,11 @@
     globals.subscribe((key, value) => {
         if (key === "initClientData_actionDetailMap") {
             actionHridByNameCache = null;
+            // 加工茶的換算對照（原料 → 加工動作）：只認真正的加工分類。processingCategory 是「收益面板要列哪些動作」，
+            // 還含迷宮、特殊（寶石研磨等）分類，拿來建對照會混進「起司→信標」這種不存在的換算
             const processingMap = {};
             for (const [actionHrid, actionDetail] of Object.entries(value)) {
-                const categorys = processingCategory[actionDetail.type];
-                if (categorys && categorys.indexOf(actionDetail.category) !== -1) {
+                if (processingConversionCategories.includes(actionDetail.category) && actionDetail.inputItems?.length) {
                     const inputHrid = actionDetail.inputItems[0].itemHrid;
                     processingMap[inputHrid] = actionDetail;
                 }

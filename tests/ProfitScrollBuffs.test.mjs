@@ -292,6 +292,9 @@ describe('遊戲動作視窗：產出經驗後面補開經驗卷軸的經驗', (
     test('提示：React 找不到時，用視窗標題名稱反查動作', () => {
         assert.equal(findActionHridByName('Cow'), '/actions/milking/cow');
         assert.equal(findActionHridByName(' 奶牛 '), '/actions/milking/cow');
+        // 遊戲官方中文是簡體，腳本自己的動作名稱是繁體，兩種都要認得
+        assert.equal(findActionHridByName('翠绿奶牛'), '/actions/milking/verdant_cow');
+        assert.equal(findActionHridByName('翠綠奶牛'), '/actions/milking/verdant_cow');
         assert.equal(findActionHridByName('不存在的動作'), null);
         const nameElement = { getAttribute: () => null, textContent: 'Cow' };
         const popupElement = { querySelector: () => nameElement };
