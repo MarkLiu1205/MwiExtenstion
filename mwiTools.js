@@ -3871,6 +3871,12 @@
                 }
             }
         } else if (obj && obj.type === "action_completed") {
+            // 動作的產出與消耗是放在 action_completed 的 endCharacterItems（絕對數量，跟 items_updated 同規則），
+            // 不合併的話資產快照與庫存數會一直停在登入當下
+            if (Array.isArray(obj.endCharacterItems) && obj.endCharacterItems.length > 0) {
+                initData_characterItems = mergeCharacterItems(initData_characterItems, obj.endCharacterItems);
+                isAssetSnapshotDirty = true;
+            }
             const action = obj.endCharacterAction;
             if (action.isDone === false) {
                 for (const a of currentActionsHridList) {
@@ -4409,11 +4415,13 @@
     function buildCurrentAssetSnapshot(liquidValues, marketAPIJson) {
         const cowbellUnitValue = settingsMap.includeCowbellsInAssets.isTrue ? getMarketFairPrice(marketAPIJson, "/items/bag_of_10_cowbells") / 10 : 0;
         const optionalValues = computeOptionalAssetValues(initData_characterItems, assetTokenUnitValues, cowbellUnitValue);
-        return buildAssetSnapshot(liquidValues, optionalValues, lastFixedAssetValues, new Date().toISOString());
+        // 房子/技能書分數算失敗時 lastFixedAssetValues 是 null：只用來顯示，以 0 計（此時不會寫進每日紀錄）
+        return buildAssetSnapshot(liquidValues, optionalValues, lastFixedAssetValues || { houses: 0, abilities: 0 }, new Date().toISOString());
     }
 
-    function saveAssetSnapshot(snapshot) {
-        if (!currentCharacterId) {
+    // characterId：開始計算時的角色。計算途中（await 期間）換了角色就放棄，免得把舊角色的數值存到新角色名下
+    function saveAssetSnapshot(snapshot, characterId = currentCharacterId) {
+        if (!currentCharacterId || characterId !== currentCharacterId) {
             return;
         }
         const dayKey = getAssetHistoryDayKey(new Date());
@@ -4433,16 +4441,20 @@
         }
         isAssetSnapshotRefreshing = true;
         isAssetSnapshotDirty = false;
+        const characterId = currentCharacterId;
         try {
             const marketAPIJson = await fetchMarketJSON();
             if (!marketAPIJson) {
                 return;
             }
             const liquidValues = await computeLiquidAssetValues(marketAPIJson);
+            if (characterId !== currentCharacterId) {
+                return;
+            }
             if (isNewDay) {
                 assetTokenUnitValues = computeAssetTokenUnitValues(marketAPIJson);
             }
-            saveAssetSnapshot(buildCurrentAssetSnapshot(liquidValues, marketAPIJson));
+            saveAssetSnapshot(buildCurrentAssetSnapshot(liquidValues, marketAPIJson), characterId);
         } catch (error) {
             console.error("MWITools refreshAssetSnapshotIfNeeded error:", error);
         } finally {
@@ -4502,13 +4514,20 @@
         if (enhancedItemCostCache.has(cacheKey)) {
             return enhancedItemCostCache.get(cacheKey);
         }
-        input_data.item_hrid = itemHrid;
-        input_data.stop_at = enhancementLevel;
-        const best = await findBestEnhanceStratWithPhiMirror(input_data);
-        const totalCost = best?.totalCost ? Math.round(best.totalCost) : 0;
-        const cost = totalCost > 0 ? totalCost : 0;
-        enhancedItemCostCache.set(cacheKey, cost);
-        return cost;
+        // 傳副本：findBestEnhanceStratWithPhiMirror 會跨 await 讀寫參數，共用全域 input_data 時
+        // 並行的估價（重連 / 定時刷新 / 懸浮窗）會互相蓋掉 item_hrid、stop_at，錯的結果還會被快取。
+        // 快取 Promise 讓同一件物品同時只模擬一次
+        const costPromise = findBestEnhanceStratWithPhiMirror({ ...input_data, item_hrid: itemHrid, stop_at: enhancementLevel }).then((best) => {
+            const totalCost = best?.totalCost ? Math.round(best.totalCost) : 0;
+            return totalCost > 0 ? totalCost : 0;
+        });
+        costPromise.catch(() => {
+            if (enhancedItemCostCache.get(cacheKey) === costPromise) {
+                enhancedItemCostCache.delete(cacheKey);
+            }
+        });
+        enhancedItemCostCache.set(cacheKey, costPromise);
+        return costPromise;
     }
 
     // 流動資產（裝備、庫存、市場掛單）的高/低價估值
@@ -4550,7 +4569,10 @@
         }
 
         for (const item of initData_myMarketListings || []) {
-            const quantity = item.orderQuantity - item.filledQuantity;
+            // 只有進行中的掛單，剩餘數量還掛在市場上；已取消 / 已過期的剩餘物品或金幣已退回背包，
+            // 這類掛單只因還有未領取的成交部分才留在清單裡，再算剩餘數量會重複計入（沒有 status 時沿用舊行為）
+            const isActiveListing = !item.status || item.status === "/market_listing_status/active";
+            const quantity = isActiveListing ? item.orderQuantity - item.filledQuantity : 0;
             const enhancementLevel = item.enhancementLevel;
             const marketPrices = marketAPIJson.marketData[item.itemHrid];
             if (!marketPrices) {
@@ -4585,6 +4607,7 @@
     }
 
     async function calculateNetworth() {
+        const characterId = currentCharacterId;
         const marketAPIJson = await fetchMarketJSON();
         if (!marketAPIJson) {
             console.error("calculateNetworth marketAPIJson is null");
@@ -4599,13 +4622,24 @@
         const networthAsk = liquidValues.equippedAsk + liquidValues.inventoryAsk + liquidValues.listingsAsk;
         const networthBid = liquidValues.equippedBid + liquidValues.inventoryBid + liquidValues.listingsBid;
 
-        // 房子/技能書分數（也用在每日資產）：登入時算一次
-        const buildScores = await getSelfBuildScores(equippedNetworthAsk * 0.5 + equippedNetworthBid * 0.5);
-        lastFixedAssetValues = { houses: (buildScores[0] + buildScores[1]) * 1000000, abilities: buildScores[3] * 1000000 };
+        // 房子/技能書分數（也用在每日資產）：登入時算一次。
+        // 算分出錯時頁首資產、倉庫總結照常顯示（分數以 0 顯示），但不寫每日紀錄，免得房子/技能書被記成 0 造成假的大跌
+        let buildScores = null;
+        try {
+            buildScores = await getSelfBuildScores(equippedNetworthAsk * 0.5 + equippedNetworthBid * 0.5);
+        } catch (error) {
+            console.error("MWITools getSelfBuildScores error:", error);
+        }
+        if (buildScores) {
+            lastFixedAssetValues = { houses: (buildScores[0] + buildScores[1]) * 1000000, abilities: buildScores[3] * 1000000 };
+        } else {
+            buildScores = [0, 0, 0, 0, 0];
+            lastFixedAssetValues = null; // 可能還是上一個角色的值；清掉後定時刷新也會跳過
+        }
         assetTokenUnitValues = computeAssetTokenUnitValues(marketAPIJson);
         const assetSnapshot = buildCurrentAssetSnapshot(liquidValues, marketAPIJson);
-        if (settingsMap.assetHistory.isTrue) {
-            saveAssetSnapshot(assetSnapshot);
+        if (settingsMap.assetHistory.isTrue && lastFixedAssetValues) {
+            saveAssetSnapshot(assetSnapshot, characterId);
             startAssetSnapshotTimer();
         }
 
@@ -5124,9 +5158,8 @@
             const marketPrices = marketAPIJson.marketData[itemHrid];
 
             if (enhanceLevel && enhanceLevel > 1) {
-                input_data.item_hrid = item.itemHrid;
-                input_data.stop_at = enhanceLevel;
-                const best = await findBestEnhanceStratWithPhiMirror(input_data);
+                // 傳副本，避免與其他並行估價互相蓋掉 item_hrid / stop_at
+                const best = await findBestEnhanceStratWithPhiMirror({ ...input_data, item_hrid: item.itemHrid, stop_at: enhanceLevel });
                 let totalCost = best?.totalCost;
                 totalCost = totalCost ? Math.round(totalCost) : 0;
                 networthAsk += item.count * (totalCost > 0 ? totalCost : 0);
@@ -5379,6 +5412,10 @@
         if (!lootItem || itemDetail?.categoryHrid !== "/item_categories/loot" || typeof lootItem.props.openLootHandler !== "function") {
             return;
         }
+        // 可交易的開箱物（牛鈴袋）開了會變成不可交易的牛鈴、無法復原，不做一次開完，交回遊戲原本只開 1 個的行為
+        if (itemDetail.isTradable) {
+            return;
+        }
         if (lootItem.instance?.canOpen?.() === false) {
             return;
         }
@@ -5433,6 +5470,10 @@
 
     function buildLootChestTooltipHtml(itemHrid, amount, marketJson) {
         if (!settingsMap.lootChestEstimate.isTrue || !initData_openableLootDropMap?.[itemHrid] || !marketJson?.marketData) {
+            return "";
+        }
+        // 可交易的開箱物（牛鈴袋）本身就有市價；產物（牛鈴）不可交易、估值為 0，顯示「開箱期望：0」只會誤導
+        if (initData_itemDetailMap?.[itemHrid]?.isTradable) {
             return "";
         }
         const chestValue = calculateLootChestValue(itemHrid, initData_itemDetailMap, initData_openableLootDropMap, marketJson, settingsMap.lootSellAtAsk.isTrue);
@@ -7204,9 +7245,8 @@
             return;
         }
 
-        input_data.item_hrid = itemHrid;
-        input_data.stop_at = enhancementLevel;
-        const best = await findBestEnhanceStratWithPhiMirror(input_data);
+        // 傳副本，避免與其他並行估價互相蓋掉 item_hrid / stop_at
+        const best = await findBestEnhanceStratWithPhiMirror({ ...input_data, item_hrid: itemHrid, stop_at: enhancementLevel });
 
         let appendHTMLStr = `<div style="color: ${SCRIPT_COLOR_TOOLTIP};">${isZH ? "不支持模擬+1裝備" : "Enhancement sim of +1 equipments not supported"
             }</div>`;
