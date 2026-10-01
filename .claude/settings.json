@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(awk -F: '$1>950 && $1<1350 || $1>1650 && $1<1800')",
+      "Bash(node --check /Users/devin/Documents/MWI/mate.js)",
+      "Bash(brew list *)",
+      "Bash(npm init *)",
+      "Bash(npm install *)",
+      "Bash(grep -rho '[一-鿿]\\\\{2,\\\\}' simulator/src)",
+      "Bash(node ConvertToTraditional.mjs)",
+      "Bash(python3 -)",
+      "Bash(node --check mate.js)",
+      "Bash(node TestTextWithoutInjected.mjs)",
+      "Bash(node GenerateStubs.js)",
+      "Bash(git add *)",
+      "Bash(git commit -m '新增 mate.js（市場伴侶備份版）：修復審查缺陷、全檔繁體化、納入本地殼腳本流程 *)",
+      "Bash(git push *)"
+    ]
+  }
+}

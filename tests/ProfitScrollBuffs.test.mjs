@@ -1,4 +1,4 @@
-// 收益面板「模擬卷軸收益」測試：node --test tests/
+// 收益面板「模擬卷軸收益」測試：node --test 'tests/*.test.mjs'
 import { test, describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

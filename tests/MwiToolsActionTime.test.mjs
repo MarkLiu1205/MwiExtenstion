@@ -1,4 +1,4 @@
-// mwiTools 頁首「目前動作」時間估算：次數解析測試（node --test tests/）
+// mwiTools 頁首「目前動作」時間估算：次數解析測試（node --test 'tests/*.test.mjs'）
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';

@@ -125,6 +125,28 @@
             desc: isZH ? "倉庫顯示：倉庫物品排序 [依賴上一項]" : "Inventory: Sort inventory items. [Depends on the previous selection]",
             isTrue: true,
         },
+        assetHistory: {
+            id: "assetHistory",
+            desc: isZH
+                ? "倉庫總結顯示：每日資產盈虧、近 7 日平均與歷史紀錄 [依賴倉庫和戰力總結]"
+                : "Inventory summary: Daily asset change, 7-day average and history. [Depends on inventory summary]",
+            isTrue: true,
+        },
+        includeCowbellsInAssets: {
+            id: "includeCowbellsInAssets",
+            desc: isZH ? "總資產計入牛鈴（以 10 個牛鈴袋價格 ÷ 10 估價）" : "Include cowbells in total assets (valued at bag of 10 price / 10).",
+            isTrue: false,
+        },
+        includeDungeonTokensInAssets: {
+            id: "includeDungeonTokensInAssets",
+            desc: isZH ? "總資產計入地下城代幣（以地下城商店最划算的兌換估價）" : "Include dungeon tokens in total assets (valued by the best dungeon shop trade).",
+            isTrue: true,
+        },
+        includeTaskTokensInAssets: {
+            id: "includeTaskTokensInAssets",
+            desc: isZH ? "總資產計入任務代幣（以任務商店最划算的兌換估價）" : "Include task tokens in total assets (valued by the best task shop trade).",
+            isTrue: false,
+        },
         profileBuildScore: {
             id: "profileBuildScore",
             desc: isZH ? "人物面板顯示：戰力分" : "Profile panel: Build score.",
@@ -148,6 +170,28 @@
                 ? "物品懸浮窗顯示：消耗品回血回魔速度、回覆性價比、每天最多消耗數量"
                 : "Item tooltip: HP/MP consumables restore speed, cost performance, max cost per day.",
             isTrue: true,
+        },
+        lootChestEstimate: {
+            id: "lootChestEstimate",
+            desc: isZH ? "物品懸浮窗顯示：寶箱開箱期望價值（產物扣市場稅、扣鑰匙）" : "Item tooltip: Expected value of opening a chest (after tax and key).",
+            isTrue: true,
+        },
+        lootSellAtAsk: {
+            id: "lootSellAtAsk",
+            desc: isZH
+                ? "寶箱期望：產物以賣單掛價估值；關閉則以買單價立即賣出 [依賴上一項]"
+                : "Chest value: Value outputs at ask (listing); off = sell to bid now. [Depends on the previous selection]",
+            isTrue: false,
+        },
+        inventoryMarketDoubleClick: {
+            id: "inventoryMarketDoubleClick",
+            desc: isZH ? "倉庫：雙擊可交易物品，直接打開它的市場頁" : "Inventory: Double-click a tradable item to open its market page.",
+            isTrue: true,
+        },
+        inventoryLootOpenAll: {
+            id: "inventoryLootOpenAll",
+            desc: isZH ? "倉庫：右鍵寶箱一次開完全部（遊戲原本右鍵只開 1 個）" : "Inventory: Right-click a chest to open all of them (game default opens 1).",
+            isTrue: false,
         },
         networkAlert: {
             id: "networkAlert",
@@ -262,6 +306,7 @@
             desc: isZH ? "MWITools本身強制顯示中文 MWITools always in Chinese" : "MWITools本身強制顯示中文 MWITools always in Chinese",
             isTrue: false,
         },
+        // @@LOCAL_FEATURE_SETTINGS@@
     };
     readSettings();
 
@@ -3645,8 +3690,17 @@
     let initData_itemDetailMap = null;
     let initData_actionCategoryDetailMap = null;
     let initData_abilityDetailMap = null;
+    let initData_openableLootDropMap = null;
     let initData_characterAbilities = null;
     let initData_myMarketListings = null;
+    let currentCharacterId = "";
+
+    // 本地移植功能（檔案最後面）共用的狀態：放在這裡，確保收到任何遊戲訊息前就已宣告
+    const localFeatureClasses = [];
+    let latestParsedMessage = null;
+    let localFeatureClientDataCache = null;
+    let latestInitCharacterData = null;
+    let isLocalFeatureDomChangeScheduled = false;
 
     let currentActionsHridList = [];
     let currentEquipmentMap = {};
@@ -3661,6 +3715,7 @@
         initData_itemDetailMap = obj.itemDetailMap;
         initData_actionCategoryDetailMap = obj.actionCategoryDetailMap;
         initData_abilityDetailMap = obj.abilityDetailMap;
+        initData_openableLootDropMap = obj.openableLootDropMap;
 
         for (const [key, value] of Object.entries(initData_itemDetailMap)) {
             itemEnNameToHridMap[value.name] = key;
@@ -3708,12 +3763,15 @@
             } catch (error) {
                 console.error("MWITools handleMessage error:", error);
                 return message;
+            } finally {
+                dispatchLatestMessageToLocalFeatures();
             }
         }
     }
 
     function handleMessage(message) {
         let obj = JSON.parse(message);
+        latestParsedMessage = obj;
         if (obj && obj.type === "init_character_data") {
             console.log(obj);
             GM_setValue("init_character_data", message);
@@ -3724,6 +3782,7 @@
             initData_actionTypeDrinkSlotsMap = obj.actionTypeDrinkSlotsMap;
             initData_characterAbilities = obj.characterAbilities;
             initData_myMarketListings = obj.myMarketListings;
+            currentCharacterId = String(obj.character?.id ?? "");
             initData_combatAbilities = obj.combatUnit.combatAbilities;
             currentActionsHridList = [...obj.characterActions];
             if (settingsMap.totalActionTime.isTrue) {
@@ -3762,6 +3821,7 @@
             initData_itemDetailMap = obj.itemDetailMap;
             initData_actionCategoryDetailMap = obj.actionCategoryDetailMap;
             initData_abilityDetailMap = obj.abilityDetailMap;
+            initData_openableLootDropMap = obj.openableLootDropMap;
 
             for (const [key, value] of Object.entries(initData_itemDetailMap)) {
                 itemEnNameToHridMap[value.name] = key;
@@ -3824,6 +3884,8 @@
                 handleBattleSummary(obj);
             }
         } else if (obj && obj.type === "items_updated" && obj.endCharacterItems) {
+            initData_characterItems = mergeCharacterItems(initData_characterItems, obj.endCharacterItems);
+            isAssetSnapshotDirty = true;
             for (const item of obj.endCharacterItems) {
                 if (item.itemLocationHrid !== "/item_locations/inventory") {
                     if (item.count === 0) {
@@ -3836,6 +3898,9 @@
             if (settingsMap.checkEquipment.isTrue) {
                 checkEquipment();
             }
+        } else if (obj && obj.type === "market_listings_updated" && obj.endMarketListings) {
+            initData_myMarketListings = mergeMarketListings(initData_myMarketListings, obj.endMarketListings);
+            isAssetSnapshotDirty = true;
         } else if (obj && obj.type === "new_battle") {
             GM_setValue("new_battle", message); // This is the only place to get other party members' equipted consumables.
 
@@ -4003,47 +4068,477 @@
         return NON_TRADEABLE_ITEM_HRIDS.has(itemHrid);
     }
 
-    async function calculateNetworth() {
-        const marketAPIJson = await fetchMarketJSON();
-        if (!marketAPIJson) {
-            console.error("calculateNetworth marketAPIJson is null");
+    /* 每日資產盈虧（參考 MWITools 26.x 的 assetHistory 精簡改寫） */
+    // 每個角色每天存一筆「當天最後一次」的總資產，跟前一個有紀錄的日子比較算盈虧
+    const ASSET_HISTORY_STORAGE_KEY = "MWITools_assetHistory_v1";
+    const ASSET_HISTORY_DISPLAY_DAYS = 14;
+    const ASSET_SNAPSHOT_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+    const DUNGEON_TOKEN_HRIDS = ["/items/chimerical_token", "/items/sinister_token", "/items/enchanted_token", "/items/pirate_token"];
+    const TASK_TOKEN_HRID = "/items/task_token";
+    let lastFixedAssetValues = null; // 房子/技能書很少變：登入時算一次，定時刷新沿用
+    let assetTokenUnitValues = {};
+    let lastAssetSnapshotDayKey = null;
+    let isAssetSnapshotDirty = false;
+    let isAssetSnapshotRefreshing = false;
+    let assetSnapshotTimer = null;
+    let isAssetHistoryExpanded = false;
+
+    function padTwoDigits(value) {
+        return String(value).padStart(2, "0");
+    }
+
+    // 本機日期 YYYY-MM-DD（盈虧以本機的一天為單位）
+    function getAssetHistoryDayKey(date) {
+        return `${date.getFullYear()}-${padTwoDigits(date.getMonth() + 1)}-${padTwoDigits(date.getDate())}`;
+    }
+
+    function getAssetHistoryDayGap(fromDayKey, toDayKey) {
+        const [fromYear, fromMonth, fromDay] = fromDayKey.split("-").map(Number);
+        const [toYear, toMonth, toDay] = toDayKey.split("-").map(Number);
+        return Math.round((Date.UTC(toYear, toMonth - 1, toDay) - Date.UTC(fromYear, fromMonth - 1, fromDay)) / 86400000);
+    }
+
+    // 物品的唯一鍵：遊戲用 hash（角色::位置::物品::強化等級）
+    function getCharacterItemKey(item) {
+        return item.hash || `${item.itemLocationHrid}::${item.itemHrid}::${item.enhancementLevel || 0}`;
+    }
+
+    // 照遊戲規則合併物品增量：同一鍵取代，數量 0 代表移除
+    function mergeCharacterItems(characterItems, updatedItems) {
+        const itemMap = new Map();
+        for (const item of characterItems || []) {
+            itemMap.set(getCharacterItemKey(item), item);
+        }
+        for (const item of updatedItems || []) {
+            if (!item?.itemHrid) {
+                continue;
+            }
+            if (item.count === 0) {
+                itemMap.delete(getCharacterItemKey(item));
+            } else {
+                itemMap.set(getCharacterItemKey(item), item);
+            }
+        }
+        return [...itemMap.values()];
+    }
+
+    // 照遊戲規則合併市場掛單：進行中或還有未領取的留著，其餘移除
+    function mergeMarketListings(marketListings, updatedListings) {
+        const listingMap = new Map();
+        for (const listing of marketListings || []) {
+            listingMap.set(listing.id, listing);
+        }
+        for (const listing of updatedListings || []) {
+            if (listing?.id === undefined) {
+                continue;
+            }
+            const isKept = listing.status === "/market_listing_status/active" || listing.unclaimedItemCount > 0 || listing.unclaimedCoinCount > 0;
+            if (isKept) {
+                listingMap.set(listing.id, listing);
+            } else {
+                listingMap.delete(listing.id);
+            }
+        }
+        return [...listingMap.values()];
+    }
+
+    function getMarketFairPrice(marketAPIJson, itemHrid) {
+        const marketPrices = marketAPIJson?.marketData?.[itemHrid];
+        if (!marketPrices?.[0]) {
+            return 0;
+        }
+        const price = getWeightedMarketPrice(marketPrices);
+        return price > 0 ? price : 0;
+    }
+
+    // 商店品項的標價：一般商店是 costs 陣列，任務商店是單一 cost
+    function getShopItemCosts(shopItem) {
+        if (Array.isArray(shopItem?.costs)) {
+            return shopItem.costs;
+        }
+        return shopItem?.cost ? [shopItem.cost] : [];
+    }
+
+    // 代幣估價：商店裡「只用這種代幣標價」的品項，取「品項市價 ÷ 代幣數」最高者；換不到可交易品項就是 0
+    function getShopCurrencyValue(currencyItemHrid, shopItemDetailMaps, marketAPIJson) {
+        let bestValue = 0;
+        for (const shopItemDetailMap of shopItemDetailMaps || []) {
+            for (const shopItem of Object.values(shopItemDetailMap || {})) {
+                const costs = getShopItemCosts(shopItem);
+                if (costs.length !== 1 || costs[0]?.itemHrid !== currencyItemHrid || !(costs[0].count > 0)) {
+                    continue;
+                }
+                const rewardCount = shopItem.count > 0 ? shopItem.count : 1;
+                const rewardPrice = getMarketFairPrice(marketAPIJson, shopItem.itemHrid);
+                if (rewardPrice > 0) {
+                    bestValue = Math.max(bestValue, (rewardPrice * rewardCount) / costs[0].count);
+                }
+            }
+        }
+        return bestValue;
+    }
+
+    // 牛鈴與代幣（依設定計入）：牛鈴以 10 個牛鈴袋 ÷ 10 估價
+    function computeOptionalAssetValues(characterItems, tokenUnitValues, cowbellUnitValue) {
+        let cowbells = 0;
+        let tokens = 0;
+        for (const item of characterItems || []) {
+            if (item.itemLocationHrid !== "/item_locations/inventory") {
+                continue;
+            }
+            if (item.itemHrid === "/items/cowbell") {
+                cowbells += item.count * cowbellUnitValue;
+            } else if (tokenUnitValues?.[item.itemHrid] > 0) {
+                tokens += item.count * tokenUnitValues[item.itemHrid];
+            }
+        }
+        return { cowbells, tokens };
+    }
+
+    // 總資產 = 流動資產（高低價平均）+ 牛鈴/代幣 + 房子 + 技能書，跟「總NetWorth」同一套算法
+    function buildAssetSnapshot(liquidValues, optionalValues, fixedValues, recordedAt) {
+        const equipment = (liquidValues.equippedAsk + liquidValues.equippedBid) / 2;
+        const inventory = (liquidValues.inventoryAsk + liquidValues.inventoryBid) / 2 + optionalValues.cowbells;
+        const marketListings = (liquidValues.listingsAsk + liquidValues.listingsBid) / 2;
+        const total = equipment + inventory + marketListings + optionalValues.tokens + fixedValues.houses + fixedValues.abilities;
+        return {
+            recordedAt,
+            total,
+            equipment,
+            inventory,
+            cowbells: optionalValues.cowbells,
+            marketListings,
+            tokens: optionalValues.tokens,
+            houses: fixedValues.houses,
+            abilities: fixedValues.abilities,
+        };
+    }
+
+    // 同一天只留最後一筆；回傳新物件，不改動傳入的紀錄
+    function recordAssetSnapshot(history, characterId, dayKey, snapshot) {
+        const roles = { ...(history?.roles || {}) };
+        const role = roles[characterId] || { days: {} };
+        roles[characterId] = { ...role, days: { ...role.days, [dayKey]: snapshot } };
+        return { version: 1, roles };
+    }
+
+    // 今天跟「前一個有紀錄的日子」比較（中間沒開遊戲的日子會跳過）
+    function getAssetDailyChange(days, dayKey) {
+        const today = days?.[dayKey];
+        if (!Number.isFinite(today?.total)) {
+            return null;
+        }
+        const previousDayKeys = Object.keys(days)
+            .filter((key) => key < dayKey && Number.isFinite(days[key]?.total))
+            .sort();
+        if (previousDayKeys.length === 0) {
+            return null;
+        }
+        const previousDayKey = previousDayKeys[previousDayKeys.length - 1];
+        return {
+            previousDayKey,
+            gapDays: getAssetHistoryDayGap(previousDayKey, dayKey),
+            change: today.total - days[previousDayKey].total,
+            previousTotal: days[previousDayKey].total,
+        };
+    }
+
+    // 近 7 天平均每日盈虧：最新一筆對約 7 天前那筆（不足 7 天就用最早一筆），除以相隔天數
+    function getAssetSevenDayAverage(days, dayKey) {
+        const dayKeys = Object.keys(days || {})
+            .filter((key) => key <= dayKey && Number.isFinite(days[key]?.total))
+            .sort();
+        if (dayKeys.length < 2) {
+            return null;
+        }
+        const currentDayKey = dayKeys[dayKeys.length - 1];
+        let baselineDayKey = dayKeys[dayKeys.length - 2];
+        for (let index = dayKeys.length - 2; index >= 0; index--) {
+            baselineDayKey = dayKeys[index];
+            if (getAssetHistoryDayGap(baselineDayKey, currentDayKey) >= 7) {
+                break;
+            }
+        }
+        const gapDays = getAssetHistoryDayGap(baselineDayKey, currentDayKey);
+        return gapDays > 0 ? (days[currentDayKey].total - days[baselineDayKey].total) / gapDays : null;
+    }
+
+    // 表格列：新到舊，每列帶「跟前一筆紀錄的差」
+    function buildAssetHistoryRows(days, limit) {
+        const dayKeys = Object.keys(days || {})
+            .filter((key) => Number.isFinite(days[key]?.total))
+            .sort();
+        const rows = [];
+        for (let index = dayKeys.length - 1; index >= 0 && rows.length < limit; index--) {
+            const dayKey = dayKeys[index];
+            const previousDayKey = dayKeys[index - 1];
+            rows.push({
+                dayKey,
+                total: days[dayKey].total,
+                change: previousDayKey ? days[dayKey].total - days[previousDayKey].total : null,
+            });
+        }
+        return rows;
+    }
+
+    function formatSignedAssetChange(change, formatNumber) {
+        return `${change >= 0 ? "+" : "-"}${formatNumber(Math.abs(change))}`;
+    }
+
+    // 身家變化百分比（跟比較基準那天的總資產比），例如 "-3.27%"；基準不是正數就回傳 null
+    function formatAssetChangePercent(change, previousTotal) {
+        if (!(previousTotal > 0)) {
+            return null;
+        }
+        const percent = (change / previousTotal) * 100;
+        return `${percent >= 0 ? "+" : "-"}${Math.abs(percent).toFixed(2)}%`;
+    }
+
+    // 例如「今天 -194.47M，身家 -3.27%」；中間沒開遊戲就寫「近 3 天」
+    function buildAssetDailyChangeSentence(dailyChange, formatNumber, isChinese) {
+        const periodText =
+            dailyChange.gapDays > 1 ? (isChinese ? `近 ${dailyChange.gapDays} 天` : `Last ${dailyChange.gapDays} days`) : isChinese ? "今天" : "Today";
+        const amountText = `${dailyChange.change >= 0 ? "+" : "-"}${formatNumber(Math.abs(dailyChange.change), 2)}`;
+        const percentText = formatAssetChangePercent(dailyChange.change, dailyChange.previousTotal);
+        if (!percentText) {
+            return `${periodText} ${amountText}`;
+        }
+        return isChinese ? `${periodText} ${amountText}，身家 ${percentText}` : `${periodText} ${amountText}, net worth ${percentText}`;
+    }
+
+    function formatAssetHistoryDate(dayKey) {
+        return dayKey.slice(5).replace("-", "/");
+    }
+
+    // 產生「今日盈虧」區塊 HTML（formatNumber 傳入數字格式化函式，方便測試）
+    function buildAssetHistoryHtml(days, todayDayKey, isExpanded, formatNumber, isChinese) {
+        const dailyChange = getAssetDailyChange(days, todayDayKey);
+        let summaryText;
+        if (dailyChange) {
+            summaryText = buildAssetDailyChangeSentence(dailyChange, formatNumber, isChinese);
+        } else if (days?.[todayDayKey]) {
+            summaryText = isChinese ? "今日盈虧：明天開始顯示（今天是第一筆紀錄）" : "Today's change: available tomorrow (first record today)";
+        } else {
+            summaryText = isChinese ? "今日盈虧：計算中…" : "Today's change: calculating…";
+        }
+        const sevenDayAverage = getAssetSevenDayAverage(days, todayDayKey);
+        const rowHtmls = buildAssetHistoryRows(days, ASSET_HISTORY_DISPLAY_DAYS).map(
+            (row) => `<tr>
+                <td style="padding-right: 8px;">${formatAssetHistoryDate(row.dayKey)}</td>
+                <td style="padding-right: 8px; text-align: right;">${formatNumber(row.total)}</td>
+                <td style="text-align: right;">${row.change === null ? "-" : formatSignedAssetChange(row.change, formatNumber)}</td>
+            </tr>`
+        );
+        let baselineText = "";
+        if (dailyChange) {
+            const gapText =
+                dailyChange.gapDays > 1
+                    ? isChinese
+                        ? `（${dailyChange.gapDays} 天前，中間沒有紀錄）`
+                        : ` (${dailyChange.gapDays} days ago, no records between)`
+                    : isChinese
+                    ? "（昨天）"
+                    : " (yesterday)";
+            baselineText = `<div>${isChinese ? "比較基準：" : "Compared with: "}${formatAssetHistoryDate(dailyChange.previousDayKey)}${gapText}</div>`;
+        }
+        const averageText =
+            sevenDayAverage === null ? "-" : `${formatSignedAssetChange(sevenDayAverage, formatNumber)}${isChinese ? " / 天" : " / day"}`;
+        return `<div style="cursor: pointer; font-weight: bold;" id="script_assetHistoryToggle">
+                ${isExpanded ? "↓ " : "+ "}${summaryText}
+            </div>
+            <div style="display: ${isExpanded ? "block" : "none"}; margin-left: 20px;">
+                ${baselineText}
+                <div>${isChinese ? "近 7 日平均：" : "7-day average: "}${averageText}</div>
+                <table style="border-collapse: collapse; margin-top: 4px;">
+                    <tr>
+                        <th style="text-align: left; padding-right: 8px;">${isChinese ? "日期" : "Date"}</th>
+                        <th style="text-align: right; padding-right: 8px;">${isChinese ? "總資產" : "Total"}</th>
+                        <th style="text-align: right;">${isChinese ? "盈虧" : "Change"}</th>
+                    </tr>
+                    ${rowHtmls.join("")}
+                </table>
+                <div id="script_assetHistoryClear" style="cursor: pointer; text-decoration: underline; margin-top: 4px; font-size: 0.75rem;">
+                    ${isChinese ? "清除這個角色的資產紀錄" : "Clear this character's asset history"}
+                </div>
+            </div>`;
+    }
+
+    function readAssetHistory() {
+        try {
+            const storedHistory = JSON.parse(GM_getValue(ASSET_HISTORY_STORAGE_KEY, "null"));
+            if (storedHistory && typeof storedHistory === "object" && storedHistory.roles) {
+                return storedHistory;
+            }
+        } catch (error) {
+            console.error("MWITools readAssetHistory error:", error);
+        }
+        return { version: 1, roles: {} };
+    }
+
+    function writeAssetHistory(history) {
+        GM_setValue(ASSET_HISTORY_STORAGE_KEY, JSON.stringify(history));
+    }
+
+    // 代幣單價依設定計算（解析一次遊戲資料的商店表）
+    function computeAssetTokenUnitValues(marketAPIJson) {
+        const tokenUnitValues = {};
+        const tokenHrids = [];
+        if (settingsMap.includeDungeonTokensInAssets.isTrue) {
+            tokenHrids.push(...DUNGEON_TOKEN_HRIDS);
+        }
+        if (settingsMap.includeTaskTokensInAssets.isTrue) {
+            tokenHrids.push(TASK_TOKEN_HRID);
+        }
+        if (tokenHrids.length === 0) {
+            return tokenUnitValues;
+        }
+        let clientData = null;
+        try {
+            clientData = JSON.parse(GM_getValue("init_client_data", ""));
+        } catch (error) {
+            console.error("MWITools computeAssetTokenUnitValues: init_client_data unavailable", error);
+            return tokenUnitValues;
+        }
+        const shopItemDetailMaps = [clientData?.shopItemDetailMap, clientData?.taskShopItemDetailMap];
+        for (const tokenHrid of tokenHrids) {
+            tokenUnitValues[tokenHrid] = getShopCurrencyValue(tokenHrid, shopItemDetailMaps, marketAPIJson);
+        }
+        return tokenUnitValues;
+    }
+
+    function buildCurrentAssetSnapshot(liquidValues, marketAPIJson) {
+        const cowbellUnitValue = settingsMap.includeCowbellsInAssets.isTrue ? getMarketFairPrice(marketAPIJson, "/items/bag_of_10_cowbells") / 10 : 0;
+        const optionalValues = computeOptionalAssetValues(initData_characterItems, assetTokenUnitValues, cowbellUnitValue);
+        return buildAssetSnapshot(liquidValues, optionalValues, lastFixedAssetValues, new Date().toISOString());
+    }
+
+    function saveAssetSnapshot(snapshot) {
+        if (!currentCharacterId) {
             return;
         }
+        const dayKey = getAssetHistoryDayKey(new Date());
+        writeAssetHistory(recordAssetSnapshot(readAssetHistory(), currentCharacterId, dayKey, snapshot));
+        lastAssetSnapshotDayKey = dayKey;
+        renderAssetHistory();
+    }
 
-        let networthAsk = 0;
-        let networthBid = 0;
-        let marketListingsNetworthAsk = 0;
-        let marketListingsNetworthBid = 0;
-        let equippedNetworthAsk = 0;
-        let equippedNetworthBid = 0;
-        let inventoryNetworthAsk = 0;
-        let inventoryNetworthBid = 0;
+    // 物品或掛單有變動、或跨日時，重算流動資產並更新今天的紀錄
+    async function refreshAssetSnapshotIfNeeded() {
+        if (!settingsMap.assetHistory.isTrue || !lastFixedAssetValues || isAssetSnapshotRefreshing) {
+            return;
+        }
+        const isNewDay = lastAssetSnapshotDayKey !== getAssetHistoryDayKey(new Date());
+        if (!isAssetSnapshotDirty && !isNewDay) {
+            return;
+        }
+        isAssetSnapshotRefreshing = true;
+        isAssetSnapshotDirty = false;
+        try {
+            const marketAPIJson = await fetchMarketJSON();
+            if (!marketAPIJson) {
+                return;
+            }
+            const liquidValues = await computeLiquidAssetValues(marketAPIJson);
+            if (isNewDay) {
+                assetTokenUnitValues = computeAssetTokenUnitValues(marketAPIJson);
+            }
+            saveAssetSnapshot(buildCurrentAssetSnapshot(liquidValues, marketAPIJson));
+        } catch (error) {
+            console.error("MWITools refreshAssetSnapshotIfNeeded error:", error);
+        } finally {
+            isAssetSnapshotRefreshing = false;
+        }
+    }
+
+    function startAssetSnapshotTimer() {
+        if (!assetSnapshotTimer) {
+            assetSnapshotTimer = setInterval(refreshAssetSnapshotIfNeeded, ASSET_SNAPSHOT_REFRESH_INTERVAL_MS);
+        }
+    }
+
+    function renderAssetHistory() {
+        const container = document.getElementById("script_assetHistory");
+        if (!container) {
+            return;
+        }
+        if (!settingsMap.assetHistory.isTrue || !currentCharacterId) {
+            container.innerHTML = "";
+            return;
+        }
+        const days = readAssetHistory().roles[currentCharacterId]?.days || {};
+        container.innerHTML = buildAssetHistoryHtml(days, getAssetHistoryDayKey(new Date()), isAssetHistoryExpanded, numberFormatter, isZH);
+        container.querySelector("#script_assetHistoryToggle")?.addEventListener("click", toggleAssetHistory);
+        container.querySelector("#script_assetHistoryClear")?.addEventListener("click", clearCurrentCharacterAssetHistory);
+    }
+
+    function toggleAssetHistory() {
+        isAssetHistoryExpanded = !isAssetHistoryExpanded;
+        renderAssetHistory();
+    }
+
+    function clearCurrentCharacterAssetHistory() {
+        if (!confirm(isZH ? "確定清除這個角色的每日資產紀錄？" : "Clear this character's daily asset history?")) {
+            return;
+        }
+        const history = readAssetHistory();
+        delete history.roles[currentCharacterId];
+        writeAssetHistory(history);
+        lastAssetSnapshotDayKey = null;
+        isAssetSnapshotDirty = true;
+        renderAssetHistory();
+        refreshAssetSnapshotIfNeeded();
+    }
+
+    // 強化 +2 以上物品用強化模擬成本估價，模擬很花時間：同一份市價內用快取，市價更新才重算
+    const enhancedItemCostCache = new Map();
+    let enhancedItemCostCacheVersion = null;
+    async function getEnhancedItemCost(itemHrid, enhancementLevel) {
+        const marketVersion = localStorage.getItem("MWITools_marketAPI_timestamp");
+        if (enhancedItemCostCacheVersion !== marketVersion) {
+            enhancedItemCostCache.clear();
+            enhancedItemCostCacheVersion = marketVersion;
+        }
+        const cacheKey = `${itemHrid}::${enhancementLevel}`;
+        if (enhancedItemCostCache.has(cacheKey)) {
+            return enhancedItemCostCache.get(cacheKey);
+        }
+        input_data.item_hrid = itemHrid;
+        input_data.stop_at = enhancementLevel;
+        const best = await findBestEnhanceStratWithPhiMirror(input_data);
+        const totalCost = best?.totalCost ? Math.round(best.totalCost) : 0;
+        const cost = totalCost > 0 ? totalCost : 0;
+        enhancedItemCostCache.set(cacheKey, cost);
+        return cost;
+    }
+
+    // 流動資產（裝備、庫存、市場掛單）的高/低價估值
+    async function computeLiquidAssetValues(marketAPIJson) {
+        const liquidValues = { equippedAsk: 0, equippedBid: 0, inventoryAsk: 0, inventoryBid: 0, listingsAsk: 0, listingsBid: 0 };
         const unknownPriceItemHrids = [];
 
-        for (const item of initData_characterItems) {
+        for (const item of initData_characterItems || []) {
             const enhanceLevel = item.enhancementLevel;
             const marketPrices = marketAPIJson.marketData[item.itemHrid];
+            const isEquipped = item.itemLocationHrid !== "/item_locations/inventory";
 
             if (enhanceLevel && enhanceLevel > 1) {
-                input_data.item_hrid = item.itemHrid;
-                input_data.stop_at = enhanceLevel;
-                const best = await findBestEnhanceStratWithPhiMirror(input_data);
-                let totalCost = best?.totalCost;
-                totalCost = totalCost ? Math.round(totalCost) : 0;
-                if (item.itemLocationHrid !== "/item_locations/inventory") {
-                    equippedNetworthAsk += item.count * (totalCost > 0 ? totalCost : 0);
-                    equippedNetworthBid += item.count * (totalCost > 0 ? totalCost : 0);
+                const totalCost = await getEnhancedItemCost(item.itemHrid, enhanceLevel);
+                if (isEquipped) {
+                    liquidValues.equippedAsk += item.count * totalCost;
+                    liquidValues.equippedBid += item.count * totalCost;
                 } else {
-                    inventoryNetworthAsk += item.count * (totalCost > 0 ? totalCost : 0);
-                    inventoryNetworthBid += item.count * (totalCost > 0 ? totalCost : 0);
+                    liquidValues.inventoryAsk += item.count * totalCost;
+                    liquidValues.inventoryBid += item.count * totalCost;
                 }
             } else if (marketPrices && marketPrices[0]) {
-                if (item.itemLocationHrid !== "/item_locations/inventory") {
-                    equippedNetworthAsk += item.count * (marketPrices[0].a > 0 ? marketPrices[0].a : 0);
-                    equippedNetworthBid += item.count * (marketPrices[0].b > 0 ? marketPrices[0].b : 0);
+                const askPrice = marketPrices[0].a > 0 ? marketPrices[0].a : 0;
+                const bidPrice = marketPrices[0].b > 0 ? marketPrices[0].b : 0;
+                if (isEquipped) {
+                    liquidValues.equippedAsk += item.count * askPrice;
+                    liquidValues.equippedBid += item.count * bidPrice;
                 } else {
-                    inventoryNetworthAsk += item.count * (marketPrices[0].a > 0 ? marketPrices[0].a : 0);
-                    inventoryNetworthBid += item.count * (marketPrices[0].b > 0 ? marketPrices[0].b : 0);
+                    liquidValues.inventoryAsk += item.count * askPrice;
+                    liquidValues.inventoryBid += item.count * bidPrice;
                 }
             } else if (!isUntradableItem(item.itemHrid)) {
                 unknownPriceItemHrids.push(item.itemHrid);
@@ -4054,7 +4549,7 @@
             console.debug("calculateNetworth: no market price for " + unknownPriceItemHrids.join(", "));
         }
 
-        for (const item of initData_myMarketListings) {
+        for (const item of initData_myMarketListings || []) {
             const quantity = item.orderQuantity - item.filledQuantity;
             const enhancementLevel = item.enhancementLevel;
             const marketPrices = marketAPIJson.marketData[item.itemHrid];
@@ -4065,47 +4560,66 @@
             let askPrice = marketPrices[0]?.a ?? 0;
             let bidPrice = marketPrices[0]?.b ?? 0;
             if (item.isSell) {
-                if (item.itemHrid === "/items/bag_of_10_cowbells") {
-                    askPrice *= 1 - 18 / 100;
-                    bidPrice *= 1 - 18 / 100;
-                } else {
-                    askPrice *= 1 - 2 / 100;
-                    bidPrice *= 1 - 2 / 100;
-                }
+                // 賣單扣掉市場稅：一般 4%、牛鈴袋 18%
+                const taxRate = item.itemHrid === "/items/bag_of_10_cowbells" ? 0.18 : 0.04;
+                askPrice *= 1 - taxRate;
+                bidPrice *= 1 - taxRate;
                 if (!enhancementLevel || enhancementLevel <= 1) {
-                    marketListingsNetworthAsk += quantity * (askPrice > 0 ? askPrice : 0);
-                    marketListingsNetworthBid += quantity * (bidPrice > 0 ? bidPrice : 0);
+                    liquidValues.listingsAsk += quantity * (askPrice > 0 ? askPrice : 0);
+                    liquidValues.listingsBid += quantity * (bidPrice > 0 ? bidPrice : 0);
                 } else {
-                    input_data.item_hrid = item.itemHrid;
-                    input_data.stop_at = enhancementLevel;
-                    const best = await findBestEnhanceStratWithPhiMirror(input_data);
-                    let totalCost = best?.totalCost;
-                    totalCost = totalCost ? Math.round(totalCost) : 0;
-                    marketListingsNetworthAsk += quantity * (totalCost > 0 ? totalCost : 0);
-                    marketListingsNetworthBid += quantity * (totalCost > 0 ? totalCost : 0);
+                    const totalCost = await getEnhancedItemCost(item.itemHrid, enhancementLevel);
+                    liquidValues.listingsAsk += quantity * totalCost;
+                    liquidValues.listingsBid += quantity * totalCost;
                 }
-                marketListingsNetworthAsk += item.unclaimedCoinCount;
-                marketListingsNetworthBid += item.unclaimedCoinCount;
+                liquidValues.listingsAsk += item.unclaimedCoinCount;
+                liquidValues.listingsBid += item.unclaimedCoinCount;
             } else {
-                marketListingsNetworthAsk += quantity * item.price;
-                marketListingsNetworthBid += quantity * item.price;
-                marketListingsNetworthAsk += item.unclaimedItemCount * (askPrice > 0 ? askPrice : 0);
-                marketListingsNetworthBid += item.unclaimedItemCount * (bidPrice > 0 ? bidPrice : 0);
+                liquidValues.listingsAsk += quantity * item.price;
+                liquidValues.listingsBid += quantity * item.price;
+                liquidValues.listingsAsk += item.unclaimedItemCount * (askPrice > 0 ? askPrice : 0);
+                liquidValues.listingsBid += item.unclaimedItemCount * (bidPrice > 0 ? bidPrice : 0);
             }
         }
+        return liquidValues;
+    }
 
-        networthAsk = equippedNetworthAsk + inventoryNetworthAsk + marketListingsNetworthAsk;
-        networthBid = equippedNetworthBid + inventoryNetworthBid + marketListingsNetworthBid;
+    async function calculateNetworth() {
+        const marketAPIJson = await fetchMarketJSON();
+        if (!marketAPIJson) {
+            console.error("calculateNetworth marketAPIJson is null");
+            return;
+        }
+
+        const liquidValues = await computeLiquidAssetValues(marketAPIJson);
+        const equippedNetworthAsk = liquidValues.equippedAsk;
+        const equippedNetworthBid = liquidValues.equippedBid;
+        const inventoryNetworthAsk = liquidValues.inventoryAsk;
+        const marketListingsNetworthAsk = liquidValues.listingsAsk;
+        const networthAsk = liquidValues.equippedAsk + liquidValues.inventoryAsk + liquidValues.listingsAsk;
+        const networthBid = liquidValues.equippedBid + liquidValues.inventoryBid + liquidValues.listingsBid;
+
+        // 房子/技能書分數（也用在每日資產）：登入時算一次
+        const buildScores = await getSelfBuildScores(equippedNetworthAsk * 0.5 + equippedNetworthBid * 0.5);
+        lastFixedAssetValues = { houses: (buildScores[0] + buildScores[1]) * 1000000, abilities: buildScores[3] * 1000000 };
+        assetTokenUnitValues = computeAssetTokenUnitValues(marketAPIJson);
+        const assetSnapshot = buildCurrentAssetSnapshot(liquidValues, marketAPIJson);
+        if (settingsMap.assetHistory.isTrue) {
+            saveAssetSnapshot(assetSnapshot);
+            startAssetSnapshotTimer();
+        }
 
         /* 仓库搜索栏下方显示人物总结 */
         // Some code of networth summery is by Stella.
         const addInventorySummery = async (invElem) => {
-            const [battleHouseScore, nonBattleHouseScore, abilityScore, allAbilityScore, equipmentScore] = await getSelfBuildScores(
-                equippedNetworthAsk * 0.5 + equippedNetworthBid * 0.5
-            );
+            const [battleHouseScore, nonBattleHouseScore, abilityScore, allAbilityScore, equipmentScore] = buildScores;
             const totalScore = battleHouseScore + abilityScore + equipmentScore;
             const totalHouseScore = battleHouseScore + nonBattleHouseScore;
-            const totalNetworth = networthAsk * 0.5 + networthBid * 0.5 + (totalHouseScore + allAbilityScore) * 1000000;
+            // 跟每日資產紀錄用同一份計算，數字才會一致（含依設定計入的牛鈴/代幣）
+            const totalNetworth = assetSnapshot.total;
+            const cowbellsRowHtml =
+                assetSnapshot.cowbells > 0 ? `<div>${isZH ? "牛鈴價值：" : "Cowbells value: "}${numberFormatter(assetSnapshot.cowbells)}</div>` : "";
+            const tokensRowHtml = assetSnapshot.tokens > 0 ? `<div>${isZH ? "代幣價值：" : "Tokens value: "}${numberFormatter(assetSnapshot.tokens)}</div>` : "";
 
             invElem.insertAdjacentHTML(
                 "beforebegin",
@@ -4133,6 +4647,7 @@
                             <div>${isZH ? "裝備價值：" : "Equipment value: "}${numberFormatter(equippedNetworthAsk)}</div>
                             <div>${isZH ? "庫存價值：" : "Inventory value: "}${numberFormatter(inventoryNetworthAsk)}</div>
                             <div>${isZH ? "訂單價值：" : "Market listing value: "}${numberFormatter(marketListingsNetworthAsk)}</div>
+                            ${cowbellsRowHtml}
                         </div>
 
                         <!-- 非流動資產 -->
@@ -4142,8 +4657,12 @@
                         <div id="nonCurrentAssets" style="display: none; margin-left: 20px;">
                             <div>${isZH ? "房子價值：" : "Houses value: "}${numberFormatter(totalHouseScore * 1000000)}</div>
                             <div>${isZH ? "技能價值：" : "Abilities value: "}${numberFormatter(allAbilityScore * 1000000)}</div>
+                            ${tokensRowHtml}
                         </div>
                     </div>
+
+                    <!-- 每日資產盈虧 -->
+                    <div id="script_assetHistory"></div>
                 </div>`
             );
 
@@ -4185,6 +4704,8 @@
                 nonCurrentAssets.style.display = isCollapsed ? "block" : "none";
                 toggleNonCurrentAssets.textContent = (isCollapsed ? "↓ " : "+ ") + (isZH ? "非流動資產價值" : "Fixed assets value");
             });
+
+            renderAssetHistory();
         };
 
         const waitForHeader = () => {
@@ -4764,7 +5285,8 @@
     const tooltipObserver = new MutationObserver(async function (mutations) {
         for (const mutation of mutations) {
             for (const added of mutation.addedNodes) {
-                if (added.classList.contains("MuiTooltip-popper")) {
+                // 加到 body 的也可能是文字節點（沒有 classList）
+                if (added.classList?.contains("MuiTooltip-popper")) {
                     if (added.querySelector("div.ItemTooltipText_name__2JAHA")) {
                         await handleTooltipItem(added);
                     } else if (added.querySelector("div.QueuedActions_queuedActionsEditMenu__3OoQH")) {
@@ -4775,6 +5297,152 @@
         }
     });
     tooltipObserver.observe(document.body, { attributes: false, childList: true, characterData: false });
+
+    /* 倉庫小工具（參考 MWITools 26.x：雙擊開市場、右鍵開完寶箱、寶箱期望價值） */
+    // 從倉庫物品格往上找遊戲的 Item 元件，拿 itemHrid / hash / 開箱函式等 props
+    function findInventoryItemComponent(itemElement) {
+        if (!itemElement) {
+            return null;
+        }
+        const fiberKey = Reflect.ownKeys(itemElement).find((key) => typeof key === "string" && /^__react(Fiber|InternalInstance)\$/.test(key));
+        let fiber = fiberKey ? itemElement[fiberKey] : null;
+        for (let depth = 0; fiber && depth < 30; depth++, fiber = fiber.return) {
+            const instance = fiber.stateNode;
+            const props = instance?.props ?? fiber.memoizedProps;
+            if (props?.itemHrid && props.hash) {
+                return { props, instance };
+            }
+        }
+        return null;
+    }
+
+    // 只處理真正的倉庫格子（收益面板也借用倉庫的樣式，要排除）
+    function getInventoryItemElement(target) {
+        const itemElement = target?.closest?.('div[class*="Item_itemContainer"]');
+        if (!itemElement?.closest('div[class*="Inventory_items"]') || itemElement.closest(".profit-pannel")) {
+            return null;
+        }
+        return itemElement;
+    }
+
+    function findGamePageComponent() {
+        const gamePageElement = document.querySelector('[class^="GamePage"]');
+        if (!gamePageElement) {
+            return null;
+        }
+        const fiberKey = Reflect.ownKeys(gamePageElement).find((key) => typeof key === "string" && key.startsWith("__reactFiber$"));
+        let fiber = fiberKey ? gamePageElement[fiberKey] : null;
+        for (let depth = 0; fiber && depth < 10; depth++, fiber = fiber.return) {
+            if (typeof fiber.stateNode?.handleGoToMarketplace === "function") {
+                return fiber.stateNode;
+            }
+        }
+        return null;
+    }
+
+    // 雙擊可交易物品 → 打開它的市場頁（用遊戲自己的「前往市場」）
+    function handleInventoryMarketDoubleClick(event) {
+        if (!settingsMap.inventoryMarketDoubleClick.isTrue || (event.button && event.button !== 0)) {
+            return;
+        }
+        const itemComponent = findInventoryItemComponent(getInventoryItemElement(event.target));
+        const itemHrid = itemComponent?.props.itemHrid;
+        if (!itemHrid || !initData_itemDetailMap?.[itemHrid]?.isTradable) {
+            return;
+        }
+        const gamePage = findGamePageComponent();
+        if (!gamePage) {
+            return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        gamePage.handleGoToMarketplace(itemHrid, Number(itemComponent.props.enhancementLevel) || 0);
+    }
+
+    // 一次能開幾個：堆疊數量；要鑰匙的寶箱再受鑰匙數限制
+    function getLootOpenAllCount(stackCount, isKeyRequired, keyCount) {
+        const count = isKeyRequired ? Math.min(Number(stackCount) || 0, Number(keyCount) || 0) : Number(stackCount) || 0;
+        return Math.max(0, Math.floor(count));
+    }
+
+    // 右鍵寶箱 → 一次開完（遊戲原本右鍵只開 1 個）；不是寶箱就交回遊戲原本的右鍵行為
+    function handleInventoryLootContextMenu(event) {
+        if (!settingsMap.inventoryLootOpenAll.isTrue || event.button !== 2) {
+            return;
+        }
+        const itemElement = getInventoryItemElement(event.target);
+        if (!itemElement || event.target.closest('[class*="Item_actionMenu"]')) {
+            return;
+        }
+        const lootItem = findInventoryItemComponent(itemElement);
+        const itemDetail = initData_itemDetailMap?.[lootItem?.props.itemHrid];
+        if (!lootItem || itemDetail?.categoryHrid !== "/item_categories/loot" || typeof lootItem.props.openLootHandler !== "function") {
+            return;
+        }
+        if (lootItem.instance?.canOpen?.() === false) {
+            return;
+        }
+        const openCount = getLootOpenAllCount(lootItem.props.count, Boolean(itemDetail.openKeyItemHrid), lootItem.props.openLootKeyCount);
+        if (openCount < 1) {
+            return;
+        }
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        lootItem.props.openLootHandler(lootItem.props.hash, openCount);
+    }
+
+    // 寶箱產物的變賣價值：可交易物品扣市場稅；產物本身又是寶箱就往下估（最多 3 層）
+    function getLootDropSaleValue(itemHrid, itemDetailMap, openableLootDropMap, marketAPIJson, isSellAtAsk, depth) {
+        if (itemHrid === "/items/coin") {
+            return 1;
+        }
+        const marketPrices = marketAPIJson?.marketData?.[itemHrid]?.[0];
+        if (itemDetailMap?.[itemHrid]?.isTradable && marketPrices) {
+            const price = isSellAtAsk ? marketPrices.a : marketPrices.b;
+            if (!(price > 0)) {
+                return 0;
+            }
+            const taxRate = itemHrid === "/items/bag_of_10_cowbells" ? 0.18 : 0.04;
+            return price * (1 - taxRate);
+        }
+        if (depth < 3 && openableLootDropMap?.[itemHrid]) {
+            return calculateLootChestValue(itemHrid, itemDetailMap, openableLootDropMap, marketAPIJson, isSellAtAsk, depth + 1).netValue;
+        }
+        return 0;
+    }
+
+    /**
+     * 開一個寶箱的期望價值
+     * @returns {{grossValue: number, keyCost: number, netValue: number}} - 產物期望價值、鑰匙成本（以賣單價立即買入）、淨值
+     */
+    function calculateLootChestValue(itemHrid, itemDetailMap, openableLootDropMap, marketAPIJson, isSellAtAsk, depth = 0) {
+        let grossValue = 0;
+        for (const drop of openableLootDropMap?.[itemHrid] || []) {
+            const dropRate = Number.isFinite(drop.dropRate) ? drop.dropRate : 1;
+            const expectedCount = dropRate * ((drop.minCount + drop.maxCount) / 2);
+            grossValue += expectedCount * getLootDropSaleValue(drop.itemHrid, itemDetailMap, openableLootDropMap, marketAPIJson, isSellAtAsk, depth);
+        }
+        let keyCost = 0;
+        const keyItemHrid = itemDetailMap?.[itemHrid]?.openKeyItemHrid;
+        if (keyItemHrid) {
+            const keyPrices = marketAPIJson?.marketData?.[keyItemHrid]?.[0];
+            keyCost = keyPrices?.a > 0 ? keyPrices.a : keyPrices?.b > 0 ? keyPrices.b : 0;
+        }
+        return { grossValue, keyCost, netValue: grossValue - keyCost };
+    }
+
+    function buildLootChestTooltipHtml(itemHrid, amount, marketJson) {
+        if (!settingsMap.lootChestEstimate.isTrue || !initData_openableLootDropMap?.[itemHrid] || !marketJson?.marketData) {
+            return "";
+        }
+        const chestValue = calculateLootChestValue(itemHrid, initData_itemDetailMap, initData_openableLootDropMap, marketJson, settingsMap.lootSellAtAsk.isTrue);
+        const keyText = chestValue.keyCost > 0 ? (isZH ? `（已扣鑰匙 ${numberFormatter(chestValue.keyCost)}）` : ` (key ${numberFormatter(chestValue.keyCost)} deducted)`) : "";
+        const totalText = amount > 0 ? (isZH ? `，${amount} 個共 ${numberFormatter(chestValue.netValue * amount)}` : `, ${amount} total ${numberFormatter(chestValue.netValue * amount)}`) : "";
+        return `<div style="color: ${SCRIPT_COLOR_TOOLTIP};">${isZH ? "開箱期望：" : "Open value: "}${numberFormatter(chestValue.netValue)}${keyText}${totalText}</div>`;
+    }
+
+    document.addEventListener("dblclick", handleInventoryMarketDoubleClick, true);
+    document.addEventListener("contextmenu", handleInventoryLootContextMenu, true);
 
     const actionHridToToolsSpeedBuffNamesMap = {
         "/action_types/brewing": "brewingSpeed",
@@ -4967,6 +5635,11 @@
         <div style="color: ${SCRIPT_COLOR_TOOLTIP};">${isZH ? "價格: " : "Price: "}${numberFormatter(ask)} / ${numberFormatter(bid)} (${ask && ask > 0 ? numberFormatter(ask * amount) : ""
                 } / ${bid && bid > 0 ? numberFormatter(bid * amount) : ""})</div>
         `;
+        }
+
+        // 寶箱開箱期望價值（只有寶箱才需要市價）
+        if (settingsMap.lootChestEstimate.isTrue && initData_openableLootDropMap?.[itemHrid]) {
+            appendHTMLStr += buildLootChestTooltipHtml(itemHrid, amount, marketJson || (await fetchMarketJSON()));
         }
 
         // 消耗品回复计算
@@ -8473,4 +9146,137 @@
         };
         let timer = setInterval(checkElem, 200);
     }
+    /* ── 本地移植功能（參考 MWITools 26.x 新功能的精簡移植）── */
+    // 每個功能是一個只有靜態成員的 class，最後 localFeatureClasses.push(類別) 註冊，可實作：
+    //   static setup()                腳本啟動時呼叫一次（只有遊戲網站會執行到這裡）
+    //   static handleMessage(message) 每則遊戲 WebSocket 訊息（已 JSON.parse，在 mwiTools 自己處理完之後）
+    //   static handleDomChange()      畫面有節點增減時呼叫（同一個畫格最多一次，要做得很輕）
+    // 設定開關由各功能自己檢查 settingsMap.xxx.isTrue（設定改了要重新整理頁面才生效）
+
+    function dispatchLatestMessageToLocalFeatures() {
+        try {
+            const message = latestParsedMessage;
+            latestParsedMessage = null;
+            if (message) {
+                dispatchLocalFeatureMessage(message);
+            }
+        } catch (error) {
+            console.error("MWITools local feature dispatch error:", error);
+        }
+    }
+
+    function dispatchLocalFeatureMessage(message) {
+        if (message.type === "init_client_data") {
+            localFeatureClientDataCache = message;
+        } else if (message.type === "init_character_data") {
+            latestInitCharacterData = message;
+        }
+        for (const featureClass of localFeatureClasses) {
+            if (typeof featureClass.handleMessage !== "function") {
+                continue;
+            }
+            try {
+                featureClass.handleMessage(message);
+            } catch (error) {
+                console.error(`MWITools ${featureClass.name}.handleMessage error:`, error);
+            }
+        }
+    }
+
+    // 遊戲靜態資料（init_client_data 全文）：第一次用到才解析，收到新的 init_client_data 時直接換成新的
+    function getLocalFeatureClientData() {
+        if (!localFeatureClientDataCache) {
+            try {
+                localFeatureClientDataCache = JSON.parse(GM_getValue("init_client_data", "") || "null");
+            } catch (error) {
+                console.error("MWITools getLocalFeatureClientData error:", error);
+                localFeatureClientDataCache = null;
+            }
+        }
+        return localFeatureClientDataCache;
+    }
+
+    // 最近一次的 init_character_data 原始內容（角色、任務、公會等），還沒登入時是 null
+    function getLocalFeatureCharacterData() {
+        return latestInitCharacterData;
+    }
+
+    // 物品 / 動作 / 怪物等 hrid 的顯示名稱：中文用繁體站實際顯示的名稱
+    function getLocalFeatureDisplayName(hrid) {
+        if (isZH) {
+            const chineseName = ZH_TRADITIONAL_ALIAS_MAP[hrid] || ZHItemNames[hrid] || ZHActionNames[hrid];
+            if (chineseName) {
+                return chineseName;
+            }
+        }
+        const clientData = getLocalFeatureClientData();
+        const englishName =
+            initData_itemDetailMap?.[hrid]?.name ||
+            initData_actionDetailMap?.[hrid]?.name ||
+            clientData?.combatMonsterDetailMap?.[hrid]?.name ||
+            clientData?.houseRoomDetailMap?.[hrid]?.name;
+        return englishName || String(hrid ?? "").split("/").pop().replaceAll("_", " ");
+    }
+
+    // 組 HTML 時，遊戲資料或玩家名稱一律先跳脫
+    function escapeLocalFeatureHtml(text) {
+        return String(text ?? "")
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll('"', "&quot;")
+            .replaceAll("'", "&#39;");
+    }
+
+    // 取 DOM 元素上的 React fiber（遊戲用 React，元件資料在 fiber 的 memoizedProps / stateNode）
+    function getLocalFeatureReactFiber(element) {
+        if (!element) {
+            return null;
+        }
+        const fiberKey = Reflect.ownKeys(element).find((key) => typeof key === "string" && /^__react(Fiber|InternalInstance)\$/.test(key));
+        return fiberKey ? element[fiberKey] : null;
+    }
+
+    function runLocalFeatureDomChange() {
+        isLocalFeatureDomChangeScheduled = false;
+        for (const featureClass of localFeatureClasses) {
+            if (typeof featureClass.handleDomChange !== "function") {
+                continue;
+            }
+            try {
+                featureClass.handleDomChange();
+            } catch (error) {
+                console.error(`MWITools ${featureClass.name}.handleDomChange error:`, error);
+            }
+        }
+    }
+
+    function scheduleLocalFeatureDomChange() {
+        if (isLocalFeatureDomChangeScheduled) {
+            return;
+        }
+        isLocalFeatureDomChangeScheduled = true;
+        requestAnimationFrame(runLocalFeatureDomChange);
+    }
+
+    function setupLocalFeatures() {
+        for (const featureClass of localFeatureClasses) {
+            if (typeof featureClass.setup !== "function") {
+                continue;
+            }
+            try {
+                featureClass.setup();
+            } catch (error) {
+                console.error(`MWITools ${featureClass.name}.setup error:`, error);
+            }
+        }
+        if (localFeatureClasses.some((featureClass) => typeof featureClass.handleDomChange === "function")) {
+            new MutationObserver(scheduleLocalFeatureDomChange).observe(document.body, { childList: true, subtree: true });
+            scheduleLocalFeatureDomChange();
+        }
+    }
+
+    // @@LOCAL_FEATURE_BLOCKS@@
+
+    setupLocalFeatures();
 })();
