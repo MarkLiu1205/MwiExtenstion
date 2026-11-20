@@ -41,6 +41,7 @@
 `simulator/` 是 [azhu949/MWICombatSimulator](https://github.com/azhu949/MWICombatSimulator)（MIT）的副本，
 推送到 main 且 `simulator/**` 有變動時，GitHub Actions 會自動建置並部署到
 <https://markliu1205.github.io/MwiExtenstion/>。mwiCombat.js 的跳轉選單已內建此自架網址（預設選項）。
+mwiCombat.js 與網站側欄「安裝匯入腳本」提供的是同一份腳本（來源 `simulator/scripts/mwi-main-site-import.user.js`），修改時兩邊要保持一致。
 本地開發：`cd simulator && npm ci && npm run dev`（跑在 localhost:5173，mwiCombat 也支援）。
 上游同步方式見 `simulator/UPSTREAM.md`。
 

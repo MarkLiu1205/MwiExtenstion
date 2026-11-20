@@ -1,13 +1,17 @@
 <template>
   <div class="grid gap-4 lg:grid-cols-2">
-    <div class="panel">
-      <h3 class="mb-3 font-heading text-sm uppercase tracking-[0.14em] text-slate-300">{{ t("common:vue.results.hpOverTime", "HP Over Time") }}</h3>
+    <div class="surface-panel">
+      <h3 class="mb-3 font-heading text-sm uppercase text-foreground/85">
+        {{ t('common:vue.results.hpOverTime', 'HP Over Time') }}
+      </h3>
       <div class="relative h-64 w-full overflow-hidden">
         <canvas ref="hpCanvas" class="block h-full w-full"></canvas>
       </div>
     </div>
-    <div class="panel">
-      <h3 class="mb-3 font-heading text-sm uppercase tracking-[0.14em] text-slate-300">{{ t("common:vue.results.mpOverTime", "MP Over Time") }}</h3>
+    <div class="surface-panel">
+      <h3 class="mb-3 font-heading text-sm uppercase text-foreground/85">
+        {{ t('common:vue.results.mpOverTime', 'MP Over Time') }}
+      </h3>
       <div class="relative h-64 w-full overflow-hidden">
         <canvas ref="mpCanvas" class="block h-full w-full"></canvas>
       </div>
@@ -16,9 +20,19 @@
 </template>
 
 <script setup>
-import { Chart, LineController, LineElement, PointElement, LinearScale, CategoryScale, Tooltip, Legend, Title } from "chart.js";
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { useI18nText } from "../composables/useI18nText.js";
+import {
+  Chart,
+  LineController,
+  LineElement,
+  PointElement,
+  LinearScale,
+  CategoryScale,
+  Tooltip,
+  Legend,
+  Title,
+} from 'chart.js';
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useI18nText } from '../composables/useI18nText.js';
 
 Chart.register(LineController, LineElement, PointElement, LinearScale, CategoryScale, Tooltip, Legend, Title);
 
@@ -33,24 +47,17 @@ const hpCanvas = ref(null);
 const mpCanvas = ref(null);
 let hpChart = null;
 let mpChart = null;
+let themeObserver = null;
 const { t } = useI18nText();
 const MAX_TIME_SERIES_POINTS = 1200;
 
-const palette = [
-  "#14b8a6",
-  "#f59e0b",
-  "#60a5fa",
-  "#f472b6",
-  "#a78bfa",
-];
+const palette = ['#14b8a6', '#f59e0b', '#60a5fa', '#f472b6', '#a78bfa'];
 
 function buildDatasets(playerMap, key) {
   const players = Object.keys(playerMap || {});
   return players.map((playerHrid, index) => {
     const color = palette[index % palette.length];
-    const keyLabel = key === "hp"
-      ? t("common:vue.results.hpShort", "HP")
-      : t("common:vue.results.mpShort", "MP");
+    const keyLabel = key === 'hp' ? t('common:vue.results.hpShort', 'HP') : t('common:vue.results.mpShort', 'MP');
     return {
       label: `${playerHrid} ${keyLabel}`,
       data: playerMap[playerHrid]?.[key] || [],
@@ -107,7 +114,7 @@ function sampleByIndices(values, indices) {
 
 function normalizeTimeSeriesData(rawData) {
   const timestamps = Array.isArray(rawData?.timestamps) ? rawData.timestamps : [];
-  const players = rawData?.players && typeof rawData.players === "object" ? rawData.players : {};
+  const players = rawData?.players && typeof rawData.players === 'object' ? rawData.players : {};
   const indices = buildSamplingIndices(timestamps.length, MAX_TIME_SERIES_POINTS);
   const sampledTimestamps = indices.map((idx) => Number(timestamps[idx] || 0));
   const sampledPlayers = {};
@@ -125,7 +132,26 @@ function normalizeTimeSeriesData(rawData) {
   };
 }
 
+function resolveCssColor(expression, fallback) {
+  const probe = document.createElement('span');
+  probe.style.color = expression;
+  probe.style.display = 'none';
+  document.body.appendChild(probe);
+  const color = window.getComputedStyle(probe).color || fallback;
+  probe.remove();
+  return color;
+}
+
+function readChartTheme() {
+  return {
+    foreground: resolveCssColor('var(--foreground)', 'CanvasText'),
+    muted: resolveCssColor('var(--muted-foreground)', 'GrayText'),
+    grid: resolveCssColor('color-mix(in oklab, var(--border) 70%, transparent)', 'transparent'),
+  };
+}
+
 function createBaseOptions(yLabel) {
+  const colors = readChartTheme();
   return {
     responsive: true,
     maintainAspectRatio: false,
@@ -134,7 +160,7 @@ function createBaseOptions(yLabel) {
     plugins: {
       legend: {
         labels: {
-          color: "#e2e8f0",
+          color: colors.foreground,
           boxWidth: 14,
         },
       },
@@ -144,20 +170,36 @@ function createBaseOptions(yLabel) {
     },
     scales: {
       x: {
-        ticks: { color: "#94a3b8", maxTicksLimit: 8 },
-        grid: { color: "rgba(148,163,184,0.12)" },
+        ticks: { color: colors.muted, maxTicksLimit: 8 },
+        grid: { color: colors.grid },
       },
       y: {
-        title: { display: true, text: yLabel, color: "#94a3b8" },
-        ticks: { color: "#94a3b8" },
-        grid: { color: "rgba(148,163,184,0.12)" },
+        title: { display: true, text: yLabel, color: colors.muted },
+        ticks: { color: colors.muted },
+        grid: { color: colors.grid },
       },
     },
     interaction: {
       intersect: false,
-      mode: "index",
+      mode: 'index',
     },
   };
+}
+
+function refreshChartTheme() {
+  const colors = readChartTheme();
+  for (const chart of [hpChart, mpChart]) {
+    if (!chart) {
+      continue;
+    }
+    chart.options.plugins.legend.labels.color = colors.foreground;
+    chart.options.scales.x.ticks.color = colors.muted;
+    chart.options.scales.x.grid.color = colors.grid;
+    chart.options.scales.y.title.color = colors.muted;
+    chart.options.scales.y.ticks.color = colors.muted;
+    chart.options.scales.y.grid.color = colors.grid;
+    chart.update('none');
+  }
 }
 
 function destroyCharts() {
@@ -173,7 +215,7 @@ function destroyCharts() {
 
 function createChart(canvasElement, yLabel) {
   return new Chart(canvasElement, {
-    type: "line",
+    type: 'line',
     data: {
       labels: [],
       datasets: [],
@@ -188,10 +230,10 @@ function ensureCharts() {
   }
 
   if (!hpChart) {
-    hpChart = createChart(hpCanvas.value, "HP");
+    hpChart = createChart(hpCanvas.value, 'HP');
   }
   if (!mpChart) {
-    mpChart = createChart(mpCanvas.value, "MP");
+    mpChart = createChart(mpCanvas.value, 'MP');
   }
   return true;
 }
@@ -204,16 +246,16 @@ function updateChartData(timeSeriesData) {
   const normalized = normalizeTimeSeriesData(timeSeriesData);
   const labels = (normalized.timestamps || []).map((value) => (Number(value) / 1e9).toFixed(1));
   const players = normalized.players || {};
-  const hpDatasets = buildDatasets(players, "hp");
-  const mpDatasets = buildDatasets(players, "mp");
+  const hpDatasets = buildDatasets(players, 'hp');
+  const mpDatasets = buildDatasets(players, 'mp');
 
   hpChart.data.labels = labels;
   hpChart.data.datasets = hpDatasets;
-  hpChart.update("none");
+  hpChart.update('none');
 
   mpChart.data.labels = labels;
   mpChart.data.datasets = mpDatasets;
-  mpChart.update("none");
+  mpChart.update('none');
 }
 
 async function renderCharts(timeSeriesData) {
@@ -230,16 +272,23 @@ watch(
     }
     renderCharts(nextValue);
   },
-  { deep: true }
+  { deep: true },
 );
 
 onMounted(() => {
+  themeObserver = new MutationObserver(refreshChartTheme);
+  themeObserver.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['class', 'data-theme'],
+  });
   if (props.timeSeriesData?.timestamps?.length) {
     renderCharts(props.timeSeriesData);
   }
 });
 
 onBeforeUnmount(() => {
+  themeObserver?.disconnect();
+  themeObserver = null;
   destroyCharts();
 });
 </script>

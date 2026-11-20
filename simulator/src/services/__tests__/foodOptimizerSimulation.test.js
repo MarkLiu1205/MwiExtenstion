@@ -1,0 +1,307 @@
+import { existsSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { buildPlayersForSimulation } from '../playerMapper.js';
+import { createEmptyPlayerConfig } from '../../shared/playerConfig.js';
+import { buildFoodCandidate, buildFoodDefaultCandidate, getFoodOptimizerItems } from '../foodOptimizerDomain.js';
+import {
+  createFoodOptimizerRandom,
+  evaluateFoodOptimizerCandidate,
+  getFoodOptimizerResources,
+  simulateFoodOptimizerRound,
+} from '../foodOptimizerSimulation.js';
+import { dungeonOptions, labyrinthOptions } from '../../shared/gameDataIndex.js';
+import { createFoodOptimizerRoundCache } from '../foodOptimizerRoundCache.js';
+import { loadWasmEngine } from '../wasmEngineLoader.js';
+import { setWasmProductionEngineForTests } from '../wasmProductionSimulation.js';
+
+// 优化器轮次 wasm-only。真轮次用例注入真实 wasm 引擎（engine/pkg 已随
+// 仓库提交构建）；产物缺失时（本地未构建）这些用例跳过。
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+const gluePath = resolve(root, 'engine', 'pkg', 'mwi_combat_engine.js');
+const wasmPath = resolve(root, 'engine', 'pkg', 'mwi_combat_engine_bg.wasm');
+const wasmPackageBuilt = existsSync(gluePath) && existsSync(wasmPath);
+
+function request() {
+  const player = createEmptyPlayerConfig(1);
+  for (const key of Object.keys(player.levels)) player.levels[key] = 30;
+  player.abilities[0] = { abilityHrid: '/abilities/fireball', level: 1 };
+  return {
+    activePlayerId: '1',
+    rounds: 3,
+    seeds: [1, 2, 3],
+    prices: { priceTable: {}, consumableMode: 'ask' },
+    payload: {
+      players: structuredClone(buildPlayersForSimulation([player])),
+      zone: { zoneHrid: '/actions/combat/fly', difficultyTier: 0 },
+      labyrinth: null,
+      extra: {},
+      simulationTimeLimit: 120 * 1e9,
+    },
+  };
+}
+const sample = (deaths, ranOutOfMana = false, costPerHour = 10) => ({
+  deaths,
+  ranOutOfMana,
+  costPerHour,
+  foodUsed: { '/items/donut': 2 },
+});
+
+describe('food optimizer engine execution', () => {
+  // 注入真实 wasm 引擎（一次性加载，用例共享）。
+  beforeEach(async () => {
+    if (!wasmPackageBuilt) return;
+    setWasmProductionEngineForTests(
+      await loadWasmEngine({ glueUrl: pathToFileURL(gluePath).href, moduleOrPath: readFile(wasmPath) }),
+    );
+  });
+
+  afterEach(() => {
+    setWasmProductionEngineForTests(null);
+  });
+
+  it.skipIf(!wasmPackageBuilt)(
+    'reproduces engine results with the same seed without touching Math.random',
+    async () => {
+      const input = request();
+      const original = Math.random;
+      expect(Array.from({ length: 5 }, createFoodOptimizerRandom(1))).toEqual(
+        Array.from({ length: 5 }, createFoodOptimizerRandom(1)),
+      );
+      const first = await simulateFoodOptimizerRound(input, null, 12345);
+      const second = await simulateFoodOptimizerRound(input, null, 12345);
+      expect(first).toEqual(second);
+      // wasm 路径不安装任何播种作用域：全程原生 Math.random。
+      expect(Math.random).toBe(original);
+      const broken = request();
+      broken.payload.zone.zoneHrid = '/invalid';
+      await expect(simulateFoodOptimizerRound(broken, null, 12345)).rejects.toThrow();
+      expect(Math.random).toBe(original);
+    },
+  );
+
+  // 'refuses a request without the WASM engine switch' 用例已删除——
+  // shouldUseWasmOptimizerRound 判据随开关一起清理，任何请求都直接走 wasm；
+  // 「引擎不可用硬失败」的防线由上方 'reproduces engine results' 用例的 broken
+  // payload 拒绝路径与 wiring 测试的 engine_unavailable 断言承载。
+
+  it('uses initialized attributes in zone and dungeon contexts', () => {
+    const input = request();
+    // JS 引擎工厂已删除——用 getFoodOptimizerResources 的改道路径
+    // （等价「reset + initializeCombatPlayers(0)」的玩家初始化链）直接断言。
+    for (const target of [
+      { zone: input.payload.zone, labyrinth: null },
+      { zone: { zoneHrid: dungeonOptions[0].hrid, difficultyTier: 0 }, labyrinth: null },
+    ]) {
+      Object.assign(input.payload, target);
+      const resources = getFoodOptimizerResources(input);
+      expect(resources.maxHp).toBeGreaterThan(0);
+      expect(resources.maxMp).toBeGreaterThan(0);
+      expect(resources.foodSlots).toBe(1);
+    }
+  });
+
+  it('returns a compact result object for optimizer rounds on the wasm engine', async () => {
+    // compact 结果形状由 wasm 引擎的 minimalResult 承接——断言 wasm 轮
+    // 输出的 simResult 字段面（无 attacks/experienceGained/hitpointsGained）。
+    const input = request();
+    const round = await simulateFoodOptimizerRound(input, null, 1, undefined, Infinity, {
+      collectThresholds: false,
+    });
+    expect(round).not.toHaveProperty('attacks');
+    expect(round).not.toHaveProperty('experienceGained');
+    expect(round).not.toHaveProperty('hitpointsGained');
+    expect(round).toHaveProperty('deaths');
+    expect(round).toHaveProperty('foodUsed');
+    expect(round).toHaveProperty('simulatedTime');
+  });
+
+  it('rejects labyrinth requests before constructing or evaluating food simulations', async () => {
+    const input = request();
+    input.payload.labyrinth = { labyrinthHrid: labyrinthOptions[0].hrid, roomLevel: 40, crates: [] };
+    const error = 'common:foodOptimizer.labyrinthUnsupported';
+    const simulate = vi.fn();
+    await expect(evaluateFoodOptimizerCandidate(input, null, 0, undefined, simulate)).rejects.toThrow(error);
+    await expect(simulateFoodOptimizerRound(input, null, 1)).rejects.toThrow(error);
+    expect(simulate).not.toHaveBeenCalled();
+  });
+
+  it('ends a mana-failing candidate within the round while fully simulating the baseline', async () => {
+    const input = request();
+    input.payload.players[0].intelligenceLevel = 1;
+    input.payload.simulationTimeLimit = 600 * 1e9;
+    const baseline = await simulateFoodOptimizerRound(input, null, 1, undefined, 0);
+    const candidate = await simulateFoodOptimizerRound(input, buildFoodCandidate([]), 1);
+    expect(baseline).toMatchObject({
+      ranOutOfMana: true,
+      stoppedEarly: false,
+      simulatedTime: input.payload.simulationTimeLimit,
+    });
+    expect(candidate).toMatchObject({ ranOutOfMana: true, stoppedEarly: true });
+    expect(candidate.simulatedTime).toBeLessThan(baseline.simulatedTime);
+    expect(candidate.simulatedTime).toBeGreaterThan(0);
+  });
+
+  it('ends the current round as soon as the remaining death budget is exceeded', async () => {
+    const input = request();
+    input.payload.simulationTimeLimit = 600 * 1e9;
+    input.payload.zone = { zoneHrid: '/actions/combat/sorcerers_tower', difficultyTier: 4 };
+    input.payload.players[0].abilities = [];
+    const baseline = await simulateFoodOptimizerRound(input, null, 1, undefined, 0);
+    const rejected = await simulateFoodOptimizerRound(input, buildFoodCandidate([]), 1, undefined, 0);
+    expect(baseline).toMatchObject({ stoppedEarly: false, simulatedTime: input.payload.simulationTimeLimit });
+    expect(baseline.deaths).toBeGreaterThan(1);
+    expect(rejected).toMatchObject({ stoppedEarly: true, deaths: 1, ranOutOfMana: false });
+    expect(rejected.simulatedTime).toBeLessThan(input.payload.simulationTimeLimit);
+  });
+
+  it('fully evaluates baseline even if it runs out of mana', async () => {
+    const simulate = vi.fn().mockResolvedValue(sample(2, true));
+    const result = await evaluateFoodOptimizerCandidate(request(), null, 0, () => {}, simulate);
+    expect(result.deaths).toBe(6);
+    expect(result.roundsCompleted).toBe(3);
+    expect(simulate.mock.calls.every((call) => call[4] === Infinity)).toBe(true);
+  });
+
+  it('rejects at the first mana-failing round', async () => {
+    const simulate = vi.fn().mockResolvedValueOnce(sample(0)).mockResolvedValueOnce(sample(0, true));
+    const result = await evaluateFoodOptimizerCandidate(request(), buildFoodCandidate([]), 100, () => {}, simulate);
+    expect(result).toMatchObject({ rejected: 'mana', feasible: false, roundsCompleted: 2 });
+    expect(simulate).toHaveBeenCalledTimes(2);
+  });
+
+  it('compares cumulative deaths to the entire baseline, not individual rounds', async () => {
+    const simulate = vi.fn().mockResolvedValue(sample(2));
+    const result = await evaluateFoodOptimizerCandidate(request(), buildFoodCandidate([]), 3, () => {}, simulate);
+    expect(result).toMatchObject({ rejected: 'deaths', feasible: false, deaths: 4, roundsCompleted: 2 });
+    simulate.mockClear();
+    const allowed = await evaluateFoodOptimizerCandidate(request(), buildFoodCandidate([]), 6, () => {}, simulate);
+    expect(allowed).toMatchObject({ feasible: true, roundsCompleted: 3, costPerHour: 10 });
+    expect(simulate.mock.calls.map((call) => call[4])).toEqual([6, 4, 2]);
+  });
+
+  it.each([
+    [90, 0, 0],
+    [120, 0, 0],
+    [60, 70, 1000000],
+  ])('classifies every valid candidate regardless of its cost (%s, %s, %s)', async (...costs) => {
+    const simulate = vi.fn();
+    for (const cost of costs) simulate.mockResolvedValueOnce(sample(0, false, cost));
+    const result = await evaluateFoodOptimizerCandidate(request(), buildFoodCandidate([]), 0, undefined, simulate);
+    expect(result).toMatchObject({ rejected: '', roundsCompleted: 3, feasible: true });
+    expect(result.costPerHour).toBe(costs.reduce((sum, value) => sum + value, 0) / 3);
+  });
+
+  it('finishes an expensive feasible round and can disable observation without changing combat', async () => {
+    const input = request();
+    input.payload.players[0].intelligenceLevel = 1;
+    input.payload.simulationTimeLimit = 600 * 1e9;
+    input.prices.priceTable['/items/star_fruit_yogurt'] = { ask: 100 };
+    const food = getFoodOptimizerItems({ ...getFoodOptimizerResources(input), thresholdStepPercent: 10 }).find(
+      (entry) => entry.hrid === '/items/star_fruit_yogurt',
+    );
+    const candidate = buildFoodCandidate([{ ...food, threshold: food.thresholds.at(-1) }]);
+    const observed = await simulateFoodOptimizerRound(input, candidate, 1);
+    const plain = await simulateFoodOptimizerRound(input, candidate, 1, undefined, Infinity, {
+      collectThresholds: false,
+    });
+    expect(observed).toMatchObject({
+      stoppedEarly: false,
+      ranOutOfMana: false,
+      simulatedTime: input.payload.simulationTimeLimit,
+    });
+    expect(observed.costPerHour).toBeGreaterThan(0);
+    expect(observed.equivalentThresholds).toHaveLength(1);
+    expect(observed.equivalentThresholds[0].max).toBeLessThan(Number.MAX_SAFE_INTEGER);
+    expect(observed.inactiveFoodThresholds.hp).toBeGreaterThanOrEqual(1);
+    expect(observed.inactiveFoodThresholds.mp).toBeGreaterThanOrEqual(1);
+    expect({ ...observed, equivalentThresholds: null, inactiveFoodThresholds: null }).toEqual(plain);
+  });
+
+  it('creates isolated combat objects from deeply frozen DTOs without copying or mutating the snapshot', async () => {
+    const input = request();
+    input.payload.players[0].equipment['/equipment_types/pouch'] = { hrid: '/items/large_pouch', enhancementLevel: 0 };
+    const original = structuredClone(input);
+    const freeze = (value) => {
+      if (!value || typeof value !== 'object' || Object.isFrozen(value)) return;
+      for (const child of Object.values(value)) freeze(child);
+      Object.freeze(value);
+    };
+    freeze(input);
+    const food = getFoodOptimizerItems({ ...getFoodOptimizerResources(input), thresholdStepPercent: 25 })[0];
+    const candidate = buildFoodDefaultCandidate([food]);
+    // 装配隔离断言改走生产装配器（buildFoodOptimizerPieces 经 wasm 轮调用）；
+    // 两次真实 wasm 轮后冻结载荷必须保持原样。
+    await simulateFoodOptimizerRound(input, candidate, 1);
+    await simulateFoodOptimizerRound(input, null, 2);
+    expect(input).toEqual(original);
+  });
+
+  it('includes every earlier round in a cumulative death-failure certificate', async () => {
+    const candidate = buildFoodCandidate([{ hrid: '/items/gummy', kind: 'mp', threshold: 50, restore: 40, price: 1 }]);
+    const range = (min, max) => [{ hrid: '/items/gummy', kind: 'mp', min, max }];
+    const simulate = vi
+      .fn()
+      .mockResolvedValueOnce({ ...sample(1), equivalentThresholds: range(30, 80) })
+      .mockResolvedValueOnce({ ...sample(1), equivalentThresholds: range(10, 90) });
+    const result = await evaluateFoodOptimizerCandidate(request(), candidate, 1, undefined, simulate);
+    expect(result).toMatchObject({ rejected: 'deaths', roundsCompleted: 2, equivalentThresholds: range(30, 80) });
+  });
+
+  it('uses the failing seed alone to certify mana rejection while retaining earlier successful rounds', async () => {
+    const input = request();
+    input.rounds = 2;
+    const makeCandidate = (threshold) =>
+      buildFoodCandidate([{ hrid: '/items/gummy', kind: 'mp', threshold, restore: 40, price: 1 }]);
+    const range = (min, max) => [{ hrid: '/items/gummy', kind: 'mp', min, max }];
+    const completed = (seed, min, max) => ({
+      ...sample(0),
+      seed,
+      stoppedEarly: false,
+      simulatedTime: input.payload.simulationTimeLimit,
+      equivalentThresholds: range(min, max),
+    });
+    const simulate = vi
+      .fn()
+      .mockResolvedValueOnce(completed(1, 30, 80))
+      .mockResolvedValueOnce({
+        ...completed(2, 1, 100),
+        ranOutOfMana: true,
+        stoppedEarly: true,
+        unusedFoodThresholds: { hp: 26, mp: 51 },
+      });
+    const roundCache = createFoodOptimizerRoundCache();
+    const result = await evaluateFoodOptimizerCandidate(input, makeCandidate(50), 0, undefined, simulate, {
+      roundCache,
+    });
+    expect(result).toMatchObject({
+      rejected: 'mana',
+      roundsCompleted: 2,
+      equivalentThresholds: range(1, 100),
+      unusedFoodThresholds: { hp: 26, mp: 51 },
+    });
+    expect(roundCache.match(1, makeCandidate(60))).toEqual(completed(1, 30, 80));
+    expect(roundCache.match(2, makeCandidate(60))).toBeNull();
+  });
+
+  it('checks the current death budget after reusing a complete round', async () => {
+    const input = request();
+    input.rounds = 1;
+    const candidate = buildFoodCandidate([{ hrid: '/items/gummy', kind: 'mp', threshold: 50, restore: 40, price: 1 }]);
+    const roundCache = createFoodOptimizerRoundCache();
+    const simulate = vi.fn().mockResolvedValue({
+      ...sample(2),
+      seed: 1,
+      stoppedEarly: false,
+      simulatedTime: input.payload.simulationTimeLimit,
+      equivalentThresholds: [{ hrid: '/items/gummy', kind: 'mp', min: 1, max: 100 }],
+    });
+    expect(
+      (await evaluateFoodOptimizerCandidate(input, candidate, 2, undefined, simulate, { roundCache })).feasible,
+    ).toBe(true);
+    const rejected = await evaluateFoodOptimizerCandidate(input, candidate, 1, undefined, simulate, { roundCache });
+    expect(rejected).toMatchObject({ feasible: false, rejected: 'deaths', simulatedRounds: 0, reusedRounds: 1 });
+  });
+});

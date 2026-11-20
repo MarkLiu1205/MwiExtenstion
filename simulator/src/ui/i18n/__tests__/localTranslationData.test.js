@@ -1,90 +1,184 @@
-import fs from "node:fs";
-import crypto from "node:crypto";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
-import { validateTranslationResources } from "../../../../scripts/official-translation-sync.mjs";
+import fs from 'node:fs';
+import crypto from 'node:crypto';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it } from 'vitest';
+import {
+  normalizeZhPunctuation,
+  validateTranslationResources,
+} from '../../../../scripts/official-translation-sync.mjs';
+import { itemDetailIndex } from '../../../shared/gameDataIndex.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const rootDir = path.resolve(__dirname, "../../../..");
-const enTranslationPath = path.resolve(rootDir, "locales/en/translation.official.generated.json");
-const zhTranslationPath = path.resolve(rootDir, "locales/zh/translation.official.generated.json");
-const sourceManifestPath = path.resolve(rootDir, "locales/official-translation-source.generated.json");
-const enCommonPath = path.resolve(__dirname, "../../../../locales/en/common.json");
-const zhCommonPath = path.resolve(__dirname, "../../../../locales/zh/common.json");
+const rootDir = path.resolve(__dirname, '../../../..');
+const enTranslationPath = path.resolve(rootDir, 'locales/en/translation.official.generated.json');
+const zhTranslationPath = path.resolve(rootDir, 'locales/zh/translation.official.generated.json');
+const sourceManifestPath = path.resolve(rootDir, 'locales/official-translation-source.generated.json');
+const enCommonPath = path.resolve(__dirname, '../../../../locales/en/common.json');
+const zhCommonPath = path.resolve(__dirname, '../../../../locales/zh/common.json');
 
 function readJson(filePath) {
-    return JSON.parse(fs.readFileSync(filePath, "utf8").replace(/^\uFEFF/, ""));
+  return JSON.parse(fs.readFileSync(filePath, 'utf8').replace(/^\uFEFF/, ''));
 }
 
 function sha256(value) {
-    return crypto.createHash("sha256").update(value, "utf8").digest("hex");
+  return crypto.createHash('sha256').update(value, 'utf8').digest('hex');
 }
 
-describe("official translation snapshots", () => {
-    it("keeps generated snapshots in locales and removes legacy dictionaries", () => {
-        expect(fs.existsSync(enTranslationPath)).toBe(true);
-        expect(fs.existsSync(zhTranslationPath)).toBe(true);
-        expect(fs.existsSync(path.resolve(rootDir, "locales/en/translation.json"))).toBe(false);
-        expect(fs.existsSync(path.resolve(rootDir, "locales/zh/translation.json"))).toBe(false);
+describe('official translation snapshots', () => {
+  it('keeps generated snapshots in locales and removes legacy dictionaries', () => {
+    expect(fs.existsSync(enTranslationPath)).toBe(true);
+    expect(fs.existsSync(zhTranslationPath)).toBe(true);
+    expect(fs.existsSync(path.resolve(rootDir, 'locales/en/translation.json'))).toBe(false);
+    expect(fs.existsSync(path.resolve(rootDir, 'locales/zh/translation.json'))).toBe(false);
+  });
+
+  it('contains complete official English ability dictionaries', () => {
+    const enTranslation = readJson(enTranslationPath);
+
+    expect(Object.keys(enTranslation.abilityNames).length).toBeGreaterThan(0);
+    expect(Object.keys(enTranslation.abilityDescriptions).sort()).toEqual(
+      Object.keys(enTranslation.abilityNames).sort(),
+    );
+  });
+
+  it('uses exact official item names without legacy refined aliases', () => {
+    const zhTranslation = readJson(zhTranslationPath);
+
+    expect(zhTranslation.itemNames).toMatchObject({
+      '/items/labyrinth_essence': '迷宫精华',
+      '/items/gatherer_cape': '采集者披风',
+      '/items/gatherer_cape_refined': '采集者披风 ★',
+      '/items/artificer_cape': '工匠披风',
+      '/items/artificer_cape_refined': '工匠披风 ★',
+      '/items/culinary_cape': '厨师披风',
+      '/items/culinary_cape_refined': '厨师披风 ★',
+      '/items/chance_cape': '机缘披风',
+      '/items/chance_cape_refined': '机缘披风 ★',
     });
+    expect(Object.values(zhTranslation.itemNames)).not.toContain('采集者斗篷');
+    expect(Object.values(zhTranslation.itemNames)).not.toContain('采集者斗篷（精）');
+  });
 
-    it("contains complete official English ability dictionaries", () => {
-        const enTranslation = readJson(enTranslationPath);
+  it('matches every tracked HRID and the recorded resource hashes', async () => {
+    const enContent = fs.readFileSync(enTranslationPath, 'utf8');
+    const zhContent = fs.readFileSync(zhTranslationPath, 'utf8');
+    const enTranslation = JSON.parse(enContent);
+    const zhTranslation = JSON.parse(zhContent);
+    const sourceManifest = readJson(sourceManifestPath);
 
-        expect(Object.keys(enTranslation.abilityNames).length).toBeGreaterThan(0);
-        expect(Object.keys(enTranslation.abilityDescriptions).sort()).toEqual(Object.keys(enTranslation.abilityNames).sort());
-    });
+    const validation = await validateTranslationResources({ en: enTranslation, zh: zhTranslation }, { rootDir });
 
-    it("uses exact official item names without legacy refined aliases", () => {
-        const zhTranslation = readJson(zhTranslationPath);
+    expect(validation.domainCount).toBe(sourceManifest.resources.en.topLevelKeyCount);
+    expect(Object.keys(zhTranslation)).toHaveLength(sourceManifest.resources.zh.topLevelKeyCount);
+    expect(sourceManifest.source.manifest.path).toBe('/asset-manifest.json');
+    expect(sourceManifest.source.manifest.sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(sourceManifest.resources.en.sha256).toBe(sha256(enContent));
+    expect(sourceManifest.resources.zh.sha256).toBe(sha256(zhContent));
+  });
 
-        expect(zhTranslation.itemNames).toMatchObject({
-            "/items/labyrinth_essence": "迷宮精華",
-            "/items/gatherer_cape": "採集者披風",
-            "/items/gatherer_cape_refined": "採集者披風 ★",
-            "/items/artificer_cape": "工匠披風",
-            "/items/artificer_cape_refined": "工匠披風 ★",
-            "/items/culinary_cape": "廚師披風",
-            "/items/culinary_cape_refined": "廚師披風 ★",
-            "/items/chance_cape": "機緣披風",
-            "/items/chance_cape_refined": "機緣披風 ★",
-        });
-        expect(Object.values(zhTranslation.itemNames)).not.toContain("採集者斗篷");
-        expect(Object.values(zhTranslation.itemNames)).not.toContain("採集者斗篷（精）");
-    });
+  it('keeps Chinese label colons full-width', () => {
+    const zhTranslation = readJson(zhTranslationPath);
+    const violations = [];
 
-    it("matches every tracked HRID and the recorded resource hashes", async () => {
-        const enContent = fs.readFileSync(enTranslationPath, "utf8");
-        const zhContent = fs.readFileSync(zhTranslationPath, "utf8");
-        const enTranslation = JSON.parse(enContent);
-        const zhTranslation = JSON.parse(zhContent);
-        const sourceManifest = readJson(sourceManifestPath);
+    function walk(value, location) {
+      if (typeof value === 'string') {
+        if (normalizeZhPunctuation(value) !== value) {
+          violations.push(`${location}: ${JSON.stringify(value.slice(0, 80))}`);
+        }
+        return;
+      }
+      if (Array.isArray(value)) {
+        value.forEach((entry, index) => walk(entry, `${location}[${index}]`));
+        return;
+      }
+      if (value && typeof value === 'object') {
+        for (const [key, entry] of Object.entries(value)) {
+          walk(entry, `${location}.${key}`);
+        }
+      }
+    }
 
-        const validation = await validateTranslationResources({ en: enTranslation, zh: zhTranslation }, { rootDir });
+    walk(zhTranslation, 'zh');
+    expect(violations).toEqual([]);
+  });
 
-        expect(validation.domainCount).toBe(sourceManifest.resources.en.topLevelKeyCount);
-        expect(Object.keys(zhTranslation)).toHaveLength(sourceManifest.resources.zh.topLevelKeyCount);
-        expect(sourceManifest.source.manifest.path).toBe("/asset-manifest.json");
-        expect(sourceManifest.source.manifest.sha256).toMatch(/^[a-f0-9]{64}$/);
-        expect(sourceManifest.resources.en.sha256).toBe(sha256(enContent));
-        expect(sourceManifest.resources.zh.sha256).toBe(sha256(zhContent));
-    });
+  it('includes feedback modal keys in both locale common bundles', () => {
+    const enCommon = readJson(enCommonPath);
+    const zhCommon = readJson(zhCommonPath);
 
-    it("includes feedback modal keys in both locale common bundles", () => {
-        const enCommon = readJson(enCommonPath);
-        const zhCommon = readJson(zhCommonPath);
+    expect(enCommon?.vue?.app?.feedback).toBeTypeOf('string');
+    expect(enCommon?.vue?.app?.feedbackHint).toBeTypeOf('string');
+    expect(enCommon?.vue?.app?.feedbackGitHubAriaLabel).toBeTypeOf('string');
+    expect(enCommon?.vue?.app?.feedbackQqLabel).toBeTypeOf('string');
+    expect(enCommon?.vue?.app?.feedbackEmailLabel).toBeTypeOf('string');
 
-        expect(enCommon?.vue?.app?.feedback).toBeTypeOf("string");
-        expect(enCommon?.vue?.app?.feedbackHint).toBeTypeOf("string");
-        expect(enCommon?.vue?.app?.feedbackGitHubAriaLabel).toBeTypeOf("string");
-        expect(enCommon?.vue?.app?.feedbackQqLabel).toBeTypeOf("string");
-        expect(enCommon?.vue?.app?.feedbackEmailLabel).toBeTypeOf("string");
+    expect(zhCommon?.vue?.app?.feedback).toBeTypeOf('string');
+    expect(zhCommon?.vue?.app?.feedbackHint).toBeTypeOf('string');
+    expect(zhCommon?.vue?.app?.feedbackGitHubAriaLabel).toBeTypeOf('string');
+    expect(zhCommon?.vue?.app?.feedbackQqLabel).toBeTypeOf('string');
+    expect(zhCommon?.vue?.app?.feedbackEmailLabel).toBeTypeOf('string');
+  });
 
-        expect(zhCommon?.vue?.app?.feedback).toBeTypeOf("string");
-        expect(zhCommon?.vue?.app?.feedbackHint).toBeTypeOf("string");
-        expect(zhCommon?.vue?.app?.feedbackGitHubAriaLabel).toBeTypeOf("string");
-        expect(zhCommon?.vue?.app?.feedbackQqLabel).toBeTypeOf("string");
-        expect(zhCommon?.vue?.app?.feedbackEmailLabel).toBeTypeOf("string");
-    });
+  it('includes application shell labels in both locale common bundles', () => {
+    const enCommon = readJson(enCommonPath);
+    const zhCommon = readJson(zhCommonPath);
+    const keys = [
+      'navSimulation',
+      'navTools',
+      'navSupport',
+      'moreActions',
+      'navigation',
+      'applicationNavigation',
+      'openNavigation',
+      'closeNavigation',
+      'expandNavigation',
+      'collapseNavigation',
+    ];
+
+    for (const key of keys) {
+      expect(enCommon?.vue?.app?.[key]).toBeTypeOf('string');
+      expect(zhCommon?.vue?.app?.[key]).toBeTypeOf('string');
+    }
+    expect(enCommon?.controls?.decrease).toBeTypeOf('string');
+    expect(enCommon?.controls?.increase).toBeTypeOf('string');
+    expect(zhCommon?.controls?.decrease).toBeTypeOf('string');
+    expect(zhCommon?.controls?.increase).toBeTypeOf('string');
+  });
+
+  it('includes search control labels in both locale common bundles', () => {
+    const enCommon = readJson(enCommonPath);
+    const zhCommon = readJson(zhCommonPath);
+    const keys = ['noResults', 'openOptions', 'refineSearchMoreResults'];
+
+    for (const key of keys) {
+      expect(enCommon?.vue?.common?.[key]).toBeTypeOf('string');
+      expect(zhCommon?.vue?.common?.[key]).toBeTypeOf('string');
+    }
+    expect(enCommon?.vue?.home?.searchTarget).toBeTypeOf('string');
+    expect(zhCommon?.vue?.home?.searchTarget).toBeTypeOf('string');
+  });
+
+  // 英文检索词与 en 会话显示名来自两条独立生成管线：itemDetailIndex 由
+  // scripts/build-game-data-index.mjs 从 src/combatsimulator/data 快照生成，
+  // en.itemNames 由 scripts/official-translation-sync.mjs 从官方站点语言包生成。
+  // 本用例锁定两者键集与逐项名称一致，防止单侧更新漏同步导致英文搜索命中与显示名漂移。
+  it('keeps the shared item index names aligned with the official English dictionary', () => {
+    const enTranslation = readJson(enTranslationPath);
+    const indexKeys = Object.keys(itemDetailIndex).sort();
+    const dictionaryKeys = Object.keys(enTranslation.itemNames).sort();
+
+    expect(dictionaryKeys).toEqual(indexKeys);
+
+    const mismatches = [];
+    for (const hrid of indexKeys) {
+      const indexedName = itemDetailIndex[hrid]?.name;
+      const dictionaryName = enTranslation.itemNames[hrid];
+      if (indexedName !== dictionaryName) {
+        mismatches.push(`${hrid}: index=${indexedName} en=${dictionaryName}`);
+      }
+    }
+
+    expect(mismatches).toEqual([]);
+  });
 });

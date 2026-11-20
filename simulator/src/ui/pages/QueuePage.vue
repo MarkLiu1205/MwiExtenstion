@@ -1,85 +1,225 @@
 <template>
   <section class="space-y-4">
-    <div class="panel space-y-4">
+    <div class="surface-panel space-y-4">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 class="font-heading text-lg font-semibold text-amber-200">{{ t("common:vue.queue.title", "Queue Runner") }}</h2>
-          <p class="text-sm text-slate-300">{{ t("common:vue.queue.activePlayer", "Active player", { name: simulator.activePlayer.name }) }}</p>
-          <p v-if="queuePartySummaryText" class="mt-1 text-xs text-slate-400">
-            {{ t("common:queue.partyLockedMembers", "Locked party") }}:
-            <span class="ml-1 text-slate-200">{{ queuePartySummaryText }}</span>
+          <h2 class="font-heading text-lg font-semibold text-primary">
+            {{ t('common:vue.queue.title', 'Queue Runner') }}
+          </h2>
+          <p class="text-sm text-foreground/85">
+            {{ t('common:vue.queue.activePlayer', 'Active player', { name: simulator.activePlayer.name }) }}
+          </p>
+          <p v-if="queuePartySummaryText" class="mt-1 text-xs text-muted-foreground">
+            {{ t('common:queue.partyLockedMembers', 'Locked party') }}:
+            <span class="ml-1 text-foreground">{{ queuePartySummaryText }}</span>
           </p>
         </div>
       </div>
 
       <div class="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-6">
-        <div class="rounded-xl border border-white/10 bg-slate-900/50 p-3 md:col-span-2 xl:col-span-3">
-          <p class="text-xs uppercase tracking-[0.14em] text-slate-400">{{ t("common:queue.baselineSummary", "Baseline Summary") }}</p>
-          <div v-if="baselineSummaryRows.length > 0" class="mt-2 space-y-1 text-sm text-slate-100">
+        <div class="rounded-md border border-border bg-muted/50 p-3 md:col-span-2 xl:col-span-3">
+          <p class="text-xs uppercase text-muted-foreground">
+            {{ t('common:queue.baselineSummary', 'Baseline Summary') }}
+          </p>
+          <div v-if="baselineSummaryRows.length > 0" class="mt-2 space-y-1 text-sm text-foreground">
             <p v-for="row in baselineSummaryRows" :key="row.key">
-              <span class="text-slate-400">{{ row.label }}:</span>
+              <span class="text-muted-foreground">{{ row.label }}:</span>
               <span class="ml-1">{{ row.value }}</span>
             </p>
           </div>
-          <p v-if="baselineSummaryRows.length > 0" class="mt-2 text-xs text-slate-400">
-            {{ t("common:queue.baselineSummaryAggregationHint", "Baseline values shown here come from multi-round robust aggregation: the simulator runs the configured baseline rounds and blends winsorized means with medians instead of showing a single sample.") }}
+          <p v-if="baselineSummaryRows.length > 0" class="mt-2 text-xs text-muted-foreground">
+            {{
+              t(
+                'common:queue.baselineSummaryAggregationHint',
+                'Baseline values shown here come from multi-round robust aggregation: the simulator runs the configured baseline rounds and blends winsorized means with medians instead of showing a single sample.',
+              )
+            }}
           </p>
-          <p v-else class="mt-1 text-sm text-slate-100">{{ t("common:queue.emptyBaseline", "No baseline yet. Click 'Set Baseline' to run and lock one.") }}</p>
-          <p v-if="baselineNeedsResetPrompt" class="mt-2 text-xs text-amber-300">
-            {{ t("common:queue.baselineNeedsResetAfterImport", "Queue changes were imported. Please click 'Set Baseline' again to refresh baseline metrics.") }}
+          <p v-else class="mt-1 text-sm text-foreground">
+            {{ t('common:queue.emptyBaseline', "No baseline yet. Click 'Set Baseline' to run and lock one.") }}
+          </p>
+          <p v-if="baselineNeedsResetPrompt" class="mt-2 text-xs text-primary">
+            {{
+              t(
+                'common:queue.baselineNeedsResetAfterImport',
+                "Queue changes were imported. Please click 'Set Baseline' again to refresh baseline metrics.",
+              )
+            }}
           </p>
         </div>
-        <div class="rounded-xl border border-white/10 bg-slate-900/50 p-3 xl:col-span-1">
-          <p class="text-xs uppercase tracking-[0.14em] text-slate-400">{{ t("common:queue.queueList", "Queue List") }}</p>
-          <p class="mt-2 text-2xl font-semibold text-slate-100">{{ queueState.items.length }}</p>
+        <div class="rounded-md border border-border bg-muted/50 p-3 xl:col-span-1">
+          <p class="text-xs uppercase text-muted-foreground">{{ t('common:queue.queueList', 'Queue List') }}</p>
+          <p class="mt-2 text-2xl font-semibold text-foreground">{{ queueState.items.length }}</p>
         </div>
-        <div class="rounded-xl border border-white/10 bg-slate-900/50 p-3 xl:col-span-1">
-          <p class="text-xs uppercase tracking-[0.14em] text-slate-400">{{ t("common:vue.queue.queueProgress", "Queue Progress") }}</p>
-          <p class="mt-2 text-2xl font-semibold text-slate-100">{{ Math.floor((queueState.progress || 0) * 100) }}%</p>
+        <div class="rounded-md border border-border bg-muted/50 p-3 xl:col-span-1">
+          <p class="text-xs uppercase text-muted-foreground">
+            {{ t('common:vue.queue.queueProgress', 'Queue Progress') }}
+          </p>
+          <p class="mt-2 text-2xl font-semibold text-foreground">{{ Math.floor((queueState.progress || 0) * 100) }}%</p>
         </div>
-        <div class="rounded-xl border border-white/10 bg-slate-900/50 p-3 xl:col-span-1">
-          <p class="text-xs uppercase tracking-[0.14em] text-slate-400">{{ t("common:vue.queue.lastRun", "Last Run") }}</p>
-          <p class="mt-2 text-sm text-slate-100">{{ lastRunText }}</p>
+        <div class="rounded-md border border-border bg-muted/50 p-3 xl:col-span-1">
+          <p class="text-xs uppercase text-muted-foreground">{{ t('common:vue.queue.lastRun', 'Last Run') }}</p>
+          <p class="mt-2 text-sm text-foreground">{{ lastRunText }}</p>
         </div>
       </div>
 
-      <p v-if="queueState.error" class="text-sm text-rose-300">{{ t(queueState.error, queueState.error) }}</p>
-      <p v-if="queuePartyWarningText" class="text-sm text-amber-300">{{ queuePartyWarningText }}</p>
+      <p v-if="queueState.error" class="text-sm text-destructive">{{ t(queueState.error, queueState.error) }}</p>
+      <p
+        v-if="removeStatus.text"
+        :class="['text-sm', removeStatus.tone === 'danger' ? 'text-destructive' : 'text-success']"
+      >
+        {{ removeStatus.text }}
+      </p>
+      <p v-if="queuePartyWarningText" class="text-sm text-primary">{{ queuePartyWarningText }}</p>
     </div>
 
-    <div class="panel" v-if="queueState.baseline">
+    <div class="surface-panel" v-if="queueState.baseline">
       <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h3 class="font-heading text-base font-semibold text-amber-200">{{ t("common:queue.queueList", "Queue List") }}</h3>
+        <h3 class="font-heading text-base font-semibold text-primary">
+          {{ t('common:queue.queueList', 'Queue List') }}
+        </h3>
       </div>
 
-      <div v-if="queueDisplayItems.length === 0" class="rounded-xl border border-white/10 bg-slate-900/40 px-3 py-4 text-sm text-slate-400">
-        {{ t("common:queue.emptyQueue", "No queue items. Change build settings and add to queue.") }}
+      <div
+        v-if="queueDisplayItems.length === 0"
+        class="rounded-md border border-border bg-muted/50 px-3 py-4 text-sm text-muted-foreground"
+      >
+        {{ t('common:queue.emptyQueue', 'No queue items. Change build settings and add to queue.') }}
       </div>
 
       <div v-else class="space-y-3">
         <article
           v-for="item in queueDisplayItems"
           :key="item.id"
-          class="rounded-xl border border-white/10 bg-slate-900/40 p-3"
+          class="rounded-md border border-border bg-muted/50 p-3"
         >
-          <div class="flex flex-wrap items-start gap-2">
-            <div>
-              <h4 class="font-heading text-base font-semibold text-slate-100">{{ item.displayName }}</h4>
-              <p class="mt-1 text-xs text-slate-400">{{ t("common:vue.queue.changeCount", "Changes", { count: item.detailLines.length }) }}</p>
+          <div class="flex flex-wrap items-start justify-between gap-2">
+            <div class="min-w-0">
+              <h4 class="font-heading text-base font-semibold text-foreground">{{ item.displayName }}</h4>
+              <p class="mt-1 text-xs text-muted-foreground">
+                {{ t('common:vue.queue.changeCount', 'Changes', { count: item.detailLines.length }) }}
+              </p>
             </div>
+            <button
+              type="button"
+              class="button-danger"
+              :disabled="queueState.isRunning"
+              :aria-label="t('common:queue.removeItemAria', 'Remove {{name}} from queue', { name: item.displayName })"
+              @click="removeQueueItem(item.id)"
+            >
+              {{ t('common:queue.removeItem', 'Remove from Queue') }}
+            </button>
           </div>
+
+          <p v-for="warning in item.costWarnings" :key="warning.key" class="mt-2 text-xs text-warning">
+            {{ warning.text }}
+          </p>
 
           <div v-if="item.categoryBadges.length > 0" class="mt-2 flex flex-wrap gap-2">
             <span
               v-for="badge in item.categoryBadges"
               :key="badge"
-              class="rounded-full border border-white/20 bg-white/5 px-3 py-1 text-xs text-slate-200"
+              class="rounded-md border border-border bg-muted/40 px-3 py-1 text-xs text-foreground"
             >
               {{ badge }}
             </span>
           </div>
 
-          <div class="mt-3 space-y-1 text-sm text-slate-300">
+          <div v-if="item.priceSelectionLines.length > 0" class="mt-3 space-y-2">
+            <div
+              v-for="(row, index) in item.priceSelectionLines"
+              :key="`${item.id}-price-${index}`"
+              class="rounded-md border border-border/60 bg-background/40 px-3 py-2"
+            >
+              <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+                <span class="font-semibold text-foreground">{{ row.itemName }}</span>
+                <span class="text-muted-foreground">+{{ row.level }}</span>
+                <span class="rounded bg-muted px-1.5 py-0.5 text-xs font-medium text-foreground/80">{{
+                  row.methodLabel
+                }}</span>
+              </div>
+              <template v-if="row.kind === 'mirror'">
+                <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-foreground/80">
+                  <span>
+                    {{ t('common:queue.mirrorCountLabel', 'Mirrors') }}
+                    <span class="text-muted-foreground">×{{ row.mirrorCount }}</span>
+                  </span>
+                  <span>
+                    {{ t('common:queue.mirrorPriceLabel', 'Mirror price') }}
+                    <span class="font-medium text-foreground">{{ row.mirrorPrice }}</span>
+                  </span>
+                </div>
+                <div class="mt-1.5 space-y-1 text-xs">
+                  <p class="text-muted-foreground">{{ t('common:queue.mirrorInputsLabel', 'Inputs') }}:</p>
+                  <ul class="space-y-0.5 pl-3">
+                    <li
+                      v-for="(input, iIdx) in row.inputs"
+                      :key="`input-${index}-${iIdx}`"
+                      class="flex items-center gap-1.5"
+                    >
+                      <span v-if="input.itemName" class="text-muted-foreground">{{ input.itemName }}</span>
+                      <span
+                        v-if="input.baselinePiece"
+                        class="rounded bg-primary/15 px-1 py-0.5 text-[10px] font-medium text-primary"
+                        :title="
+                          input.baselinePieceMissingPrice
+                            ? t(
+                                'common:queue.mirrorBaselinePieceNoPriceHint',
+                                'The baseline piece has no market price; the total falls back to cash cost (excluded).',
+                              )
+                            : t(
+                                'common:queue.priceSelectionBaselinePieceHint',
+                                'The baseline piece consumed by the mirror synthesis; valued at its sale value and included in the total.',
+                              )
+                        "
+                        >{{ t('common:queue.priceSelectionBaselinePieceTag', 'Baseline piece') }}</span
+                      >
+                      <span class="text-foreground/80">+{{ input.level }}</span>
+                      <span class="text-muted-foreground">×</span>
+                      <span class="text-foreground/80">{{ input.count }}</span>
+                      <span class="text-muted-foreground">·</span>
+                      <span
+                        v-if="input.baselinePieceMissingPrice"
+                        class="font-medium text-warning"
+                        :title="
+                          t(
+                            'common:queue.mirrorBaselinePieceNoPriceHint',
+                            'The baseline piece has no market price; the total falls back to cash cost (excluded).',
+                          )
+                        "
+                        >{{
+                          t('common:queue.priceSelectionBaselinePieceNoPrice', 'No market price; excluded from total')
+                        }}</span
+                      >
+                      <span v-else class="font-medium text-foreground">{{ input.price }}</span>
+                      <span
+                        v-if="input.manual"
+                        class="rounded bg-warning/15 px-1 py-0.5 text-[10px] font-medium text-warning"
+                        >{{ t('common:queue.priceSelectionManualInputTag', 'manual') }}</span
+                      >
+                    </li>
+                  </ul>
+                </div>
+                <div
+                  class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/40 pt-1.5 text-xs"
+                >
+                  <span class="text-muted-foreground">
+                    {{ t('common:queue.mirrorTotalLabel', 'Total') }}
+                    <span class="ml-1 text-sm font-semibold text-foreground">{{ row.total }}</span>
+                  </span>
+                  <span v-if="row.baselineUsedText" class="text-primary">{{ row.baselineUsedText }}</span>
+                </div>
+              </template>
+              <template v-else>
+                <div class="mt-1 text-sm">
+                  <span class="text-muted-foreground">{{ t('common:queue.confirmPriceValue', 'Price') }}:</span>
+                  <span class="ml-1 font-semibold text-foreground">{{ row.price }}</span>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <div class="mt-3 space-y-1 text-sm text-foreground/85">
             <p v-for="(line, index) in item.detailLines" :key="`${item.id}-${index}`">{{ line }}</p>
           </div>
         </article>
@@ -89,26 +229,28 @@
 </template>
 
 <script setup>
-import { computed } from "vue";
+import { computed, ref } from 'vue';
 import {
   abilityDetailIndex as abilityDetailMap,
   houseRoomDetailIndex as houseRoomDetailMap,
   itemDetailIndex as itemDetailMap,
-} from "../../shared/gameDataIndex.js";
-import { EQUIPMENT_SLOT_KEYS, LEVEL_KEYS } from "../../shared/playerConfig.js";
-import { buildTriggerChangeDescriptor, getComparableTriggerTargetHrids } from "../../services/triggerMapper.js";
-import { useSimulatorStore } from "../../stores/simulatorStore.js";
-import { useGameDataText } from "../composables/useGameDataText.js";
-import { useI18nText } from "../composables/useI18nText.js";
+} from '../../shared/gameDataIndex.js';
+import { EQUIPMENT_SLOT_KEYS, LEVEL_KEYS } from '../../shared/playerConfig.js';
+import { buildTriggerChangeDescriptor, getComparableTriggerTargetHrids } from '../../services/triggerMapper.js';
+import { useSimulatorStore } from '../../stores/simulatorStore.js';
+import { formatCompactAmountForLocale } from '../../services/amountFormatting.js';
+import { useGameDataText } from '../composables/useGameDataText.js';
+import { useI18nText } from '../composables/useI18nText.js';
 import {
   buildTriggerChangeLabel,
   formatQueueTriggerDetailLine,
   formatQueueTriggerLabel,
   formatQueueTriggerStateText,
-} from "../queueTriggerPresentation.js";
+} from '../queueTriggerPresentation.js';
+import { buildChangedEquipmentKeys, buildSelectionKey } from '../queuePriceSelection.js';
 
 const simulator = useSimulatorStore();
-const { t } = useI18nText();
+const { t, language } = useI18nText();
 const {
   getAbilityName,
   getActionName,
@@ -119,7 +261,7 @@ const {
   getSkillName,
 } = useGameDataText();
 const ONE_HOUR = 60 * 60 * 1e9;
-const ABILITY_BOOK_CATEGORY_HRID = "/item_categories/ability_book";
+const ABILITY_BOOK_CATEGORY_HRID = '/item_categories/ability_book';
 const CHANGE_CATEGORY_PRIORITY = {
   item: 0,
   house_room: 1,
@@ -131,17 +273,23 @@ const CHANGE_CATEGORY_PRIORITY = {
 };
 
 const queueState = computed(() => simulator.activeQueueState);
-const queuePartyStatus = computed(() => simulator.activeQueuePartyStatus || { hasMismatch: false, messageKey: "", memberNames: [] });
-const queuePartySummaryText = computed(() => (
+const removeStatus = ref({ tone: '', text: '' });
+const queuePartyStatus = computed(
+  () => simulator.activeQueuePartyStatus || { hasMismatch: false, messageKey: '', memberNames: [] },
+);
+const queuePartySummaryText = computed(() =>
   Array.isArray(queuePartyStatus.value?.memberNames) && queuePartyStatus.value.memberNames.length > 0
-    ? queuePartyStatus.value.memberNames.join(" / ")
-    : ""
-));
-const queuePartyWarningText = computed(() => (
+    ? queuePartyStatus.value.memberNames.join(' / ')
+    : '',
+);
+const queuePartyWarningText = computed(() =>
   queuePartyStatus.value?.hasMismatch
-    ? t(queuePartyStatus.value?.messageKey || "common:queue.partyChangedSinceBaseline", queuePartyStatus.value?.messageKey || "common:queue.partyChangedSinceBaseline")
-    : ""
-));
+    ? t(
+        queuePartyStatus.value?.messageKey || 'common:queue.partyChangedSinceBaseline',
+        queuePartyStatus.value?.messageKey || 'common:queue.partyChangedSinceBaseline',
+      )
+    : '',
+);
 const baselineNeedsResetPrompt = computed(() => {
   const baseline = queueState.value?.baseline;
   if (!baseline) {
@@ -156,7 +304,7 @@ const abilityBookInfoByAbilityHrid = (() => {
     if (item?.categoryHrid !== ABILITY_BOOK_CATEGORY_HRID) {
       continue;
     }
-    const abilityHrid = String(item?.abilityBookDetail?.abilityHrid || "");
+    const abilityHrid = String(item?.abilityBookDetail?.abilityHrid || '');
     if (!abilityHrid) {
       continue;
     }
@@ -166,7 +314,7 @@ const abilityBookInfoByAbilityHrid = (() => {
     }
     if (!result[abilityHrid] || xpPerBook > result[abilityHrid].xpPerBook) {
       result[abilityHrid] = {
-        itemHrid: String(item?.hrid || ""),
+        itemHrid: String(item?.hrid || ''),
         xpPerBook,
       };
     }
@@ -176,16 +324,13 @@ const abilityBookInfoByAbilityHrid = (() => {
 
 const actionNameFallbackMap = computed(() => {
   const map = {};
-  const actionOptions = [
-    ...(simulator.options?.zones || []),
-    ...(simulator.options?.dungeons || []),
-  ];
+  const actionOptions = [...(simulator.options?.zones || []), ...(simulator.options?.dungeons || [])];
   for (const option of actionOptions) {
-    const hrid = String(option?.hrid || "");
+    const hrid = String(option?.hrid || '');
     if (!hrid || Object.prototype.hasOwnProperty.call(map, hrid)) {
       continue;
     }
-    map[hrid] = String(option?.name || "");
+    map[hrid] = String(option?.name || '');
   }
   return map;
 });
@@ -199,48 +344,48 @@ const baselineSummaryRows = computed(() => {
   const metrics = baseline.metrics || {};
   return [
     {
-      key: "zone",
-      label: t("common:queue.settingZone", "Zone"),
+      key: 'zone',
+      label: t('common:queue.settingZone', 'Zone'),
       value: resolveBaselineZoneName(baseline),
     },
     {
-      key: "difficulty",
-      label: t("common:queue.settingDifficulty", "Difficulty"),
+      key: 'difficulty',
+      label: t('common:queue.settingDifficulty', 'Difficulty'),
       value: resolveBaselineDifficultyText(baseline),
     },
     {
-      key: "duration",
-      label: t("common:queue.settingDuration", "Duration"),
+      key: 'duration',
+      label: t('common:queue.settingDuration', 'Duration'),
       value: resolveBaselineDurationText(baseline),
     },
     {
-      key: "baselineRounds",
-      label: t("common:queue.baselineRoundCount", "Baseline Rounds"),
+      key: 'rounds',
+      label: t('common:queue.roundCount', 'Rounds'),
       value: resolveBaselineConfiguredRoundsText(baseline),
     },
     {
-      key: "baselineCompletedRounds",
-      label: t("common:queue.baselineCompletedSamples", "Completed Samples"),
+      key: 'baselineCompletedRounds',
+      label: t('common:queue.baselineCompletedSamples', 'Completed Samples'),
       value: resolveBaselineCompletedRoundsText(baseline),
     },
     {
-      key: "dps",
-      label: t("common:queue.metricDps", "DPS"),
+      key: 'dps',
+      label: t('common:queue.metricDps', 'DPS'),
       value: formatMetricValue(metrics?.dps, 2),
     },
     {
-      key: "dailyNoRngProfit",
-      label: t("common:queue.dailyNoRngProfit", "Daily No RNG Profit"),
-      value: formatQueueMetricValue("dailyNoRngProfit", metrics?.dailyNoRngProfit, 2),
+      key: 'dailyNoRngProfit',
+      label: t('common:queue.dailyNoRngProfit', 'Daily No RNG Profit'),
+      value: formatQueueMetricValue('dailyNoRngProfit', metrics?.dailyNoRngProfit, 2),
     },
     {
-      key: "xpPerHour",
-      label: t("common:simulationResults.xpPerHour", "XP per hour"),
-      value: formatQueueMetricValue("xpPerHour", metrics?.xpPerHour, 0),
+      key: 'xpPerHour',
+      label: t('common:simulationResults.xpPerHour', 'XP per hour'),
+      value: formatQueueMetricValue('xpPerHour', metrics?.xpPerHour, 0),
     },
     {
-      key: "killsPerHour",
-      label: t("common:simulationResults.killPerHour", "Kills per hour"),
+      key: 'killsPerHour',
+      label: t('common:simulationResults.killPerHour', 'Kills per hour'),
       value: formatMetricValue(metrics?.killsPerHour, 1),
     },
   ];
@@ -255,32 +400,221 @@ const queueDisplayItems = computed(() => {
 
   return queueItems.map((item, index) => {
     const changes = buildQueueChangesFromSnapshots(baselineSnapshot, item?.snapshot);
-    const fallbackName = item?.name || `${t("common:queue.queueItem", "Queue Item")} ${index + 1}`;
+    const fallbackName = item?.name || `${t('common:queue.queueItem', 'Queue Item')} ${index + 1}`;
     const displayName = deriveQueueItemDisplayNameFromChanges(changes, index + 1, fallbackName);
     const categoryBadges = Array.from(new Set(changes.map((change) => localizeQueueCategory(change.category))));
-    const detailLines = changes.length > 0
-      ? changes.map((change) => formatQueueChangeDetailLine(change))
-      : (Array.isArray(item?.changes) ? item.changes.map((line) => String(line || "")) : []);
+    const detailLines =
+      changes.length > 0
+        ? changes.map((change) => formatQueueChangeDetailLine(change))
+        : Array.isArray(item?.changes)
+          ? item.changes.map((line) => String(line || ''))
+          : [];
 
     return {
       id: item.id,
       displayName,
       categoryBadges,
       detailLines,
+      priceSelectionLines: buildPriceSelectionLines(item, baselineSnapshot),
+      costWarnings: (Array.isArray(item?.costWarnings) ? item.costWarnings : []).map((warning, warningIndex) => ({
+        key: [warning?.code || 'warning', warning?.slotKey || 'slot', warningIndex].join('-'),
+        text:
+          warning?.code === 'historical_ask'
+            ? t(
+                'common:queue.confirmedHistoricalAskWarning',
+                '{{slot}}: {{item}} +{{level}} uses historical Ask {{price}} (volume {{volume}}, data {{time}}). Check the data time before relying on this price.',
+                {
+                  slot: localizeEquipmentSlotLabel(warning?.slotKey),
+                  item: localizeHridDisplayName(warning?.itemHrid),
+                  level: Number(warning?.enhancementLevel || 0),
+                  price: formatConfirmedMarketPrice(warning?.price),
+                  volume: formatMarketVolume(warning?.volume),
+                  time: formatMarketDataTime(warning?.marketTimestamp),
+                },
+              )
+            : warning?.code === 'confirmed_hourly_average'
+              ? t(
+                  'common:queue.confirmedHourlyAverageWarning',
+                  '{{slot}}: {{item}} +{{level}} uses confirmed hourly average {{price}} (volume {{volume}}, data {{time}}).',
+                  {
+                    slot: localizeEquipmentSlotLabel(warning?.slotKey),
+                    item: localizeHridDisplayName(warning?.itemHrid),
+                    level: Number(warning?.enhancementLevel || 0),
+                    price: formatConfirmedMarketPrice(warning?.price),
+                    volume: formatMarketVolume(warning?.volume),
+                    time: formatMarketDataTime(warning?.marketTimestamp),
+                  },
+                )
+              : warning?.code === 'manual_price'
+                ? t(
+                    'common:queue.manualPriceWarning',
+                    '{{slot}}: {{item}} +{{level}} uses a manually entered price {{price}}. This value was not verified against market data. Double-check the digits before relying on it.',
+                    {
+                      slot: localizeEquipmentSlotLabel(warning?.slotKey),
+                      item: localizeHridDisplayName(warning?.itemHrid),
+                      level: Number(warning?.enhancementLevel || 0),
+                      price: formatConfirmedMarketPrice(warning?.price),
+                    },
+                  )
+                : t(
+                    'common:queue.baselineSaleZeroWarning',
+                    '{{slot}}: {{item}} +{{level}} has no exact buy or sell quote. Its sale value is treated as 0.',
+                    {
+                      slot: localizeEquipmentSlotLabel(warning?.slotKey),
+                      item: localizeHridDisplayName(warning?.itemHrid),
+                      level: Number(warning?.enhancementLevel || 0),
+                    },
+                  ),
+      })),
     };
   });
 });
 
+function formatMarketNumber(value) {
+  return new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(Number(value || 0));
+}
+
+function formatConfirmedMarketPrice(value) {
+  return formatCompactAmountForLocale(value, language.value === 'zh' ? 'zh-CN' : 'en-US');
+}
+
+function buildPriceSelectionLines(item, baselineSnapshot) {
+  const selections = Array.isArray(item?.priceSelections) ? item.priceSelections : [];
+  if (selections.length === 0) {
+    return [];
+  }
+  const changedKeys = buildChangedEquipmentKeys(item, baselineSnapshot);
+  const rows = [];
+  for (const selection of selections) {
+    const selectionKey = buildSelectionKey(selection.itemHrid, selection.enhancementLevel);
+    if (changedKeys.size > 0 && !changedKeys.has(selectionKey)) {
+      continue;
+    }
+    const itemName = localizeHridDisplayName(selection.itemHrid);
+    const level = Number(selection.enhancementLevel || 0);
+    const method = String(selection.method || 'left1');
+
+    if (method === 'mirror') {
+      const mirrorCount = Number(selection.mirrorCount || 0);
+      const mirrorPrice = Number(selection.mirrorPrice || 0);
+      const inputs = (Array.isArray(selection.inputs) ? selection.inputs : []).map((input) => {
+        // 价格域感知：精炼目标的低档输入件(+N-2)来自基础物品域，与行物品不同款时显示物品名，
+        // 避免把基础物品 +13 误读为行（精炼）物品 +13。旧持久化数据无 itemHrid，回退为行物品。
+        const inputItemHrid = String(input.itemHrid || selection.itemHrid || '');
+        return {
+          itemName:
+            inputItemHrid && inputItemHrid !== String(selection.itemHrid || '')
+              ? localizeHridDisplayName(inputItemHrid)
+              : '',
+          level: Number(input.level || 0),
+          count: Math.max(1, Number(input.count || 1)),
+          price: formatConfirmedMarketPrice(input.price),
+          manual: String(input.source || '') === 'manual',
+        };
+      });
+      const usedBaselineLevels = Array.isArray(selection.usedBaselineLevels) ? selection.usedBaselineLevels : [];
+      // 基准件行（仅有快照字段的新数据）：合计（selection.price）为总成本口径
+      //（现金合成成本 + 基准件出售价值），把基准件列为首行使明细与合计对账一致；
+      // 无市场价时标"未计入"（合计回落现金口径）。旧持久化数据无该字段——price 仍是
+      // 现金口径，不显示基准件行，此时明细=合计=现金口径，自洽不误导。
+      const rawBaselinePieceSaleValue = Number(selection.baselinePieceSaleValue);
+      if (
+        usedBaselineLevels.length > 0 &&
+        selection.baselinePieceSaleValue != null &&
+        Number.isFinite(rawBaselinePieceSaleValue)
+      ) {
+        inputs.unshift({
+          baselinePiece: true,
+          itemName: '',
+          level: Math.max(0, Math.floor(Number(usedBaselineLevels[0] || 0))),
+          count: 1,
+          price: rawBaselinePieceSaleValue > 0 ? formatConfirmedMarketPrice(rawBaselinePieceSaleValue) : '',
+          manual: false,
+          baselinePieceMissingPrice: !(rawBaselinePieceSaleValue > 0),
+        });
+      }
+      const baselineUsedText =
+        usedBaselineLevels.length > 0
+          ? t('common:queue.priceSelectionBaselineUsed', 'baseline +{{level}} used', {
+              level: usedBaselineLevels.join(', +'),
+            })
+          : '';
+      rows.push({
+        kind: 'mirror',
+        itemName,
+        level,
+        methodLabel: t('common:queue.priceMethodMirror', 'Mirror'),
+        mirrorCount,
+        mirrorPrice: formatConfirmedMarketPrice(mirrorPrice),
+        inputs,
+        total: formatConfirmedMarketPrice(selection.price),
+        baselineUsedText,
+      });
+      continue;
+    }
+
+    if (method === 'manual') {
+      rows.push({
+        kind: 'manual',
+        itemName,
+        level,
+        methodLabel: t('common:queue.priceMethodManual', 'Manual'),
+        price: formatConfirmedMarketPrice(selection.price),
+      });
+      continue;
+    }
+
+    rows.push({
+      kind: 'reference',
+      itemName,
+      level,
+      methodLabel:
+        method === 'right1'
+          ? t('common:queue.priceMethodRight1', 'Right 1')
+          : t('common:queue.priceMethodLeft1', 'Left 1'),
+      price: formatConfirmedMarketPrice(selection.price),
+    });
+  }
+  return rows;
+}
+
+function formatMarketVolume(value) {
+  const volume = Number(value || 0);
+  return volume > 0 ? formatMarketNumber(volume) : t('common:queue.confirmPriceVolumeUnknown', 'Unknown');
+}
+
+function formatMarketDataTime(timestampSeconds) {
+  const timestamp = Number(timestampSeconds || 0);
+  return timestamp > 0
+    ? new Date(timestamp * 1000).toLocaleString()
+    : t('common:queue.confirmPriceTimeUnknown', 'Unknown');
+}
+
+async function removeQueueItem(itemId) {
+  const removed = await simulator.removeQueueItem(itemId);
+  removeStatus.value = removed
+    ? { tone: 'success', text: t('common:queue.removeItemSuccess', 'Queue item removed.') }
+    : {
+        tone: 'danger',
+        text: t(
+          'common:queue.removeItemFailed',
+          'Unable to remove this queue item while the queue is running or the item no longer exists.',
+        ),
+      };
+}
+
 const lastRunText = computed(() => {
-  if (queueState.value.lastRunStatus === "cancelled") {
+  if (queueState.value.lastRunStatus === 'cancelled') {
     const partialCount = Array.isArray(queueState.value.ranking) ? queueState.value.ranking.length : 0;
     if (partialCount > 0) {
-      return t("common:vue.queue.lastRunCancelledPartial", "Stopped with {{count}} partial result(s)", { count: partialCount });
+      return t('common:vue.queue.lastRunCancelledPartial', 'Stopped with {{count}} partial result(s)', {
+        count: partialCount,
+      });
     }
-    return t("common:vue.queue.lastRunCancelled", "Stopped");
+    return t('common:vue.queue.lastRunCancelled', 'Stopped');
   }
   if (!queueState.value.lastRunAt) {
-    return t("common:vue.queue.never", "Never");
+    return t('common:vue.queue.never', 'Never');
   }
   return new Date(queueState.value.lastRunAt).toLocaleString();
 });
@@ -295,7 +629,7 @@ function buildQueueChangesFromSnapshots(baselineSnapshot, targetSnapshot) {
     const afterLevel = Number(target?.levels?.[key] ?? 1);
     if (beforeLevel !== afterLevel) {
       changes.push({
-        category: "profession",
+        category: 'profession',
         label: key,
         before: { level: beforeLevel },
         after: { level: afterLevel },
@@ -304,15 +638,15 @@ function buildQueueChangesFromSnapshots(baselineSnapshot, targetSnapshot) {
   }
 
   for (const slot of EQUIPMENT_SLOT_KEYS) {
-    const beforeEquipment = baseline?.equipment?.[slot] ?? { itemHrid: "", enhancementLevel: 0 };
-    const afterEquipment = target?.equipment?.[slot] ?? { itemHrid: "", enhancementLevel: 0 };
-    const beforeItemHrid = String(beforeEquipment?.itemHrid || "");
-    const afterItemHrid = String(afterEquipment?.itemHrid || "");
+    const beforeEquipment = baseline?.equipment?.[slot] ?? { itemHrid: '', enhancementLevel: 0 };
+    const afterEquipment = target?.equipment?.[slot] ?? { itemHrid: '', enhancementLevel: 0 };
+    const beforeItemHrid = String(beforeEquipment?.itemHrid || '');
+    const afterItemHrid = String(afterEquipment?.itemHrid || '');
     const beforeEnhancement = Math.max(0, Math.floor(Number(beforeEquipment?.enhancementLevel || 0)));
     const afterEnhancement = Math.max(0, Math.floor(Number(afterEquipment?.enhancementLevel || 0)));
     if (beforeItemHrid !== afterItemHrid || beforeEnhancement !== afterEnhancement) {
       changes.push({
-        category: "item",
+        category: 'item',
         label: slot,
         before: {
           itemHrid: beforeItemHrid,
@@ -327,22 +661,22 @@ function buildQueueChangesFromSnapshots(baselineSnapshot, targetSnapshot) {
   }
 
   for (let i = 0; i < 3; i += 1) {
-    const beforeFood = String(baseline?.food?.[i] || "");
-    const afterFood = String(target?.food?.[i] || "");
+    const beforeFood = String(baseline?.food?.[i] || '');
+    const afterFood = String(target?.food?.[i] || '');
     if (beforeFood !== afterFood) {
       changes.push({
-        category: "food",
+        category: 'food',
         label: `food${i + 1}`,
         before: { itemHrid: beforeFood },
         after: { itemHrid: afterFood },
       });
     }
 
-    const beforeDrink = String(baseline?.drinks?.[i] || "");
-    const afterDrink = String(target?.drinks?.[i] || "");
+    const beforeDrink = String(baseline?.drinks?.[i] || '');
+    const afterDrink = String(target?.drinks?.[i] || '');
     if (beforeDrink !== afterDrink) {
       changes.push({
-        category: "drink",
+        category: 'drink',
         label: `drink${i + 1}`,
         before: { itemHrid: beforeDrink },
         after: { itemHrid: afterDrink },
@@ -351,15 +685,15 @@ function buildQueueChangesFromSnapshots(baselineSnapshot, targetSnapshot) {
   }
 
   for (let i = 0; i < 5; i += 1) {
-    const beforeAbility = baseline?.abilities?.[i] ?? { abilityHrid: "", level: 1 };
-    const afterAbility = target?.abilities?.[i] ?? { abilityHrid: "", level: 1 };
-    const beforeHrid = String(beforeAbility?.abilityHrid || "");
-    const afterHrid = String(afterAbility?.abilityHrid || "");
+    const beforeAbility = baseline?.abilities?.[i] ?? { abilityHrid: '', level: 1 };
+    const afterAbility = target?.abilities?.[i] ?? { abilityHrid: '', level: 1 };
+    const beforeHrid = String(beforeAbility?.abilityHrid || '');
+    const afterHrid = String(afterAbility?.abilityHrid || '');
     const beforeLevel = Math.max(1, Math.floor(Number(beforeAbility?.level || 1)));
     const afterLevel = Math.max(1, Math.floor(Number(afterAbility?.level || 1)));
     if (beforeHrid !== afterHrid || beforeLevel !== afterLevel) {
       changes.push({
-        category: "skill",
+        category: 'skill',
         label: `ability${i + 1}`,
         before: {
           abilityHrid: beforeHrid,
@@ -374,22 +708,18 @@ function buildQueueChangesFromSnapshots(baselineSnapshot, targetSnapshot) {
   }
 
   for (const targetHrid of getComparableTriggerTargetHrids(baseline, target)) {
-    const normalizedTargetHrid = String(targetHrid || "");
+    const normalizedTargetHrid = String(targetHrid || '');
     if (!normalizedTargetHrid) {
       continue;
     }
 
-    const triggerChange = buildTriggerChangeDescriptor(
-      baseline?.triggerMap,
-      target?.triggerMap,
-      normalizedTargetHrid,
-    );
+    const triggerChange = buildTriggerChangeDescriptor(baseline?.triggerMap, target?.triggerMap, normalizedTargetHrid);
     if (!triggerChange) {
       continue;
     }
 
     changes.push({
-      category: "trigger",
+      category: 'trigger',
       label: buildTriggerChangeLabel(normalizedTargetHrid),
       before: {
         state: triggerChange.beforeState,
@@ -403,7 +733,7 @@ function buildQueueChangesFromSnapshots(baselineSnapshot, targetSnapshot) {
   }
 
   for (const room of Object.values(houseRoomDetailMap || {})) {
-    const roomHrid = String(room?.hrid || "");
+    const roomHrid = String(room?.hrid || '');
     if (!roomHrid) {
       continue;
     }
@@ -411,7 +741,7 @@ function buildQueueChangesFromSnapshots(baselineSnapshot, targetSnapshot) {
     const afterLevel = Math.max(0, Math.floor(Number(target?.houseRooms?.[roomHrid] ?? 0)));
     if (beforeLevel !== afterLevel) {
       changes.push({
-        category: "house_room",
+        category: 'house_room',
         label: roomHrid,
         before: { level: beforeLevel },
         after: { level: afterLevel },
@@ -422,9 +752,9 @@ function buildQueueChangesFromSnapshots(baselineSnapshot, targetSnapshot) {
   return changes;
 }
 
-function deriveQueueItemDisplayNameFromChanges(changes, fallbackIndex, fallbackText = "") {
+function deriveQueueItemDisplayNameFromChanges(changes, fallbackIndex, fallbackText = '') {
   if (!Array.isArray(changes) || changes.length === 0) {
-    return fallbackText || `${t("common:queue.queueItem", "Queue Item")} ${fallbackIndex}`;
+    return fallbackText || `${t('common:queue.queueItem', 'Queue Item')} ${fallbackIndex}`;
   }
 
   const sorted = [...changes].sort((left, right) => {
@@ -435,15 +765,15 @@ function deriveQueueItemDisplayNameFromChanges(changes, fallbackIndex, fallbackT
 
   const candidates = sorted
     .map((change) => deriveSingleQueueChangeDisplayName(change))
-    .filter((value) => String(value || "").trim().length > 0);
+    .filter((value) => String(value || '').trim().length > 0);
   const uniqueCandidates = Array.from(new Set(candidates));
   if (uniqueCandidates.length === 0) {
-    return fallbackText || `${t("common:queue.queueItem", "Queue Item")} ${fallbackIndex}`;
+    return fallbackText || `${t('common:queue.queueItem', 'Queue Item')} ${fallbackIndex}`;
   }
   if (uniqueCandidates.length === 1) {
     return uniqueCandidates[0];
   }
-  return t("common:queue.itemNameWithMore", "{{name}} +{{count}}", {
+  return t('common:queue.itemNameWithMore', '{{name}} +{{count}}', {
     name: uniqueCandidates[0],
     count: uniqueCandidates.length - 1,
   });
@@ -451,16 +781,16 @@ function deriveQueueItemDisplayNameFromChanges(changes, fallbackIndex, fallbackT
 
 function deriveSingleQueueChangeDisplayName(change) {
   if (!change) {
-    return "";
+    return '';
   }
 
-  if (change.category === "profession") {
+  if (change.category === 'profession') {
     return localizeQueueChangeLabel(change);
   }
 
-  if (change.category === "skill") {
-    const beforeHrid = String(change?.before?.abilityHrid || "");
-    const afterHrid = String(change?.after?.abilityHrid || "");
+  if (change.category === 'skill') {
+    const beforeHrid = String(change?.before?.abilityHrid || '');
+    const afterHrid = String(change?.after?.abilityHrid || '');
     const beforeLevel = Number(change?.before?.level || 1);
     const afterLevel = Number(change?.after?.level || 1);
     if (
@@ -473,14 +803,14 @@ function deriveSingleQueueChangeDisplayName(change) {
       const abilityName = localizeHridDisplayName(afterHrid);
       const books = computeAbilityBooksNeededForRange(afterHrid, beforeLevel, afterLevel);
       if (books != null) {
-        return t("common:queue.skillLevelChangeWithBooks", "{{name}}: Level {{from}} -> {{to}} ({{books}} books)", {
+        return t('common:queue.skillLevelChangeWithBooks', '{{name}}: Level {{from}} -> {{to}} ({{books}} books)', {
           name: abilityName,
           from: beforeLevel,
           to: afterLevel,
           books,
         });
       }
-      return t("common:queue.skillLevelChange", "{{name}}: Level {{from}} -> {{to}}", {
+      return t('common:queue.skillLevelChange', '{{name}}: Level {{from}} -> {{to}}', {
         name: abilityName,
         from: beforeLevel,
         to: afterLevel,
@@ -488,14 +818,14 @@ function deriveSingleQueueChangeDisplayName(change) {
     }
   }
 
-  if (change.category === "item") {
-    const beforeItemHrid = String(change?.before?.itemHrid || "");
-    const afterItemHrid = String(change?.after?.itemHrid || "");
+  if (change.category === 'item') {
+    const beforeItemHrid = String(change?.before?.itemHrid || '');
+    const afterItemHrid = String(change?.after?.itemHrid || '');
     const beforeLevel = Math.max(0, Math.floor(Number(change?.before?.enhancementLevel || 0)));
     const afterLevel = Math.max(0, Math.floor(Number(change?.after?.enhancementLevel || 0)));
 
     if (beforeItemHrid && afterItemHrid && beforeItemHrid === afterItemHrid) {
-      return t("common:queue.itemEnhancementChange", "{{name}}: Enhance {{from}} -> {{to}}", {
+      return t('common:queue.itemEnhancementChange', '{{name}}: Enhance {{from}} -> {{to}}', {
         name: localizeHridDisplayName(beforeItemHrid),
         from: beforeLevel,
         to: afterLevel,
@@ -512,93 +842,92 @@ function deriveSingleQueueChangeDisplayName(change) {
     }
   }
 
-  if (change.category === "trigger") {
-    return formatQueueTriggerLabel(
-      parseTriggerTargetHridFromChange(change),
-      localizeHridDisplayName,
-      t,
-    );
+  if (change.category === 'trigger') {
+    return formatQueueTriggerLabel(parseTriggerTargetHridFromChange(change), localizeHridDisplayName, t);
   }
 
-  const afterText = formatQueueChangeValue(change, "after");
-  if (afterText && afterText !== "-") {
+  const afterText = formatQueueChangeValue(change, 'after');
+  if (afterText && afterText !== '-') {
     return afterText;
   }
-  const beforeText = formatQueueChangeValue(change, "before");
-  if (beforeText && beforeText !== "-") {
+  const beforeText = formatQueueChangeValue(change, 'before');
+  if (beforeText && beforeText !== '-') {
     return beforeText;
   }
   return localizeQueueChangeLabel(change);
 }
 
 function formatQueueChangeDetailLine(change) {
-  if (String(change?.category || "") === "trigger") {
-    return formatQueueTriggerDetailLine({
-      label: change?.label,
-      beforeState: change?.before?.state,
-      beforeTriggers: change?.before?.triggers,
-      afterState: change?.after?.state,
-      afterTriggers: change?.after?.triggers,
-    }, {
-      t,
-      resolveTargetName: localizeHridDisplayName,
-    });
+  if (String(change?.category || '') === 'trigger') {
+    return formatQueueTriggerDetailLine(
+      {
+        label: change?.label,
+        beforeState: change?.before?.state,
+        beforeTriggers: change?.before?.triggers,
+        afterState: change?.after?.state,
+        afterTriggers: change?.after?.triggers,
+      },
+      {
+        t,
+        resolveTargetName: localizeHridDisplayName,
+      },
+    );
   }
   const label = localizeQueueChangeLabel(change);
-  const beforeText = formatQueueChangeValue(change, "before");
-  const afterText = formatQueueChangeValue(change, "after");
+  const beforeText = formatQueueChangeValue(change, 'before');
+  const afterText = formatQueueChangeValue(change, 'after');
   return `${label}: ${beforeText} -> ${afterText}`;
 }
 
 function localizeQueueCategory(category) {
-  if (category === "food") {
-    return getItemCategoryName("/item_categories/food", "Food");
+  if (category === 'food') {
+    return getItemCategoryName('/item_categories/food', 'Food');
   }
-  if (category === "drink") {
-    return getItemCategoryName("/item_categories/drink", "Drink");
+  if (category === 'drink') {
+    return getItemCategoryName('/item_categories/drink', 'Drink');
   }
   const key = `common:queue.changeCategory.${category}`;
-  return t(key, category || "-");
+  return t(key, category || '-');
 }
 
 function localizeQueueChangeLabel(change) {
-  const category = String(change?.category || "");
-  const label = String(change?.label || "");
-  if (category === "profession") {
+  const category = String(change?.category || '');
+  const label = String(change?.label || '');
+  if (category === 'profession') {
     return getSkillName(label, label);
   }
-  if (category === "item") {
+  if (category === 'item') {
     return localizeEquipmentSlotLabel(label);
   }
-  if (category === "food") {
-    const index = Number(label.replace(/\D/g, "")) || 1;
-    return t("common:queue.foodSlot", "Food Slot {{index}}", { index });
+  if (category === 'food') {
+    const index = Number(label.replace(/\D/g, '')) || 1;
+    return t('common:queue.foodSlot', 'Food Slot {{index}}', { index });
   }
-  if (category === "drink") {
-    const index = Number(label.replace(/\D/g, "")) || 1;
-    return t("common:queue.drinkSlot", "Drink Slot {{index}}", { index });
+  if (category === 'drink') {
+    const index = Number(label.replace(/\D/g, '')) || 1;
+    return t('common:queue.drinkSlot', 'Drink Slot {{index}}', { index });
   }
-  if (category === "skill") {
-    const index = Number(label.replace(/\D/g, "")) || 1;
-    return t("common:queue.abilitySlot", "Ability Slot {{index}}", { index });
+  if (category === 'skill') {
+    const index = Number(label.replace(/\D/g, '')) || 1;
+    return t('common:queue.abilitySlot', 'Ability Slot {{index}}', { index });
   }
-  if (category === "house_room") {
-    return getHouseRoomName(label, houseRoomDetailMap?.[label]?.name || label || "House Room");
+  if (category === 'house_room') {
+    return getHouseRoomName(label, houseRoomDetailMap?.[label]?.name || label || 'House Room');
   }
-  if (category === "trigger") {
+  if (category === 'trigger') {
     return formatQueueTriggerLabel(parseTriggerTargetHridFromChange(change), localizeHridDisplayName, t);
   }
-  return label || "-";
+  return label || '-';
 }
 
 function localizeEquipmentSlotLabel(slotKey) {
-  return getEquipmentSlotName(String(slotKey || ""));
+  return getEquipmentSlotName(String(slotKey || ''));
 }
 
 function localizeHridDisplayName(hrid) {
-  const value = String(hrid || "");
+  const value = String(hrid || '');
   if (!value) {
-    return "-";
+    return '-';
   }
 
   const fallback = itemDetailMap?.[value]?.name || actionNameFallbackMap.value?.[value] || value;
@@ -607,69 +936,67 @@ function localizeHridDisplayName(hrid) {
     return getItemName(value, itemDetailMap[value]?.name || value);
   }
 
-  const abilityName = getAbilityName(value, "");
+  const abilityName = getAbilityName(value, '');
   if (abilityName && abilityName !== value) {
     return abilityName;
   }
 
-  if (Object.prototype.hasOwnProperty.call(actionNameFallbackMap.value || {}, value) || value.startsWith("/actions/")) {
+  if (Object.prototype.hasOwnProperty.call(actionNameFallbackMap.value || {}, value) || value.startsWith('/actions/')) {
     return getActionName(value, actionNameFallbackMap.value?.[value] || value);
   }
 
   return fallback;
 }
 
-function formatQueueChangeValue(change, side = "after") {
-  const category = String(change?.category || "");
-  const payload = side === "before" ? change?.before : change?.after;
+function formatQueueChangeValue(change, side = 'after') {
+  const category = String(change?.category || '');
+  const payload = side === 'before' ? change?.before : change?.after;
   if (!payload) {
-    return "-";
+    return '-';
   }
 
-  if (category === "profession") {
+  if (category === 'profession') {
     const level = Number(payload?.level);
-    return Number.isFinite(level) ? `${Math.floor(level)}` : "-";
+    return Number.isFinite(level) ? `${Math.floor(level)}` : '-';
   }
 
-  if (category === "item") {
-    const itemHrid = String(payload?.itemHrid || "");
+  if (category === 'item') {
+    const itemHrid = String(payload?.itemHrid || '');
     if (!itemHrid) {
-      return "-";
+      return '-';
     }
     const enhancementLevel = Math.max(0, Math.floor(Number(payload?.enhancementLevel || 0)));
     return `${localizeHridDisplayName(itemHrid)}(+${enhancementLevel})`;
   }
 
-  if (category === "food" || category === "drink") {
-    const itemHrid = String(payload?.itemHrid || "");
-    return itemHrid ? localizeHridDisplayName(itemHrid) : "-";
+  if (category === 'food' || category === 'drink') {
+    const itemHrid = String(payload?.itemHrid || '');
+    return itemHrid ? localizeHridDisplayName(itemHrid) : '-';
   }
 
-  if (category === "skill") {
-    const abilityHrid = String(payload?.abilityHrid || "");
+  if (category === 'skill') {
+    const abilityHrid = String(payload?.abilityHrid || '');
     if (!abilityHrid) {
-      return "-";
+      return '-';
     }
     const level = Math.max(1, Math.floor(Number(payload?.level || 1)));
     return `${localizeHridDisplayName(abilityHrid)}(Lv.${level})`;
   }
 
-  if (category === "house_room") {
+  if (category === 'house_room') {
     const level = Math.max(0, Math.floor(Number(payload?.level || 0)));
     return `${level}`;
   }
 
-  if (category === "trigger") {
+  if (category === 'trigger') {
     return formatQueueTriggerStateText(payload?.state, t);
   }
 
-  return "-";
+  return '-';
 }
 
 function parseTriggerTargetHridFromChange(change) {
-  return String(change?.label || "").startsWith("trigger:")
-    ? String(change?.label || "").slice("trigger:".length)
-    : "";
+  return String(change?.label || '').startsWith('trigger:') ? String(change?.label || '').slice('trigger:'.length) : '';
 }
 
 function getAbilityXpForLevel(level) {
@@ -686,19 +1013,19 @@ function getAbilityXpForLevel(level) {
 }
 
 function getSpellBookXpForAbility(abilityHrid) {
-  const normalizedHrid = String(abilityHrid || "");
+  const normalizedHrid = String(abilityHrid || '');
   const bookInfo = abilityBookInfoByAbilityHrid?.[normalizedHrid];
   if (bookInfo?.xpPerBook > 0) {
     return bookInfo.xpPerBook;
   }
 
-  const abilityName = String(abilityDetailMap?.[normalizedHrid]?.name || "");
+  const abilityName = String(abilityDetailMap?.[normalizedHrid]?.name || '');
   if (!abilityName) {
     return 0;
   }
 
   const spellBookXpMap = window?.jigsSpellBookXpByName;
-  if (!spellBookXpMap || typeof spellBookXpMap !== "object") {
+  if (!spellBookXpMap || typeof spellBookXpMap !== 'object') {
     return 0;
   }
 
@@ -708,7 +1035,7 @@ function getSpellBookXpForAbility(abilityHrid) {
 }
 
 function computeAbilityBooksNeededForRange(abilityHrid, fromLevel, toLevel) {
-  const safeAbilityHrid = String(abilityHrid || "");
+  const safeAbilityHrid = String(abilityHrid || '');
   const safeFrom = Number(fromLevel);
   const safeTo = Number(toLevel);
   if (!safeAbilityHrid || !Number.isFinite(safeFrom) || !Number.isFinite(safeTo) || safeTo <= safeFrom) {
@@ -735,26 +1062,26 @@ function computeAbilityBooksNeededForRange(abilityHrid, fromLevel, toLevel) {
   return Number.isFinite(booksNeeded) && booksNeeded >= 0 ? booksNeeded : null;
 }
 
-function formatActionName(actionHrid, fallbackName = "-") {
-  const hrid = String(actionHrid || "");
+function formatActionName(actionHrid, fallbackName = '-') {
+  const hrid = String(actionHrid || '');
   if (!hrid) {
-    return fallbackName || "-";
+    return fallbackName || '-';
   }
 
   return getActionName(hrid, fallbackName || hrid);
 }
 
 function resolveBaselineZoneName(baseline) {
-  const configuredHrid = String(baseline?.settings?.zoneHrid || "");
+  const configuredHrid = String(baseline?.settings?.zoneHrid || '');
   if (configuredHrid) {
     return formatActionName(configuredHrid, actionNameFallbackMap.value?.[configuredHrid] || configuredHrid);
   }
 
-  const resultZone = String(baseline?.simResult?.zoneHrid || baseline?.simResult?.zoneName || "");
+  const resultZone = String(baseline?.simResult?.zoneHrid || baseline?.simResult?.zoneName || '');
   if (!resultZone) {
-    return "-";
+    return '-';
   }
-  if (resultZone.startsWith("/actions/")) {
+  if (resultZone.startsWith('/actions/')) {
     return formatActionName(resultZone, actionNameFallbackMap.value?.[resultZone] || resultZone);
   }
   return resultZone;
@@ -770,7 +1097,7 @@ function resolveBaselineDifficultyText(baseline) {
   if (Number.isFinite(resultTier)) {
     return `T${Math.max(0, Math.floor(resultTier))}`;
   }
-  return "-";
+  return '-';
 }
 
 function resolveBaselineDurationText(baseline) {
@@ -786,18 +1113,18 @@ function resolveBaselineDurationText(baseline) {
     return `${rounded}h`;
   }
 
-  return "-";
+  return '-';
 }
 
 function resolveBaselineConfiguredRoundsText(baseline) {
-  const configuredRounds = Number(baseline?.settings?.baselineRounds);
+  const configuredRounds = Number(baseline?.settings?.rounds);
   if (Number.isFinite(configuredRounds) && configuredRounds > 0) {
     return `${Math.max(1, Math.floor(configuredRounds))}`;
   }
   if (baseline?.simResult) {
-    return "1";
+    return '1';
   }
-  return "-";
+  return '-';
 }
 
 function resolveBaselineCompletedRoundsText(baseline) {
@@ -806,15 +1133,15 @@ function resolveBaselineCompletedRoundsText(baseline) {
     return `${Math.max(0, Math.floor(completedRounds))}`;
   }
   if (baseline?.simResult) {
-    return "1";
+    return '1';
   }
-  return "-";
+  return '-';
 }
 
 function formatMetricValue(value, digits = 2) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) {
-    return "-";
+    return '-';
   }
   return numeric.toLocaleString(undefined, {
     maximumFractionDigits: digits,
@@ -825,7 +1152,7 @@ function formatMetricValue(value, digits = 2) {
 function formatCompactKmbValue(value, digits = 1) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) {
-    return "-";
+    return '-';
   }
 
   const abs = Math.abs(numeric);
@@ -842,10 +1169,9 @@ function formatCompactKmbValue(value, digits = 1) {
 }
 
 function formatQueueMetricValue(metricKey, value, digits = 2) {
-  if (metricKey === "dailyNoRngProfit" || metricKey === "xpPerHour") {
+  if (metricKey === 'dailyNoRngProfit' || metricKey === 'xpPerHour') {
     return formatCompactKmbValue(value, 1);
   }
   return formatMetricValue(value, digits);
 }
-
 </script>

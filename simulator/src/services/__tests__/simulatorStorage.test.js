@@ -1,0 +1,1226 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ADVISOR_DIFFICULTY_TIER_OPTIONS, getAllAdvisorZoneHrids } from '../advisorDomain.js';
+import {
+  applyPriceOverridesToTable,
+  buildDungeonAlignedPriceTable,
+  clearTriggerOptimizerReportFromStorage,
+  cloneBasePriceTable,
+  createPricingState,
+  createProfitPricingOptions,
+  getStorageItem,
+  hasMeaningfulPlayerSnapshotData,
+  loadAdvisorSettingsFromStorage,
+  loadPlayerDataSnapshotFromStorage,
+  loadSimulationUiSettingsFromStorage,
+  loadEquipmentSetsFromStorage,
+  loadFoodOptimizerSettingsFromStorage,
+  loadGameModeFromStorage,
+  loadQueueRunSettingsByPlayerFromStorage,
+  loadTriggerOptimizerReportFromStorage,
+  normalizeAdvisorSettings,
+  normalizeFoodOptimizerSettings,
+  normalizeMarketItemValues,
+  normalizeMarketItemValueSources,
+  normalizePricingSettings,
+  normalizeSimulationUiSettings,
+  normalizeStoredPlayerDataMap,
+  persistAdvisorSettingsToStorage,
+  persistFoodOptimizerSettingsToStorage,
+  persistGameModeToStorage,
+  persistSimulationUiSettingsToStorage,
+  persistTriggerOptimizerReportToStorage,
+  readJsonStorage,
+  removeStorageItem,
+  setJsonStorage,
+} from '../simulatorStorage.js';
+import {
+  BAG_OF_10_COWBELLS_HRID,
+  COWBELL_HRID,
+  createDefaultPriceTable,
+  MIRROR_OF_PROTECTION_HRID,
+  NON_TRADABLE_CAPE_HRIDS,
+  rebuildSyntheticEntriesInTable,
+} from '../marketPriceService.js';
+import { FOOD_OPTIMIZER_DEFAULT_ROUNDS, getFoodOptimizerCatalogHrids } from '../foodOptimizerDomain.js';
+
+const PLAYER_DATA_SNAPSHOT_STORAGE_KEY = 'mwi.player.data.snapshot.v1';
+const QUEUE_RUN_SETTINGS_STORAGE_KEY = 'mwi.queue.runSettings.v1';
+const PRICE_SETTINGS_STORAGE_KEY = 'mwi.price.settings.v1';
+const PRICE_MARKET_CACHE_STORAGE_KEY = 'mwi.price.marketCache.v1';
+const SIMULATION_UI_STORAGE_KEY = 'mwi.simulation.ui.v1';
+const GAME_MODE_STORAGE_KEY = 'mwi.gameMode.v1';
+const ADVISOR_SETTINGS_STORAGE_KEY = 'mwi.advisor.settings.v1';
+const FOOD_OPTIMIZER_SETTINGS_STORAGE_KEY = 'mwi.foodOptimizer.settings.v1';
+const TRIGGER_OPTIMIZER_REPORT_STORAGE_KEY = 'mwi.triggerOptimizer.report.v1';
+
+function createMemoryStorage(initialValues = {}) {
+  const data = new Map(Object.entries(initialValues));
+
+  return {
+    data,
+    getItem: vi.fn((key) => data.get(key) ?? null),
+    setItem: vi.fn((key, value) => {
+      data.set(key, String(value));
+    }),
+    removeItem: vi.fn((key) => {
+      data.delete(key);
+    }),
+  };
+}
+
+function createMeaningfulPlayerSnapshot(overrides = {}) {
+  return JSON.stringify({
+    player: {
+      levels: {
+        stamina: 2,
+        ...(overrides.levels || {}),
+      },
+      ...(overrides.player || {}),
+    },
+    ...(overrides.root || {}),
+  });
+}
+
+describe('simulatorStorage', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  describe('food optimizer settings', () => {
+    it('uses exact top 10 for first use and unreadable preferences', () => {
+      const storage = createMemoryStorage();
+      vi.stubGlobal('localStorage', storage);
+      const expected = {
+        thresholdStepPercent: 10,
+        rounds: 1,
+        searchMode: 'top10',
+        foodHrids: null,
+        requireZeroDeaths: false,
+      };
+      expect(loadFoodOptimizerSettingsFromStorage()).toEqual(expected);
+
+      storage.data.set(FOOD_OPTIMIZER_SETTINGS_STORAGE_KEY, '{broken');
+      expect(loadFoodOptimizerSettingsFromStorage()).toEqual(expected);
+      storage.data.set(FOOD_OPTIMIZER_SETTINGS_STORAGE_KEY, JSON.stringify({ version: 999, searchMode: 'complete' }));
+      expect(loadFoodOptimizerSettingsFromStorage()).toEqual(expected);
+    });
+
+    it('recovers invalid stored rounds with the same shared default as first use', () => {
+      // 契约：非法/损坏的存储值回落到“首次使用”的同一个常量（脏数据跟随产品默认，
+      // 不引入第二个魔法数）。改默认值不会让这两条路径分裂，除非有人刻意拆常量。
+      for (const rounds of [0, 11, 'nonsense', true]) {
+        const storage = createMemoryStorage({
+          [FOOD_OPTIMIZER_SETTINGS_STORAGE_KEY]: JSON.stringify({ version: 1, thresholdStepPercent: 10, rounds }),
+        });
+        vi.stubGlobal('localStorage', storage);
+        expect(loadFoodOptimizerSettingsFromStorage().rounds).toBe(FOOD_OPTIMIZER_DEFAULT_ROUNDS);
+      }
+      // 负向对照：合法值必须原样保留，否则上面的断言可能被“一律回默认”蒙混过去。
+      const control = createMemoryStorage({
+        [FOOD_OPTIMIZER_SETTINGS_STORAGE_KEY]: JSON.stringify({ version: 1, thresholdStepPercent: 10, rounds: 4 }),
+      });
+      vi.stubGlobal('localStorage', control);
+      expect(loadFoodOptimizerSettingsFromStorage().rounds).toBe(4);
+    });
+
+    it('uses exact top 10 when loading preferences saved before search modes existed', () => {
+      const storage = createMemoryStorage({
+        [FOOD_OPTIMIZER_SETTINGS_STORAGE_KEY]: JSON.stringify({ version: 1, thresholdStepPercent: 15, rounds: 4 }),
+      });
+      vi.stubGlobal('localStorage', storage);
+      const settings = loadFoodOptimizerSettingsFromStorage();
+      expect(settings).toEqual({
+        thresholdStepPercent: 15,
+        rounds: 4,
+        searchMode: 'top10',
+        foodHrids: null,
+        requireZeroDeaths: false,
+      });
+      persistFoodOptimizerSettingsToStorage(settings);
+      expect(JSON.parse(storage.data.get(FOOD_OPTIMIZER_SETTINGS_STORAGE_KEY)).searchMode).toBe('top10');
+    });
+
+    it.each(['top10', 'complete'])('round-trips the %s mode with the other optimizer settings', (searchMode) => {
+      const storage = createMemoryStorage();
+      vi.stubGlobal('localStorage', storage);
+      const settings = { thresholdStepPercent: 25, rounds: 5, searchMode, foodHrids: null, requireZeroDeaths: false };
+      expect(persistFoodOptimizerSettingsToStorage(settings)).toEqual(settings);
+      expect(loadFoodOptimizerSettingsFromStorage()).toEqual(settings);
+      expect(JSON.parse(storage.data.get(FOOD_OPTIMIZER_SETTINGS_STORAGE_KEY))).toMatchObject({
+        version: 1,
+        ...settings,
+      });
+    });
+
+    it('normalizes the stored food scope to catalog order and drops unknown items', () => {
+      const storage = createMemoryStorage();
+      vi.stubGlobal('localStorage', storage);
+      const catalog = getFoodOptimizerCatalogHrids();
+      expect(catalog.length).toBeGreaterThan(2);
+
+      const settings = {
+        thresholdStepPercent: 25,
+        rounds: 5,
+        searchMode: 'top10',
+        foodHrids: [catalog[1], catalog[0]],
+      };
+      expect(persistFoodOptimizerSettingsToStorage(settings).foodHrids).toEqual([catalog[0], catalog[1]]);
+      expect(loadFoodOptimizerSettingsFromStorage().foodHrids).toEqual([catalog[0], catalog[1]]);
+
+      // 无效与空集合回退到“未保存范围”的 null 口径；全选保留显式完整数组。
+      for (const raw of [['/items/not_a_food'], []])
+        expect(normalizeFoodOptimizerSettings({ foodHrids: raw }).foodHrids).toBeNull();
+      expect(normalizeFoodOptimizerSettings({ foodHrids: catalog }).foodHrids).toEqual(catalog);
+    });
+
+    it('normalizes the zero-death switch across old, enabled and corrupt preferences', () => {
+      // 旧数据没有该字段：与首次使用一致，默认不排除有死亡的方案（不静默加严搜索）。
+      const storage = createMemoryStorage({
+        [FOOD_OPTIMIZER_SETTINGS_STORAGE_KEY]: JSON.stringify({ version: 1, thresholdStepPercent: 10, rounds: 2 }),
+      });
+      vi.stubGlobal('localStorage', storage);
+      expect(loadFoodOptimizerSettingsFromStorage().requireZeroDeaths).toBe(false);
+      for (const raw of ['true', 1, 0, null, {}, []])
+        expect(normalizeFoodOptimizerSettings({ requireZeroDeaths: raw }).requireZeroDeaths).toBe(false);
+
+      const enabled = createMemoryStorage();
+      vi.stubGlobal('localStorage', enabled);
+      const settings = {
+        thresholdStepPercent: 10,
+        rounds: 2,
+        searchMode: 'top10',
+        foodHrids: null,
+        requireZeroDeaths: true,
+      };
+      expect(persistFoodOptimizerSettingsToStorage(settings)).toEqual(settings);
+      expect(loadFoodOptimizerSettingsFromStorage()).toEqual(settings);
+    });
+  });
+
+  it('reads JSON objects and falls back for missing, invalid, or non-object values', () => {
+    const fallback = { ok: false };
+    const storage = createMemoryStorage({
+      settings: JSON.stringify({ ok: true }),
+      broken: '{',
+      arrayValue: JSON.stringify(['kept']),
+    });
+
+    expect(readJsonStorage('settings', { storage, fallback })).toEqual({ ok: true });
+    expect(readJsonStorage('missing', { storage, fallback })).toBe(fallback);
+    expect(readJsonStorage('broken', { storage, fallback })).toBe(fallback);
+    expect(readJsonStorage('arrayValue', { storage, fallback })).toBe(fallback);
+    expect(
+      readJsonStorage('arrayValue', {
+        storage,
+        fallback,
+        requirePlainObject: false,
+      }),
+    ).toEqual(['kept']);
+  });
+
+  it('gets raw storage values with fallback and unavailable-storage errors', () => {
+    const storage = createMemoryStorage({ language: 'zh', empty: '' });
+
+    expect(getStorageItem('language', { storage, fallback: 'en' })).toBe('zh');
+    expect(getStorageItem('missing', { storage, fallback: 'en' })).toBe('en');
+    expect(getStorageItem('missing', { storage })).toBeNull();
+    expect(getStorageItem('empty', { storage, fallback: 'en' })).toBe('en');
+    expect(getStorageItem('language', { storage: null, fallback: 'en' })).toBe('en');
+    expect(() =>
+      getStorageItem('language', {
+        storage: null,
+        throwIfUnavailable: true,
+      }),
+    ).toThrow('localStorage unavailable');
+  });
+
+  it('falls back for storage read errors unless throwing is requested', () => {
+    const storage = createMemoryStorage();
+    storage.getItem.mockImplementation(() => {
+      throw new Error('storage blocked');
+    });
+
+    expect(getStorageItem('language', { storage, fallback: 'en' })).toBe('en');
+    expect(() =>
+      getStorageItem('language', {
+        storage,
+        throwIfUnavailable: true,
+      }),
+    ).toThrow('storage blocked');
+  });
+
+  it('writes JSON and reports unavailable storage without throwing by default', () => {
+    const storage = createMemoryStorage();
+
+    expect(setJsonStorage('settings', { enabled: true }, { storage })).toBe(true);
+    expect(storage.setItem).toHaveBeenCalledWith('settings', JSON.stringify({ enabled: true }));
+    expect(storage.data.get('settings')).toBe(JSON.stringify({ enabled: true }));
+    expect(setJsonStorage('settings', { enabled: false }, { storage: null })).toBe(false);
+  });
+
+  it('defaults combat scroll effects off while preserving an explicit opt-in', () => {
+    expect(normalizeSimulationUiSettings({}).combatScrollsEnabled).toBe(false);
+    expect(normalizeSimulationUiSettings({ combatScrollsEnabled: true }).combatScrollsEnabled).toBe(true);
+
+    const storage = createMemoryStorage({
+      [SIMULATION_UI_STORAGE_KEY]: JSON.stringify({}),
+    });
+    vi.stubGlobal('localStorage', storage);
+    expect(loadSimulationUiSettingsFromStorage().combatScrollsEnabled).toBe(false);
+
+    storage.data.set(SIMULATION_UI_STORAGE_KEY, JSON.stringify({ combatScrollsEnabled: true }));
+    expect(loadSimulationUiSettingsFromStorage().combatScrollsEnabled).toBe(true);
+  });
+
+  it('defaults HP/MP visualization on and preserves the persisted choice', () => {
+    expect(normalizeSimulationUiSettings({}).enableHpMpVisualization).toBe(false);
+    expect(normalizeSimulationUiSettings({ enableHpMpVisualization: true }).enableHpMpVisualization).toBe(true);
+
+    const storage = createMemoryStorage();
+    vi.stubGlobal('localStorage', storage);
+    expect(loadSimulationUiSettingsFromStorage().enableHpMpVisualization).toBe(true);
+
+    persistSimulationUiSettingsToStorage({ enableHpMpVisualization: false });
+    expect(JSON.parse(storage.data.get(SIMULATION_UI_STORAGE_KEY)).enableHpMpVisualization).toBe(false);
+    expect(loadSimulationUiSettingsFromStorage().enableHpMpVisualization).toBe(false);
+  });
+
+  it('persists simulation rounds with the [1,100] contract', () => {
+    expect(normalizeSimulationUiSettings({}).simulationRounds).toBe(1);
+    expect(normalizeSimulationUiSettings({ simulationRounds: 12 }).simulationRounds).toBe(12);
+    expect(normalizeSimulationUiSettings({ simulationRounds: 101 }).simulationRounds).toBe(100);
+    expect(normalizeSimulationUiSettings({ simulationRounds: 0 }).simulationRounds).toBe(1);
+
+    const storage = createMemoryStorage();
+    vi.stubGlobal('localStorage', storage);
+    expect(loadSimulationUiSettingsFromStorage().simulationRounds).toBe(1);
+
+    persistSimulationUiSettingsToStorage({ simulationRounds: 12 });
+    expect(JSON.parse(storage.data.get(SIMULATION_UI_STORAGE_KEY)).simulationRounds).toBe(12);
+    expect(loadSimulationUiSettingsFromStorage().simulationRounds).toBe(12);
+  });
+
+  it('persists the global game mode independently and falls back to standard for invalid values', () => {
+    const storage = createMemoryStorage();
+    vi.stubGlobal('localStorage', storage);
+    // 无存储默认标准模式。
+    expect(loadGameModeFromStorage()).toBe('standard');
+
+    expect(persistGameModeToStorage('ironcow')).toBe('ironcow');
+    expect(JSON.parse(storage.data.get(GAME_MODE_STORAGE_KEY)).mode).toBe('ironcow');
+    expect(loadGameModeFromStorage()).toBe('ironcow');
+
+    // 非法持久化值回落标准；非规范写法（大小写）容忍。
+    storage.data.set(GAME_MODE_STORAGE_KEY, JSON.stringify({ mode: 'bogus' }));
+    expect(loadGameModeFromStorage()).toBe('standard');
+    storage.data.set(GAME_MODE_STORAGE_KEY, JSON.stringify({ mode: 'IRONCOW' }));
+    expect(loadGameModeFromStorage()).toBe('ironcow');
+
+    // 存储损坏（非 JSON）时同样回落标准模式，不抛错。
+    storage.data.set(GAME_MODE_STORAGE_KEY, '{broken');
+    expect(loadGameModeFromStorage()).toBe('standard');
+  });
+
+  it('throws the existing unavailable-storage error when requested for writes', () => {
+    expect(() =>
+      setJsonStorage(
+        'settings',
+        {},
+        {
+          storage: null,
+          throwIfUnavailable: true,
+        },
+      ),
+    ).toThrow('localStorage unavailable');
+  });
+
+  it('reports storage write errors without throwing by default', () => {
+    const storage = createMemoryStorage();
+    storage.setItem.mockImplementation(() => {
+      throw new Error('quota exceeded');
+    });
+
+    expect(setJsonStorage('settings', { enabled: true }, { storage })).toBe(false);
+    expect(() =>
+      setJsonStorage(
+        'settings',
+        { enabled: true },
+        {
+          storage,
+          throwIfUnavailable: true,
+        },
+      ),
+    ).toThrow('quota exceeded');
+  });
+
+  it('removes items and preserves the silent-or-throw unavailable behavior', () => {
+    const storage = createMemoryStorage({ settings: '{}' });
+
+    expect(removeStorageItem('settings', { storage })).toBe(true);
+    expect(storage.removeItem).toHaveBeenCalledWith('settings');
+    expect(storage.data.has('settings')).toBe(false);
+    expect(removeStorageItem('settings', { storage: null })).toBe(false);
+    expect(() =>
+      removeStorageItem('settings', {
+        storage: null,
+        throwIfUnavailable: true,
+      }),
+    ).toThrow('localStorage unavailable');
+  });
+
+  it('loads equipment sets without crashing when startup normalization cannot write back', () => {
+    const storage = createMemoryStorage({
+      'mwi.equipmentSets.v2': JSON.stringify({
+        Farming: {
+          savedAt: 123,
+          queueChanges: { items: [] },
+        },
+      }),
+    });
+    storage.setItem.mockImplementation(() => {
+      throw new Error('quota exceeded');
+    });
+    vi.stubGlobal('localStorage', storage);
+
+    expect(loadEquipmentSetsFromStorage()).toEqual({
+      Farming: {
+        savedAt: 123,
+        queueChanges: {
+          version: 1,
+          items: [],
+        },
+      },
+    });
+  });
+
+  it('does not write back already-normalized equipment sets on startup', () => {
+    const storage = createMemoryStorage({
+      'mwi.equipmentSets.v2': JSON.stringify({
+        Farming: {
+          savedAt: 123,
+          queueChanges: {
+            version: 1,
+            items: [],
+          },
+        },
+      }),
+    });
+    vi.stubGlobal('localStorage', storage);
+
+    expect(loadEquipmentSetsFromStorage()).toEqual({
+      Farming: {
+        savedAt: 123,
+        queueChanges: {
+          version: 1,
+          items: [],
+        },
+      },
+    });
+    expect(storage.setItem).not.toHaveBeenCalled();
+  });
+
+  it('writes back equipment sets only when normalization changes storage data', () => {
+    const storage = createMemoryStorage({
+      'mwi.equipmentSets.v2': JSON.stringify({
+        ' Farming ': {
+          savedAt: '123',
+          queueChanges: {
+            items: [],
+          },
+        },
+        Legacy: {
+          snapshot: {},
+        },
+      }),
+    });
+    vi.stubGlobal('localStorage', storage);
+
+    expect(loadEquipmentSetsFromStorage()).toEqual({
+      Farming: {
+        savedAt: 123,
+        queueChanges: {
+          version: 1,
+          items: [],
+        },
+      },
+    });
+    expect(storage.setItem).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(storage.data.get('mwi.equipmentSets.v2'))).toEqual({
+      Farming: {
+        savedAt: 123,
+        queueChanges: {
+          version: 1,
+          items: [],
+        },
+      },
+    });
+  });
+
+  it('normalizes stored player data maps for partial and complete snapshot sets', () => {
+    const validSnapshot = createMeaningfulPlayerSnapshot();
+    const fullMap = {
+      1: validSnapshot,
+      2: createMeaningfulPlayerSnapshot({ levels: { attack: 3 } }),
+      3: createMeaningfulPlayerSnapshot({ levels: { defense: 4 } }),
+      4: createMeaningfulPlayerSnapshot({ levels: { magic: 5 } }),
+      5: createMeaningfulPlayerSnapshot({ levels: { ranged: 6 } }),
+    };
+
+    expect(
+      normalizeStoredPlayerDataMap(
+        {
+          1: validSnapshot,
+          2: '',
+        },
+        true,
+      ),
+    ).toEqual({ 1: validSnapshot });
+    expect(normalizeStoredPlayerDataMap(fullMap, false)).toEqual(fullMap);
+    expect(
+      normalizeStoredPlayerDataMap(
+        {
+          ...fullMap,
+          5: '',
+        },
+        false,
+      ),
+    ).toBeNull();
+    expect(
+      normalizeStoredPlayerDataMap(
+        {
+          1: JSON.stringify({ player: { levels: { stamina: 1 } } }),
+        },
+        true,
+      ),
+    ).toBeNull();
+    expect(
+      normalizeStoredPlayerDataMap(
+        {
+          1: validSnapshot,
+          2: '{',
+        },
+        true,
+      ),
+    ).toEqual({ 1: validSnapshot });
+    expect(normalizeStoredPlayerDataMap({ 1: '{' }, true)).toBeNull();
+  });
+
+  it('treats a manually configured combat scroll as meaningful snapshot data', () => {
+    expect(
+      hasMeaningfulPlayerSnapshotData({
+        player: {
+          levels: { stamina: 1 },
+          equipment: {},
+          combatScrolls: {
+            '/items/seal_of_damage': { quantity: null },
+          },
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it('loads player data snapshots with explicit ok, missing, and invalid statuses', () => {
+    const playerSnapshot = createMeaningfulPlayerSnapshot();
+    const storage = createMemoryStorage({
+      [PLAYER_DATA_SNAPSHOT_STORAGE_KEY]: JSON.stringify({
+        version: 1,
+        savedAt: '123',
+        playerDataMap: {
+          1: playerSnapshot,
+          2: '',
+        },
+      }),
+    });
+    vi.stubGlobal('localStorage', storage);
+
+    expect(loadPlayerDataSnapshotFromStorage()).toEqual({
+      status: 'ok',
+      savedAt: 123,
+      playerDataMap: {
+        1: playerSnapshot,
+      },
+    });
+
+    storage.data.set(
+      PLAYER_DATA_SNAPSHOT_STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        savedAt: '124',
+        playerDataMap: {
+          1: playerSnapshot,
+          2: '{',
+        },
+      }),
+    );
+    expect(loadPlayerDataSnapshotFromStorage()).toEqual({
+      status: 'ok',
+      savedAt: 124,
+      playerDataMap: {
+        1: playerSnapshot,
+      },
+    });
+
+    storage.data.delete(PLAYER_DATA_SNAPSHOT_STORAGE_KEY);
+    expect(loadPlayerDataSnapshotFromStorage()).toEqual({
+      status: 'not_found',
+      savedAt: 0,
+      playerDataMap: {},
+    });
+
+    storage.data.set(
+      PLAYER_DATA_SNAPSHOT_STORAGE_KEY,
+      JSON.stringify({
+        version: 999,
+        playerDataMap: {
+          1: playerSnapshot,
+        },
+      }),
+    );
+    expect(loadPlayerDataSnapshotFromStorage()).toEqual({
+      status: 'invalid',
+      savedAt: 0,
+      playerDataMap: {},
+    });
+  });
+
+  it('loads and normalizes queue run settings by player', () => {
+    const storage = createMemoryStorage({
+      [QUEUE_RUN_SETTINGS_STORAGE_KEY]: JSON.stringify({
+        version: 1,
+        savedAt: 456,
+        byPlayer: {
+          1: {
+            rounds: 12,
+            medianBlend: 0.25,
+            weightProfit: 1,
+            weightXp: 0,
+            weightDeathSafety: 0,
+            executionMode: 'serial',
+          },
+          2: {
+            rounds: 999,
+            medianBlend: -1,
+            executionMode: 'parallel',
+          },
+          'not-a-player': {
+            rounds: 5,
+          },
+        },
+      }),
+    });
+    vi.stubGlobal('localStorage', storage);
+
+    const loadedSettings = loadQueueRunSettingsByPlayerFromStorage();
+    expect(loadedSettings).toMatchObject({
+      1: {
+        rounds: 12,
+        medianBlend: 0.25,
+        weightProfit: 1,
+        weightXp: 0,
+        weightDeathSafety: 0,
+        executionMode: 'serial',
+      },
+      2: {
+        rounds: 200,
+        medianBlend: 0,
+        weightProfit: 0.5,
+        weightXp: 0.3,
+        executionMode: 'parallel',
+      },
+    });
+    expect(loadedSettings['2'].weightDeathSafety).toBeCloseTo(0.2, 6);
+
+    storage.data.set(QUEUE_RUN_SETTINGS_STORAGE_KEY, JSON.stringify({ version: 999 }));
+    expect(loadQueueRunSettingsByPlayerFromStorage()).toEqual({});
+  });
+
+  it('creates pricing state from persisted settings, market cache, and overrides', () => {
+    const storage = createMemoryStorage({
+      [PRICE_SETTINGS_STORAGE_KEY]: JSON.stringify({
+        consumableMode: 'bid',
+        dropMode: 'ask',
+        overrides: {
+          '/items/test_item': {
+            ask: 7,
+            bid: 3,
+          },
+          '/items/ignored': {
+            ask: -1,
+          },
+        },
+      }),
+      [PRICE_MARKET_CACHE_STORAGE_KEY]: JSON.stringify({
+        basePriceTable: {
+          '/items/test_item': {
+            ask: 5,
+            bid: 2,
+            vendor: 1,
+          },
+        },
+        enhancementQuotesByItem: {
+          '/items/test_sword': {
+            2: {
+              ask: 100,
+              bid: 80,
+            },
+          },
+        },
+        enhancementLevelsByItem: {
+          '/items/test_sword': [2, 'bad', 1, 2],
+        },
+        marketItemValues: {
+          '/items/test_item': { 0: 12345 },
+        },
+        marketItemValueSources: {
+          '/items/test_item': 'synthetic',
+          '/items/bad': 'nope',
+        },
+        marketItemValueSourcesByLevel: {
+          '/items/test_item': { 0: 'synthetic', 1.7: 'synthetic', bad: 'synthetic', '-1': 'official' },
+          '/items/bad': { 0: 'nope' },
+        },
+        marketTimestamp: 90,
+        lastFetchedAt: 100,
+        sourceUrl: 'https://example.test/prices.json',
+      }),
+    });
+    vi.stubGlobal('localStorage', storage);
+
+    const pricingState = createPricingState();
+
+    expect(pricingState.consumableMode).toBe('bid');
+    expect(pricingState.dropMode).toBe('ask');
+    expect(pricingState.basePriceTable['/items/test_item']).toEqual({
+      ask: 5,
+      bid: 2,
+      vendor: 1,
+    });
+    expect(pricingState.priceTable['/items/test_item']).toEqual({
+      ask: 7,
+      bid: 3,
+      vendor: 1,
+    });
+    expect(pricingState.enhancementQuotesByItem['/items/test_sword']['2']).toMatchObject({
+      ask: 100,
+      bid: 80,
+    });
+    expect(pricingState.enhancementLevelsByItem['/items/test_sword']).toEqual([1, 2]);
+    expect(pricingState.marketItemValues).toEqual({ '/items/test_item': { 0: 12345 } });
+    // A3：来源标注随市场缓存恢复（白名单外条目丢弃）。
+    expect(pricingState.marketItemValueSources).toEqual({ '/items/test_item': 'synthetic' });
+    // 【一般-5】等级级来源覆盖随市场缓存恢复（白名单外条目丢弃；等级键与
+    // normalizeMarketItemValues 同语义归一化——'1.7'→'1'、非数值/负数丢弃）。
+    expect(pricingState.marketItemValueSourcesByLevel).toEqual({
+      '/items/test_item': { 0: 'synthetic', 1: 'synthetic' },
+    });
+    expect(pricingState.marketTimestamp).toBe(90);
+    expect(pricingState.lastFetchedAt).toBe(100);
+    expect(pricingState.sourceUrl).toBe('https://example.test/prices.json');
+    expect(pricingState.isLoading).toBe(false);
+    expect(pricingState.error).toBe('');
+  });
+
+  it('normalizePricingSettings 对旧载荷向后兼容并归一两个新键（T10）', () => {
+    // 旧设置无新键 → nonTradableValuation=true / taxMode='market'（§4.1/§4.2 默认）。
+    expect(normalizePricingSettings({})).toMatchObject({
+      consumableMode: 'ask',
+      dropMode: 'bid',
+      nonTradableValuation: true,
+      taxMode: 'market',
+      overrides: {},
+    });
+    expect(normalizePricingSettings({ consumableMode: 'ask' })).toMatchObject({
+      consumableMode: 'ask',
+      nonTradableValuation: true,
+      taxMode: 'market',
+    });
+    // 非对象输入同走空对象兜底。
+    expect(normalizePricingSettings(null)).toMatchObject({ nonTradableValuation: true, taxMode: 'market' });
+    expect(normalizePricingSettings('junk')).toMatchObject({ nonTradableValuation: true, taxMode: 'market' });
+
+    // 显式合法值保留。
+    expect(normalizePricingSettings({ nonTradableValuation: false, taxMode: 'none' })).toMatchObject({
+      nonTradableValuation: false,
+      taxMode: 'none',
+    });
+    // 存量 'all' 落盘值归一为 'market'（2026-09-04 两档决策的向后兼容锚点）。
+    expect(normalizePricingSettings({ nonTradableValuation: false, taxMode: 'all' }).taxMode).toBe('market');
+
+    // 非法 taxMode → 'market'；nonTradableValuation 仅严格 false 才关闭（§4.1）。
+    expect(normalizePricingSettings({ taxMode: 'bogus' }).taxMode).toBe('market');
+    expect(normalizePricingSettings({ nonTradableValuation: 'off' }).nonTradableValuation).toBe(true);
+  });
+
+  it('createPricingState 从旧缓存剥离重导出合成条目并携带两个新键（T11）', () => {
+    // 旧缓存形态：开关关时代写入（宝箱合成值不含牛铃 + 牛铃 vendor=0），
+    // 但表内已含铃袋行情（快照原貌）。
+    const legacyChestValue = 102300;
+    const createStaleCacheStorage = () =>
+      createMemoryStorage({
+        [PRICE_SETTINGS_STORAGE_KEY]: JSON.stringify({ consumableMode: 'bid', dropMode: 'ask' }),
+        [PRICE_MARKET_CACHE_STORAGE_KEY]: JSON.stringify({
+          basePriceTable: {
+            '/items/bag_of_10_cowbells': { ask: 1090000, bid: 1060000, vendor: 0 },
+            '/items/large_treasure_chest': {
+              ask: legacyChestValue,
+              bid: legacyChestValue,
+              vendor: legacyChestValue,
+            },
+            '/items/cowbell': { ask: -1, bid: -1, vendor: 0 },
+            '/items/coin': { ask: 1, bid: 1, vendor: 1 },
+          },
+          marketTimestamp: 90,
+          lastFetchedAt: 100,
+          sourceUrl: 'https://example.test/prices.json',
+        }),
+      });
+
+    // 旧设置无新键 → 开关默认 true → 缓存旧宝箱值被剥离重导出、合成吃到牛铃
+    //（袋 bid 已在缓存表，不触发任何 fetch；createPricingState 本身即同步纯函数）。
+    const storageOn = createStaleCacheStorage();
+    vi.stubGlobal('localStorage', storageOn);
+    const stateOn = createPricingState();
+    expect(stateOn.nonTradableValuation).toBe(true);
+    expect(stateOn.taxMode).toBe('market');
+    expect(stateOn.basePriceTable['/items/cowbell']).toEqual({ ask: -1, bid: -1, vendor: 106000 });
+    expect(stateOn.basePriceTable['/items/large_treasure_chest'].bid).toBeGreaterThan(legacyChestValue);
+    expect(stateOn.priceTable['/items/large_treasure_chest'].bid).toBe(
+      stateOn.basePriceTable['/items/large_treasure_chest'].bid,
+    );
+
+    // 缓存不回写：持久化载荷保持快照原貌（牛铃仍为 0、宝箱仍为旧值）。
+    const persistedCache = JSON.parse(storageOn.data.get(PRICE_MARKET_CACHE_STORAGE_KEY));
+    expect(persistedCache.basePriceTable['/items/cowbell']).toEqual({ ask: -1, bid: -1, vendor: 0 });
+    expect(persistedCache.basePriceTable['/items/large_treasure_chest'].bid).toBe(legacyChestValue);
+
+    // 显式关（nonTradableValuation=false）→ 宝箱按新模型净额重算（'market' 默认档
+    // 关档合成值 100,908，牛铃 18% 修订 §8.3），不再等于缓存里的旧烘焙值 102,300。
+    const storageOff = createStaleCacheStorage();
+    storageOff.data.set(
+      PRICE_SETTINGS_STORAGE_KEY,
+      JSON.stringify({ consumableMode: 'bid', dropMode: 'ask', nonTradableValuation: false }),
+    );
+    vi.stubGlobal('localStorage', storageOff);
+    const stateOff = createPricingState();
+    expect(stateOff.nonTradableValuation).toBe(false);
+    expect(stateOff.taxMode).toBe('market');
+    expect(stateOff.basePriceTable['/items/cowbell']).toEqual({ ask: -1, bid: -1, vendor: 0 });
+    expect(stateOff.basePriceTable['/items/large_treasure_chest']).toEqual({
+      ask: 100908,
+      bid: 100908,
+      vendor: 100908,
+    });
+
+    // taxMode 线程化（牛铃 18% 修订 §3.5-7）：显式 'none' → 宝箱合成回到税前锚点
+    // 102,300（= pre-feature 基线，'none' 档全免税语义自洽）。
+    const storageNone = createStaleCacheStorage();
+    storageNone.data.set(
+      PRICE_SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        consumableMode: 'bid',
+        dropMode: 'ask',
+        nonTradableValuation: false,
+        taxMode: 'none',
+      }),
+    );
+    vi.stubGlobal('localStorage', storageNone);
+    const stateNone = createPricingState();
+    expect(stateNone.taxMode).toBe('none');
+    expect(stateNone.basePriceTable['/items/cowbell']).toEqual({ ask: -1, bid: -1, vendor: 0 });
+    expect(stateNone.basePriceTable['/items/large_treasure_chest']).toEqual({
+      ask: 102300,
+      bid: 102300,
+      vendor: 102300,
+    });
+  });
+
+  it('createProfitPricingOptions 线程化 taxMode 并保留缺键默认（T12）', () => {
+    const priceTable = { '/items/test_item': { ask: 5, bid: 2, vendor: 1 } };
+    expect(
+      createProfitPricingOptions({
+        consumableMode: 'bid',
+        dropMode: 'ask',
+        taxMode: 'none',
+        priceTable,
+      }),
+    ).toEqual({
+      consumableMode: 'bid',
+      dropMode: 'ask',
+      taxMode: 'none',
+      priceTable,
+    });
+
+    // 缺键 / null / 非法值 → 'market'（现状锚点）。
+    expect(createProfitPricingOptions({ consumableMode: 'bid', dropMode: 'ask' }).taxMode).toBe('market');
+    expect(createProfitPricingOptions(null).taxMode).toBe('market');
+    expect(createProfitPricingOptions({ taxMode: 'bogus' }).taxMode).toBe('market');
+  });
+
+  describe('normalizeMarketItemValues（#33 形状校验直测）', () => {
+    it('保留合法条目并把等级键归一化为非负整数字符串（小数向下取整）', () => {
+      expect(normalizeMarketItemValues({ '/items/foo': { 0: 100, 1.7: 250 } })).toEqual({
+        '/items/foo': { 0: 100, 1: 250 },
+      });
+    });
+
+    it('非对象输入返回空对象', () => {
+      expect(normalizeMarketItemValues(null)).toEqual({});
+      expect(normalizeMarketItemValues([['/items/foo', { 0: 100 }]])).toEqual({});
+      expect(normalizeMarketItemValues('nope')).toEqual({});
+      expect(normalizeMarketItemValues(undefined)).toEqual({});
+    });
+
+    it('丢弃非 /items/ 前缀与原型污染危险键（__proto__ 键经 JSON 形态注入）', () => {
+      const protoPayload = JSON.parse('{"__proto__": {"0": 100}, "/items/foo": {"0": 100}}');
+      expect(normalizeMarketItemValues(protoPayload)).toEqual({ '/items/foo': { 0: 100 } });
+      expect(normalizeMarketItemValues({ foo: { 0: 100 }, constructor: { 0: 100 } })).toEqual({});
+    });
+
+    it('丢弃非法等级（负数/非数值）与非法值（零/负/非有限）', () => {
+      expect(
+        normalizeMarketItemValues({
+          '/items/foo': {
+            '-1': 100,
+            bad: 100,
+            2: -50,
+            3: 0,
+            4: Infinity,
+            5: 700,
+          },
+        }),
+      ).toEqual({ '/items/foo': { 5: 700 } });
+    });
+
+    it('等级档为空、值为全非法或档位形态非对象时该物品整体丢弃', () => {
+      expect(
+        normalizeMarketItemValues({
+          '/items/empty': {},
+          '/items/invalid': { 0: 0 },
+          '/items/notmap': null,
+          '/items/notmap2': [100],
+          '/items/ok': { 0: 100 },
+        }),
+      ).toEqual({ '/items/ok': { 0: 100 } });
+    });
+  });
+
+  describe('normalizeMarketItemValueSources（#30 A3 形状校验直测）', () => {
+    it('保留合法 hrid 与白名单值（official/synthetic）', () => {
+      expect(
+        normalizeMarketItemValueSources({
+          '/items/foo': 'synthetic',
+          '/items/bar': 'official',
+        }),
+      ).toEqual({
+        '/items/foo': 'synthetic',
+        '/items/bar': 'official',
+      });
+    });
+
+    it('非对象输入返回空对象（旧缓存无该键 → 向后兼容）', () => {
+      expect(normalizeMarketItemValueSources(null)).toEqual({});
+      expect(normalizeMarketItemValueSources(undefined)).toEqual({});
+      expect(normalizeMarketItemValueSources(['official'])).toEqual({});
+      expect(normalizeMarketItemValueSources('synthetic')).toEqual({});
+    });
+
+    it('丢弃非法 hrid、危险键与非白名单值', () => {
+      expect(
+        normalizeMarketItemValueSources({
+          foo: 'synthetic',
+          constructor: 'official',
+          '/items/bad': 'nope',
+          '/items/empty': '',
+          '/items/num': 1,
+        }),
+      ).toEqual({});
+      const protoPayload = JSON.parse('{"__proto__": "synthetic", "/items/foo": "synthetic"}');
+      expect(normalizeMarketItemValueSources(protoPayload)).toEqual({ '/items/foo': 'synthetic' });
+    });
+  });
+
+  describe('advisorSettings 持久化', () => {
+    it('清洗脏数据并完成 round-trip（load 与 persist 输出一致）', () => {
+      const storage = createMemoryStorage();
+      vi.stubGlobal('localStorage', storage);
+
+      const normalized = persistAdvisorSettingsToStorage({
+        goalPreset: 'IRONCOW',
+        customWeights: { profitPerHour: -3, xpPerHour: 1 },
+        ironcowWeights: { dropsPerHour: 0.5, xpPerHour: 0.2, safety: 0.1 },
+        filters: {
+          includeGroupZones: false,
+          includeSoloZones: true,
+          quickRounds: 999,
+          refineTopCount: 0,
+          refineTopEnabled: false,
+          dropItemHrids: ['  /items/marine_scale  ', '', '/items/marine_scale', '/items/pearl'],
+        },
+      });
+
+      expect(normalized).toEqual({
+        goalPreset: 'ironcow',
+        customWeights: { profitPerHour: 0, xpPerHour: 0.9, safety: 0.1 },
+        // 输入未携带 customWeightInputs（旧载荷形态）→ null，页面回退归一化回显。
+        customWeightInputs: null,
+        // 三权和 ≠ 1 → 回退默认 0.45/0.45/0.1
+        ironcowWeights: { dropsPerHour: 0.45, xpPerHour: 0.45, safety: 0.1 },
+        filters: {
+          includeGroupZones: false,
+          includeSoloZones: true,
+          refineTopEnabled: false,
+          refineTopCount: 1,
+          refineRounds: 20,
+          quickRounds: 10,
+          dropItemHrids: ['/items/marine_scale', '/items/pearl'],
+          // 本 repo：难度逐级勾选与区域过滤，旧载荷缺省＝全部勾选
+          selectedDifficultyTiers: [...ADVISOR_DIFFICULTY_TIER_OPTIONS],
+          selectedZoneHrids: getAllAdvisorZoneHrids(),
+        },
+      });
+
+      const stored = JSON.parse(storage.data.get(ADVISOR_SETTINGS_STORAGE_KEY));
+      expect(stored.version).toBe(1);
+      expect(stored.savedAt).toBeGreaterThan(0);
+      expect(loadAdvisorSettingsFromStorage()).toEqual(normalized);
+    });
+
+    it('customWeightInputs：合法原样保留、非法回退 null（旧载荷兼容）', () => {
+      const storage = createMemoryStorage();
+      vi.stubGlobal('localStorage', storage);
+
+      // 合法原始输入 verbatim 保留（不归一化、不取整——0.6 原样），与归一化
+      // customWeights 并存落盘且 load 往返一致（G3 2026-09-05：刷新后回显源）。
+      const normalized = persistAdvisorSettingsToStorage({
+        goalPreset: 'custom',
+        customWeights: { profitPerHour: 0.5294, xpPerHour: 0.3706, safety: 0.1 },
+        customWeightInputs: { profitPerHour: 0.6, xpPerHour: 0.42 },
+      });
+      expect(normalized.customWeightInputs).toEqual({ profitPerHour: 0.6, xpPerHour: 0.42 });
+      expect(loadAdvisorSettingsFromStorage().customWeightInputs).toEqual({ profitPerHour: 0.6, xpPerHour: 0.42 });
+
+      // 任一字段非有限数 / 缺失 / 非对象 → null（页面回退「由归一化 customWeights
+      // 回显」的旧行为）。
+      expect(
+        normalizeAdvisorSettings({ customWeightInputs: { profitPerHour: 'bad', xpPerHour: 0.42 } }).customWeightInputs,
+      ).toBeNull();
+      expect(normalizeAdvisorSettings({ customWeightInputs: { xpPerHour: 0.42 } }).customWeightInputs).toBeNull();
+      expect(normalizeAdvisorSettings({ customWeightInputs: [0.6, 0.42] }).customWeightInputs).toBeNull();
+      expect(normalizeAdvisorSettings({}).customWeightInputs).toBeNull();
+    });
+
+    it('对缺失、损坏与版本不匹配的载荷回退默认配置', () => {
+      const storage = createMemoryStorage({
+        [ADVISOR_SETTINGS_STORAGE_KEY]: '{broken',
+      });
+      vi.stubGlobal('localStorage', storage);
+
+      const defaults = normalizeAdvisorSettings();
+      expect(defaults.goalPreset).toBe('balanced');
+      expect(defaults.filters.dropItemHrids).toEqual([]);
+      expect(defaults.ironcowWeights).toEqual({ dropsPerHour: 0.45, xpPerHour: 0.45, safety: 0.1 });
+
+      expect(loadAdvisorSettingsFromStorage()).toEqual(defaults);
+
+      storage.data.set(ADVISOR_SETTINGS_STORAGE_KEY, JSON.stringify({ version: 999, goalPreset: 'ironcow' }));
+      expect(loadAdvisorSettingsFromStorage()).toEqual(defaults);
+
+      storage.data.set(ADVISOR_SETTINGS_STORAGE_KEY, JSON.stringify(['not', 'an', 'object']));
+      expect(loadAdvisorSettingsFromStorage()).toEqual(defaults);
+
+      storage.data.delete(ADVISOR_SETTINGS_STORAGE_KEY);
+      expect(loadAdvisorSettingsFromStorage()).toEqual(defaults);
+    });
+  });
+
+  describe('triggerOptimizer 报告持久化', () => {
+    it('round-trip：persist → load 深拷贝解耦，clear 后回到 null', () => {
+      const storage = createMemoryStorage();
+      vi.stubGlobal('localStorage', storage);
+      const report = { createdAt: 1727000000000, perAbilityChoices: [], bestTriggerMap: {} };
+
+      expect(persistTriggerOptimizerReportToStorage(report)).toBe(true);
+      const stored = JSON.parse(storage.data.get(TRIGGER_OPTIMIZER_REPORT_STORAGE_KEY));
+      expect(stored.version).toBe(1);
+      expect(stored.savedAt).toBeGreaterThan(0);
+
+      const loaded = loadTriggerOptimizerReportFromStorage();
+      expect(loaded).toEqual(report);
+      // 深拷贝解耦：改内存里这份不回灌存储（store 会原地写 stale 等字段）。
+      loaded.perAbilityChoices.push({ slotIndex: 1 });
+      expect(loadTriggerOptimizerReportFromStorage()).toEqual(report);
+
+      expect(clearTriggerOptimizerReportFromStorage()).toBe(true);
+      expect(loadTriggerOptimizerReportFromStorage()).toBeNull();
+    });
+
+    it('损坏 JSON / 版本不符 / 形状不合法一律静默回落（null / false）', () => {
+      const storage = createMemoryStorage({
+        [TRIGGER_OPTIMIZER_REPORT_STORAGE_KEY]: '{broken',
+      });
+      vi.stubGlobal('localStorage', storage);
+      expect(loadTriggerOptimizerReportFromStorage()).toBeNull();
+
+      storage.data.set(
+        TRIGGER_OPTIMIZER_REPORT_STORAGE_KEY,
+        JSON.stringify({ version: 999, report: { createdAt: 1 } }),
+      );
+      expect(loadTriggerOptimizerReportFromStorage()).toBeNull();
+
+      storage.data.set(
+        TRIGGER_OPTIMIZER_REPORT_STORAGE_KEY,
+        JSON.stringify({ version: 1, report: { perAbilityChoices: [] } }),
+      );
+      expect(loadTriggerOptimizerReportFromStorage()).toBeNull();
+
+      expect(persistTriggerOptimizerReportToStorage({ noCreatedAt: true })).toBe(false);
+      // 空结果（createEmptyResult 自带 createdAt: 0）不是报告：不落盘，否则开跑清空会覆盖好报告。
+      expect(persistTriggerOptimizerReportToStorage({ createdAt: 0, perAbilityChoices: [] })).toBe(false);
+    });
+  });
+
+  describe('buildDungeonAlignedPriceTable 地牢收益建表（工具箱 574037 口径，默认关）', () => {
+    const CAPE_BASE_VENDOR = 100000;
+
+    function createAlignedBaseTable() {
+      const table = createDefaultPriceTable();
+      table[BAG_OF_10_COWBELLS_HRID] = { ask: 1090000, bid: 1060000, vendor: 0 };
+      table[MIRROR_OF_PROTECTION_HRID] = { ask: 150000, bid: 123456, vendor: 200000 };
+      return table;
+    }
+    it('无口径选项：零开销直通返回原引用（逐位不变）', () => {
+      const base = createAlignedBaseTable();
+      expect(buildDungeonAlignedPriceTable(base)).toBe(base);
+      expect(buildDungeonAlignedPriceTable(base, {})).toBe(base);
+      expect(buildDungeonAlignedPriceTable(base, { excludeCowbellValue: false, excludeCapeValue: false })).toBe(base);
+      // 仅 nonTradableValuation / taxMode（非口径项）也直通：这两项只在线程化给 rebuild 时生效。
+      expect(buildDungeonAlignedPriceTable(base, { nonTradableValuation: true, taxMode: 'none' })).toBe(base);
+    });
+
+    it('excludeCowbellValue：牛铃与铃袋按 0，大宝箱合成价扣除箱内牛铃，入参表未被修改', () => {
+      const base = createAlignedBaseTable();
+      const snapshot = JSON.stringify(base);
+      const aligned = buildDungeonAlignedPriceTable(base, { excludeCowbellValue: true });
+
+      expect(aligned).not.toBe(base);
+      expect(aligned[COWBELL_HRID]).toEqual({ ask: 0, bid: 0, vendor: 0 });
+      // 铃袋同属牛铃收益（脚本 isCowbellItem 语义）：一并按 0。
+      expect(aligned[BAG_OF_10_COWBELLS_HRID]).toEqual({ ask: 0, bid: 0, vendor: 0 });
+
+      // 大宝箱合成价吃到清零后的牛铃：等于「保守注入口径」再按牛铃 0 复算（箱内牛铃被扣除）。
+      const conservative = rebuildSyntheticEntriesInTable(cloneBasePriceTable(base), { nonTradableValuation: true });
+      expect(conservative['/items/large_treasure_chest'].bid - aligned['/items/large_treasure_chest'].bid).toBe(117342);
+
+      // 克隆语义：入参表逐位未被修改（袋/镜行情与合成值原样保留）。
+      expect(JSON.stringify(base)).toBe(snapshot);
+    });
+
+    it('excludeCapeValue：7 件披风 ask/bid/vendor 三列全部按 0 估值，入参表未被修改', () => {
+      const base = createAlignedBaseTable();
+      const aligned = buildDungeonAlignedPriceTable(base, { excludeCapeValue: true });
+      for (const capeHrid of NON_TRADABLE_CAPE_HRIDS) {
+        expect(aligned[capeHrid]).toEqual({ ask: 0, bid: 0, vendor: 0 });
+      }
+      // 镜本身不受影响（仍保留行情），披风清零只作用于 7 件披风键。
+      expect(aligned[MIRROR_OF_PROTECTION_HRID]).toEqual({ ask: 150000, bid: 123456, vendor: 200000 });
+      // 入参表未被修改（镜与披风保持原状）。
+      expect(base[MIRROR_OF_PROTECTION_HRID]).toEqual({ ask: 150000, bid: 123456, vendor: 200000 });
+      expect(base['/items/chance_cape']).toEqual({ ask: -1, bid: -1, vendor: CAPE_BASE_VENDOR });
+    });
+
+    it('两口径同开：披风清零在 rebuild 之后（顺序正确），牛铃/袋同为零', () => {
+      const base = createAlignedBaseTable();
+      const aligned = buildDungeonAlignedPriceTable(base, {
+        excludeCowbellValue: true,
+        excludeCapeValue: true,
+      });
+      // 顺序陷阱：若先清零再 rebuild，披风三列会被复位为基础形态（ask/bid=-1、vendor 兜底）。
+      for (const capeHrid of NON_TRADABLE_CAPE_HRIDS) {
+        expect(aligned[capeHrid]).toEqual({ ask: 0, bid: 0, vendor: 0 });
+      }
+      expect(aligned[COWBELL_HRID]).toEqual({ ask: 0, bid: 0, vendor: 0 });
+      expect(aligned[BAG_OF_10_COWBELLS_HRID]).toEqual({ ask: 0, bid: 0, vendor: 0 });
+
+      // 叠加 nonTradableValuation=true：rebuild 的保守注入（披风 vendor=round(镜 bid)）先执行、
+      // 随后被清零覆盖，披风与牛铃三列仍为 0。
+      const withConservative = buildDungeonAlignedPriceTable(base, {
+        excludeCowbellValue: true,
+        excludeCapeValue: true,
+        nonTradableValuation: true,
+      });
+      for (const capeHrid of NON_TRADABLE_CAPE_HRIDS) {
+        expect(withConservative[capeHrid]).toEqual({ ask: 0, bid: 0, vendor: 0 });
+      }
+      expect(withConservative[COWBELL_HRID]).toEqual({ ask: 0, bid: 0, vendor: 0 });
+    });
+
+    it('披风清零不依赖镜行情：镜无价 / 仅一侧有价时同样按 0 估值', () => {
+      // 镜无行情（默认表 ask/bid = -1）→ 仍清零。
+      const noMirror = buildDungeonAlignedPriceTable(createDefaultPriceTable(), { excludeCapeValue: true });
+      for (const capeHrid of NON_TRADABLE_CAPE_HRIDS) {
+        expect(noMirror[capeHrid]).toEqual({ ask: 0, bid: 0, vendor: 0 });
+      }
+
+      // 仅 ask 侧有价：同样三列全 0。
+      const askOnlyBase = createDefaultPriceTable();
+      askOnlyBase[MIRROR_OF_PROTECTION_HRID] = { ask: 150000, bid: -1, vendor: 200000 };
+      const askOnly = buildDungeonAlignedPriceTable(askOnlyBase, { excludeCapeValue: true });
+      for (const capeHrid of NON_TRADABLE_CAPE_HRIDS) {
+        expect(askOnly[capeHrid]).toEqual({ ask: 0, bid: 0, vendor: 0 });
+      }
+    });
+
+    it('牛铃清零不受 nonTradableValuation 影响，且与披风段相互独立', () => {
+      const base = createAlignedBaseTable();
+      const aligned = buildDungeonAlignedPriceTable(base, {
+        excludeCowbellValue: true,
+        nonTradableValuation: false,
+      });
+      expect(aligned[COWBELL_HRID]).toEqual({ ask: 0, bid: 0, vendor: 0 });
+      // 披风段独立：nonTradableValuation=false → 披风保持基础形态（静态收购价兜底）。
+      for (const capeHrid of NON_TRADABLE_CAPE_HRIDS) {
+        expect(aligned[capeHrid]).toEqual({ ask: -1, bid: -1, vendor: CAPE_BASE_VENDOR });
+      }
+      // 入参表未被修改（清零只存在于克隆表）。
+      expect(base[COWBELL_HRID]).toEqual({ ask: -1, bid: -1, vendor: 0 });
+    });
+
+    // 已知边界锚定（2026-10-16）：excludeCowbellValue 的 rebuild 会复位全部合成键，
+    // 入参表上这些键的「已烘焙全局改价」（simulatorStore 的 priceTable 产物）被重算覆盖；
+    // excludeCapeValue 单独开不触发 rebuild，合成键既有值保留。彻底修复需产品裁决，暂不做。
+    it('已知边界：excludeCowbellValue 复位合成键上的全局改价，excludeCapeValue 单独开不复位', () => {
+      const withGlobalOverrides = applyPriceOverridesToTable(createAlignedBaseTable(), {
+        '/items/large_treasure_chest': { ask: 999000, bid: 888000 },
+        '/items/coin': { bid: 7 },
+      });
+
+      // excludeCowbellValue 开：大宝箱 / coin 的全局改价被 rebuild 重算覆盖——
+      // 产物与「无改价基表同档 rebuild」逐位一致（复位是整体性的，不是仅宝箱单侧）。
+      const aligned = buildDungeonAlignedPriceTable(withGlobalOverrides, { excludeCowbellValue: true });
+      const rebakedFromPlainBase = buildDungeonAlignedPriceTable(createAlignedBaseTable(), {
+        excludeCowbellValue: true,
+      });
+      expect(aligned['/items/large_treasure_chest']).toEqual(rebakedFromPlainBase['/items/large_treasure_chest']);
+      expect(aligned['/items/coin']).toEqual({ ask: 1, bid: 1, vendor: 1 });
+
+      // 调用方保留全局改价的姿势：在建表产物上再次叠加 overrides（纯克隆，可安全复用）。
+      const restored = applyPriceOverridesToTable(aligned, {
+        '/items/large_treasure_chest': { ask: 999000, bid: 888000 },
+      });
+      expect(restored['/items/large_treasure_chest'].ask).toBe(999000);
+      expect(restored['/items/large_treasure_chest'].bid).toBe(888000);
+
+      // excludeCapeValue 单独开：不触发 rebuild，大宝箱 / coin 的全局改价保留，仅 7 件披风清零。
+      const capeOnly = buildDungeonAlignedPriceTable(withGlobalOverrides, { excludeCapeValue: true });
+      expect(capeOnly['/items/large_treasure_chest']).toEqual({
+        ask: 999000,
+        bid: 888000,
+        vendor: withGlobalOverrides['/items/large_treasure_chest'].vendor,
+      });
+      expect(capeOnly['/items/coin'].bid).toBe(7);
+      for (const capeHrid of NON_TRADABLE_CAPE_HRIDS) {
+        expect(capeOnly[capeHrid]).toEqual({ ask: 0, bid: 0, vendor: 0 });
+      }
+    });
+  });
+});

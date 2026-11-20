@@ -1,0 +1,2180 @@
+//! 战斗单位（CombatUnit）核心：增益注册/源选择/过期 + 派生属性结算。
+//! 逐行复刻 JS 侧 `src/combatsimulator/combatUnit.js`：
+//! - 属性结算 `updateCombatDetailsFromBuffs`（JS 406-613 行）；
+//! - 增益生命周期 `addBuff` / `reconcileBuffSource` / `removeBuff*` / 过期扫描 / `clearBuffs`（JS 615-966 行）。
+//!
+//! 逐位 parity 要点：
+//! - 所有浮点表达式保持与 JS 完全相同的运算顺序（浮点不满足结合律）；
+//! - combatBuffs / permanentBuffs / buffSources 等按插入序遍历（见 `ordered_map`）；
+//! - 结算期增益索引（等价 JS `buffBoostSnapshots`）在结算开头构建一次，全程使用；
+//! - JS `updateCombatDetails` 的 FRESH_COMBAT_STATS 分支只是省去「刚捕获即写回」的复制，
+//!   结果与完整恢复一致，此处不做分支。
+//!
+//! 刻意保留的 JS 既有怪癖（不得「改进」）：
+//! - `addPermanentBuff` 直接按 typeHrid 累加 ratio/flat，不做等级并入；
+//! - REPLACE 策略下活动源被移除/过期时级联清除该 uniqueHrid 的所有源（无休眠交接）；
+//! - STRONGEST 策略平局保留先注册者；最强比较仅对官方队伍光环开放；
+//! - `removeExpiredBuffByUniqueHrid` / `removeExpiredBuffs` 返回「属性是否变脏」布尔，
+//!   而 `removeBuff` / `clearBuffs` 等包装方法不返回任何值（探针轨迹记 null）；
+//! - threat 结算的 `if (ratioBoost !== 0)` 分支：ratio 为 0 时直接覆盖为 base 再叠加 flat。
+
+use crate::ability::Ability;
+use crate::buff::{
+    buffs_affect_stats_equally, get_party_aura_buff_strength, is_stronger_party_aura_buff, Buff, BuffSourcePolicy,
+    PartyAuraError, PartyAuraErrorKind,
+};
+use crate::consumable::Consumable;
+use crate::hrid::{hrid_is_empty, intern_hrid, with_hrid, Hrid};
+use crate::ordered_map::OrderedMap;
+use serde::{Deserialize, Serialize};
+
+/// 单位操作错误的类别（与 JS 抛出的内置错误一一对应）。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UnitErrorKind {
+    TypeError,
+    Error,
+    RangeError,
+}
+
+impl UnitErrorKind {
+    pub fn name(&self) -> &'static str {
+        match self {
+            UnitErrorKind::TypeError => "TypeError",
+            UnitErrorKind::Error => "Error",
+            UnitErrorKind::RangeError => "RangeError",
+        }
+    }
+}
+
+/// 单位操作错误：保留类别与消息，供探针逐字对账 JS 的异常。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UnitError {
+    pub kind: UnitErrorKind,
+    pub message: String,
+}
+
+impl UnitError {
+    pub fn type_error(message: impl Into<String>) -> Self {
+        Self { kind: UnitErrorKind::TypeError, message: message.into() }
+    }
+
+    pub fn error(message: impl Into<String>) -> Self {
+        Self { kind: UnitErrorKind::Error, message: message.into() }
+    }
+}
+
+impl From<PartyAuraError> for UnitError {
+    fn from(error: PartyAuraError) -> Self {
+        let kind = match error.kind {
+            PartyAuraErrorKind::TypeError => UnitErrorKind::TypeError,
+            PartyAuraErrorKind::RangeError => UnitErrorKind::RangeError,
+            PartyAuraErrorKind::Error => UnitErrorKind::Error,
+        };
+        Self { kind, message: error.message }
+    }
+}
+
+impl std::fmt::Display for UnitError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{}: {}", self.kind.name(), self.message)
+    }
+}
+
+/// 战斗数值面板（等价 JS `combatDetails.combatStats` 全字段）。
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CombatStats {
+    pub combat_style_hrid: Hrid,
+    pub damage_type: Hrid,
+    pub attack_interval: f64,
+    pub auto_attack_damage: f64,
+    pub ability_damage: f64,
+    pub critical_rate: f64,
+    pub critical_damage: f64,
+    pub stab_accuracy: f64,
+    pub slash_accuracy: f64,
+    pub smash_accuracy: f64,
+    pub ranged_accuracy: f64,
+    pub magic_accuracy: f64,
+    pub stab_damage: f64,
+    pub slash_damage: f64,
+    pub smash_damage: f64,
+    pub ranged_damage: f64,
+    pub magic_damage: f64,
+    pub defensive_damage: f64,
+    pub task_damage: f64,
+    pub physical_amplify: f64,
+    pub water_amplify: f64,
+    pub nature_amplify: f64,
+    pub fire_amplify: f64,
+    pub healing_amplify: f64,
+    pub physical_thorns: f64,
+    pub elemental_thorns: f64,
+    pub max_hitpoints: f64,
+    pub max_manapoints: f64,
+    pub stab_evasion: f64,
+    pub slash_evasion: f64,
+    pub smash_evasion: f64,
+    pub ranged_evasion: f64,
+    pub magic_evasion: f64,
+    pub armor: f64,
+    pub water_resistance: f64,
+    pub nature_resistance: f64,
+    pub fire_resistance: f64,
+    pub life_steal: f64,
+    pub hp_regen_per10: f64,
+    pub mp_regen_per10: f64,
+    pub combat_drop_rate: f64,
+    pub combat_drop_quantity: f64,
+    pub combat_rare_find: f64,
+    pub combat_experience: f64,
+    pub food_slots: f64,
+    pub drink_slots: f64,
+    pub armor_penetration: f64,
+    pub water_penetration: f64,
+    pub nature_penetration: f64,
+    pub fire_penetration: f64,
+    pub mana_leech: f64,
+    pub cast_speed: f64,
+    pub threat: f64,
+    pub parry: f64,
+    pub mayhem: f64,
+    pub pierce: f64,
+    pub curse: f64,
+    pub ripple: f64,
+    pub bloom: f64,
+    pub blaze: f64,
+    pub weaken: f64,
+    pub fury: f64,
+    pub food_haste: f64,
+    pub drink_concentration: f64,
+    pub damage_taken: f64,
+    pub attack_speed: f64,
+    pub armor_damage_ratio: f64,
+    pub hp_drain_ratio: f64,
+    pub primary_training: Hrid,
+    pub focus_training: Hrid,
+    pub stamina_experience: f64,
+    pub intelligence_experience: f64,
+    pub attack_experience: f64,
+    pub defense_experience: f64,
+    pub melee_experience: f64,
+    pub ranged_experience: f64,
+    pub magic_experience: f64,
+    pub retaliation: f64,
+    /// 忠实复刻 JS 怪癖：`combatStats` 初始对象**没有** tenacity 键（面板有），
+    /// 结算 `undefined + x` 得 NaN；数据驱动的怪物可能带上数值。
+    /// `None` = JS 的 undefined（序列化为缺失键），`Some(NaN)` = 结算后的 NaN（序列化为 null）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tenacity: Option<f64>,
+    /// 同为 JS 的「可能缺失」字段：`combatStats.abilityHaste` 仅由怪物数据写入
+    /// （monster.js 的 OPTIONAL_COMBAT_STATS 会补 0），玩家侧为 undefined ⇒ 冷却缩放恒不生效。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ability_haste: Option<f64>,
+    pub max_hitpoints_ratio: f64,
+    pub max_manapoints_ratio: f64,
+}
+
+impl Default for CombatStats {
+    fn default() -> Self {
+        Self {
+            combat_style_hrid: Hrid::COMBAT_STYLE_SMASH,
+            damage_type: Hrid::DAMAGE_TYPE_PHYSICAL,
+            attack_interval: 3000000000.0,
+            auto_attack_damage: 0.0,
+            ability_damage: 0.0,
+            critical_rate: 0.0,
+            critical_damage: 0.0,
+            stab_accuracy: 0.0,
+            slash_accuracy: 0.0,
+            smash_accuracy: 0.0,
+            ranged_accuracy: 0.0,
+            magic_accuracy: 0.0,
+            stab_damage: 0.0,
+            slash_damage: 0.0,
+            smash_damage: 0.0,
+            ranged_damage: 0.0,
+            magic_damage: 0.0,
+            defensive_damage: 0.0,
+            task_damage: 0.0,
+            physical_amplify: 0.0,
+            water_amplify: 0.0,
+            nature_amplify: 0.0,
+            fire_amplify: 0.0,
+            healing_amplify: 0.0,
+            physical_thorns: 0.0,
+            elemental_thorns: 0.0,
+            max_hitpoints: 0.0,
+            max_manapoints: 0.0,
+            stab_evasion: 0.0,
+            slash_evasion: 0.0,
+            smash_evasion: 0.0,
+            ranged_evasion: 0.0,
+            magic_evasion: 0.0,
+            armor: 0.0,
+            water_resistance: 0.0,
+            nature_resistance: 0.0,
+            fire_resistance: 0.0,
+            life_steal: 0.0,
+            hp_regen_per10: 0.01,
+            mp_regen_per10: 0.01,
+            combat_drop_rate: 0.0,
+            combat_drop_quantity: 0.0,
+            combat_rare_find: 0.0,
+            combat_experience: 0.0,
+            food_slots: 1.0,
+            drink_slots: 1.0,
+            armor_penetration: 0.0,
+            water_penetration: 0.0,
+            nature_penetration: 0.0,
+            fire_penetration: 0.0,
+            mana_leech: 0.0,
+            cast_speed: 0.0,
+            threat: 100.0,
+            parry: 0.0,
+            mayhem: 0.0,
+            pierce: 0.0,
+            curse: 0.0,
+            ripple: 0.0,
+            bloom: 0.0,
+            blaze: 0.0,
+            weaken: 0.0,
+            fury: 0.0,
+            food_haste: 0.0,
+            drink_concentration: 0.0,
+            damage_taken: 0.0,
+            attack_speed: 0.0,
+            armor_damage_ratio: 0.0,
+            hp_drain_ratio: 0.0,
+            primary_training: Hrid::EMPTY,
+            focus_training: Hrid::EMPTY,
+            stamina_experience: 0.0,
+            intelligence_experience: 0.0,
+            attack_experience: 0.0,
+            defense_experience: 0.0,
+            melee_experience: 0.0,
+            ranged_experience: 0.0,
+            magic_experience: 0.0,
+            retaliation: 0.0,
+            tenacity: None,
+            ability_haste: None,
+            max_hitpoints_ratio: 0.0,
+            max_manapoints_ratio: 0.0,
+        }
+    }
+}
+
+macro_rules! combat_stats_numeric_fields {
+    ($($field:ident => $name:literal),* $(,)?) => {
+        impl CombatStats {
+            /// 按 JS 字段名写入数值字段（探针 / 测试装配用）。返回是否命中。
+            pub fn set_numeric_field(&mut self, name: &str, value: f64) -> bool {
+                match name {
+                    $( $name => { self.$field = value; true } )*
+                    _ => false,
+                }
+            }
+
+            /// 字段名 → 数值 setter（构造期一次解析；与 `set_numeric_field` 同集合；
+            /// `tenacity` / `abilityHaste` 的 Option 语义由调用方 `resolve_numeric_setter` 处理）。
+            pub fn numeric_field_setter(name: &str) -> Option<fn(&mut CombatStats, f64)> {
+                match name {
+                    $( $name => Some(|stats: &mut CombatStats, value: f64| stats.$field = value), )*
+                    _ => None,
+                }
+            }
+        }
+    };
+}
+
+combat_stats_numeric_fields! {
+    attack_interval => "attackInterval",
+    auto_attack_damage => "autoAttackDamage",
+    ability_damage => "abilityDamage",
+    critical_rate => "criticalRate",
+    critical_damage => "criticalDamage",
+    stab_accuracy => "stabAccuracy",
+    slash_accuracy => "slashAccuracy",
+    smash_accuracy => "smashAccuracy",
+    ranged_accuracy => "rangedAccuracy",
+    magic_accuracy => "magicAccuracy",
+    stab_damage => "stabDamage",
+    slash_damage => "slashDamage",
+    smash_damage => "smashDamage",
+    ranged_damage => "rangedDamage",
+    magic_damage => "magicDamage",
+    defensive_damage => "defensiveDamage",
+    task_damage => "taskDamage",
+    physical_amplify => "physicalAmplify",
+    water_amplify => "waterAmplify",
+    nature_amplify => "natureAmplify",
+    fire_amplify => "fireAmplify",
+    healing_amplify => "healingAmplify",
+    physical_thorns => "physicalThorns",
+    elemental_thorns => "elementalThorns",
+    max_hitpoints => "maxHitpoints",
+    max_manapoints => "maxManapoints",
+    stab_evasion => "stabEvasion",
+    slash_evasion => "slashEvasion",
+    smash_evasion => "smashEvasion",
+    ranged_evasion => "rangedEvasion",
+    magic_evasion => "magicEvasion",
+    armor => "armor",
+    water_resistance => "waterResistance",
+    nature_resistance => "natureResistance",
+    fire_resistance => "fireResistance",
+    life_steal => "lifeSteal",
+    hp_regen_per10 => "hpRegenPer10",
+    mp_regen_per10 => "mpRegenPer10",
+    combat_drop_rate => "combatDropRate",
+    combat_drop_quantity => "combatDropQuantity",
+    combat_rare_find => "combatRareFind",
+    combat_experience => "combatExperience",
+    food_slots => "foodSlots",
+    drink_slots => "drinkSlots",
+    armor_penetration => "armorPenetration",
+    water_penetration => "waterPenetration",
+    nature_penetration => "naturePenetration",
+    fire_penetration => "firePenetration",
+    mana_leech => "manaLeech",
+    cast_speed => "castSpeed",
+    threat => "threat",
+    parry => "parry",
+    mayhem => "mayhem",
+    pierce => "pierce",
+    curse => "curse",
+    ripple => "ripple",
+    bloom => "bloom",
+    blaze => "blaze",
+    weaken => "weaken",
+    fury => "fury",
+    food_haste => "foodHaste",
+    drink_concentration => "drinkConcentration",
+    damage_taken => "damageTaken",
+    attack_speed => "attackSpeed",
+    armor_damage_ratio => "armorDamageRatio",
+    hp_drain_ratio => "hpDrainRatio",
+    stamina_experience => "staminaExperience",
+    intelligence_experience => "intelligenceExperience",
+    attack_experience => "attackExperience",
+    defense_experience => "defenseExperience",
+    melee_experience => "meleeExperience",
+    ranged_experience => "rangedExperience",
+    magic_experience => "magicExperience",
+    retaliation => "retaliation",
+    max_hitpoints_ratio => "maxHitpointsRatio",
+    max_manapoints_ratio => "maxManapointsRatio",
+}
+
+macro_rules! combat_stats_string_fields {
+    ($($field:ident => $name:literal),* $(,)?) => {
+        impl CombatStats {
+            /// 按 JS 字段名写入字符串字段（生产桥 / 探针装配用）。返回是否命中。
+            pub fn set_string_field(&mut self, name: &str, value: &str) -> bool {
+                match name {
+                    $( $name => { self.$field = intern_hrid(value); true } )*
+                    _ => false,
+                }
+            }
+
+            /// 字段名 → 字符串 setter（构造期一次解析；与 `set_string_field` 同集合）。
+            pub fn string_field_setter(name: &str) -> Option<fn(&mut CombatStats, Hrid)> {
+                match name {
+                    $( $name => Some(|stats: &mut CombatStats, value: Hrid| stats.$field = value), )*
+                    _ => None,
+                }
+            }
+        }
+    };
+}
+
+combat_stats_string_fields! {
+    combat_style_hrid => "combatStyleHrid",
+    damage_type => "damageType",
+    primary_training => "primaryTraining",
+    focus_training => "focusTraining",
+}
+
+/// 结算后面板（等价 JS `combatDetails`，含派生等级/伤害/闪避/抗性等）。
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CombatDetails {
+    pub stamina_level: f64,
+    pub intelligence_level: f64,
+    pub attack_level: f64,
+    pub melee_level: f64,
+    pub defense_level: f64,
+    pub ranged_level: f64,
+    pub magic_level: f64,
+    pub max_hitpoints: f64,
+    pub current_hitpoints: f64,
+    pub max_manapoints: f64,
+    pub current_manapoints: f64,
+    pub stab_accuracy_rating: f64,
+    pub slash_accuracy_rating: f64,
+    pub smash_accuracy_rating: f64,
+    pub ranged_accuracy_rating: f64,
+    pub magic_accuracy_rating: f64,
+    pub stab_max_damage: f64,
+    pub slash_max_damage: f64,
+    pub smash_max_damage: f64,
+    pub ranged_max_damage: f64,
+    pub magic_max_damage: f64,
+    pub stab_evasion_rating: f64,
+    pub slash_evasion_rating: f64,
+    pub smash_evasion_rating: f64,
+    pub ranged_evasion_rating: f64,
+    pub magic_evasion_rating: f64,
+    pub defensive_max_damage: f64,
+    pub total_armor: f64,
+    pub total_water_resistance: f64,
+    pub total_nature_resistance: f64,
+    pub total_fire_resistance: f64,
+    pub ability_haste: f64,
+    pub tenacity: f64,
+    pub total_threat: f64,
+    pub combat_stats: CombatStats,
+}
+
+impl Default for CombatDetails {
+    fn default() -> Self {
+        Self {
+            stamina_level: 1.0,
+            intelligence_level: 1.0,
+            attack_level: 1.0,
+            melee_level: 1.0,
+            defense_level: 1.0,
+            ranged_level: 1.0,
+            magic_level: 1.0,
+            max_hitpoints: 110.0,
+            current_hitpoints: 110.0,
+            max_manapoints: 110.0,
+            current_manapoints: 110.0,
+            stab_accuracy_rating: 11.0,
+            slash_accuracy_rating: 11.0,
+            smash_accuracy_rating: 11.0,
+            ranged_accuracy_rating: 11.0,
+            magic_accuracy_rating: 11.0,
+            stab_max_damage: 11.0,
+            slash_max_damage: 11.0,
+            smash_max_damage: 11.0,
+            ranged_max_damage: 11.0,
+            magic_max_damage: 11.0,
+            stab_evasion_rating: 11.0,
+            slash_evasion_rating: 11.0,
+            smash_evasion_rating: 11.0,
+            ranged_evasion_rating: 11.0,
+            magic_evasion_rating: 11.0,
+            defensive_max_damage: 0.0,
+            total_armor: 0.2,
+            total_water_resistance: 0.4,
+            total_nature_resistance: 0.4,
+            total_fire_resistance: 0.4,
+            ability_haste: 0.0,
+            tenacity: 0.0,
+            total_threat: 100.0,
+            combat_stats: CombatStats::default(),
+        }
+    }
+}
+
+/// 单个增益对某 buff_type 的投影（等价 JS `{ ratioBoost, flatBoost }`）。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BuffBoost {
+    pub ratio_boost: f64,
+    pub flat_boost: f64,
+}
+
+impl BuffBoost {
+    pub const ZERO: Self = Self { ratio_boost: 0.0, flat_boost: 0.0 };
+}
+
+/// 结算期增益汇总：单遍遍历 `combat_buffs`，按 `type_hrid` 直接
+/// 分派到固定槽位——替代旧方案「`index_buffs_by_type` 建 OrderedMap 索引
+/// （每类型一次 String 克隆）+ 结算体 40 次线性查找」。
+///
+/// 两类槽位对应旧 `BuffBoostEntry` 的两种消费形态：
+/// - **逐项槽**（12 个，`Vec<BuffBoost>`）：等级字段 / evasion / armor / 三系
+///   抗性。消费端逐项循环（`value += base * ratio; value += flat`），浮点加法
+///   不满足结合律、逐项顺序不可合并，故按遍历顺序保序追加（等价旧 `entry.buffs`）。
+/// - **汇总槽**（28 个，`BuffBoost`）：消费端只读 ratio/flat 总和。从 `0.0`
+///   起按遍历顺序 `+=` 累加——与 JS `indexBuffsByType` 的
+///   `{ ratioBoost: 0, flatBoost: 0 }` 起点 `+=` 序列逐位一致
+///   （attack_speed 消费端的 `fold(0.0)` 与该序列逐位相同，故归入此类）。
+///
+/// 未匹配任何槽位的 `type_hrid`（结算体不消费的类型）直接跳过——旧索引虽会
+/// 为其建组，但无消费方读取，行为等价。
+#[derive(Default)]
+pub struct SettlementBoosts {
+    // ---- 逐项槽 ----
+    pub stamina_level: Vec<BuffBoost>,
+    pub intelligence_level: Vec<BuffBoost>,
+    pub attack_level: Vec<BuffBoost>,
+    pub melee_level: Vec<BuffBoost>,
+    pub defense_level: Vec<BuffBoost>,
+    pub ranged_level: Vec<BuffBoost>,
+    pub magic_level: Vec<BuffBoost>,
+    pub evasion: Vec<BuffBoost>,
+    pub armor: Vec<BuffBoost>,
+    pub water_resistance: Vec<BuffBoost>,
+    pub nature_resistance: Vec<BuffBoost>,
+    pub fire_resistance: Vec<BuffBoost>,
+    // ---- 汇总槽 ----
+    pub max_hitpoints: BuffBoost,
+    pub max_manapoints: BuffBoost,
+    pub fury_accuracy: BuffBoost,
+    pub fury_damage: BuffBoost,
+    pub accuracy: BuffBoost,
+    pub damage: BuffBoost,
+    pub damage_taken: BuffBoost,
+    pub physical_amplify: BuffBoost,
+    pub water_amplify: BuffBoost,
+    pub nature_amplify: BuffBoost,
+    pub fire_amplify: BuffBoost,
+    pub healing_amplify: BuffBoost,
+    pub attack_speed: BuffBoost,
+    pub hp_regen: BuffBoost,
+    pub mp_regen: BuffBoost,
+    pub life_steal: BuffBoost,
+    pub physical_thorns: BuffBoost,
+    pub elemental_thorns: BuffBoost,
+    pub wisdom: BuffBoost,
+    pub critical_rate: BuffBoost,
+    pub critical_damage: BuffBoost,
+    pub cast_speed: BuffBoost,
+    pub combat_drop_rate: BuffBoost,
+    pub rare_find: BuffBoost,
+    pub combat_drop_quantity: BuffBoost,
+    pub threat: BuffBoost,
+    pub retaliation: BuffBoost,
+    pub tenacity: BuffBoost,
+}
+
+/// `type_hrid` → 槽位的可变引用分派目标。
+enum Slot<'a> {
+    Items(&'a mut Vec<BuffBoost>),
+    Sum(&'a mut BuffBoost),
+}
+
+thread_local! {
+    /// 结算暂存——跨 `update_combat_details` 调用复用 12 个逐项槽的 Vec 容量，
+    /// 消除每次结算的整表构建分配/释放。**非语义状态**：每次使用前全量清零（`rebuild`
+    /// 首步），读数恒来自当次构建；重入（`try_borrow_mut` 失败）时退回独立构建，
+    /// 两条路径的输出逐位恒等，仅放弃容量复用。
+    static SETTLEMENT_BOOSTS_SCRATCH: std::cell::RefCell<SettlementBoosts> =
+        std::cell::RefCell::new(SettlementBoosts::default());
+}
+
+impl SettlementBoosts {
+    /// 单遍构建：遍历顺序 = `combat_buffs` 键序（浮点累加序的前提）。
+    pub fn build(buffs: &OrderedMap<Hrid, Buff>) -> Self {
+        let mut boosts = Self::default();
+        boosts.rebuild(buffs);
+        boosts
+    }
+
+    /// 原地重建（保留全部 Vec 容量）。输出与 `build` 逐位恒等。
+    pub fn rebuild(&mut self, buffs: &OrderedMap<Hrid, Buff>) {
+        let _prof = crate::prof::start("unit.index_buffs");
+        self.clear_for_reuse();
+        for buff in buffs.values() {
+            match self.slot_mut(buff.type_hrid) {
+                Some(Slot::Items(list)) => {
+                    list.push(BuffBoost { ratio_boost: buff.ratio_boost, flat_boost: buff.flat_boost });
+                }
+                Some(Slot::Sum(entry)) => {
+                    entry.ratio_boost += buff.ratio_boost;
+                    entry.flat_boost += buff.flat_boost;
+                }
+                None => {}
+            }
+        }
+    }
+
+    /// 归零到可复用状态——逐项槽 `clear`（保容量）、汇总槽重置为 `BuffBoost::ZERO`
+    ///（与 `Self::default()` 的逐字段起点一致；容器容量不影响任何输出）。
+    fn clear_for_reuse(&mut self) {
+        self.stamina_level.clear();
+        self.intelligence_level.clear();
+        self.attack_level.clear();
+        self.melee_level.clear();
+        self.defense_level.clear();
+        self.ranged_level.clear();
+        self.magic_level.clear();
+        self.evasion.clear();
+        self.armor.clear();
+        self.water_resistance.clear();
+        self.nature_resistance.clear();
+        self.fire_resistance.clear();
+        self.max_hitpoints = BuffBoost::ZERO;
+        self.max_manapoints = BuffBoost::ZERO;
+        self.fury_accuracy = BuffBoost::ZERO;
+        self.fury_damage = BuffBoost::ZERO;
+        self.accuracy = BuffBoost::ZERO;
+        self.damage = BuffBoost::ZERO;
+        self.damage_taken = BuffBoost::ZERO;
+        self.physical_amplify = BuffBoost::ZERO;
+        self.water_amplify = BuffBoost::ZERO;
+        self.nature_amplify = BuffBoost::ZERO;
+        self.fire_amplify = BuffBoost::ZERO;
+        self.healing_amplify = BuffBoost::ZERO;
+        self.attack_speed = BuffBoost::ZERO;
+        self.hp_regen = BuffBoost::ZERO;
+        self.mp_regen = BuffBoost::ZERO;
+        self.life_steal = BuffBoost::ZERO;
+        self.physical_thorns = BuffBoost::ZERO;
+        self.elemental_thorns = BuffBoost::ZERO;
+        self.wisdom = BuffBoost::ZERO;
+        self.critical_rate = BuffBoost::ZERO;
+        self.critical_damage = BuffBoost::ZERO;
+        self.cast_speed = BuffBoost::ZERO;
+        self.combat_drop_rate = BuffBoost::ZERO;
+        self.rare_find = BuffBoost::ZERO;
+        self.combat_drop_quantity = BuffBoost::ZERO;
+        self.threat = BuffBoost::ZERO;
+        self.retaliation = BuffBoost::ZERO;
+        self.tenacity = BuffBoost::ZERO;
+    }
+
+    /// 结算体消费的 40 个 `type_hrid` → 槽位；其余类型返回 `None`（跳过）。
+    /// 匹配集即 `update_combat_details_with_boosts` 的全部消费键，二者成对维护。
+    #[inline]
+    fn slot_mut(&mut self, type_hrid: Hrid) -> Option<Slot<'_>> {
+        Some(match type_hrid {
+            Hrid::BUFF_TYPE_STAMINA_LEVEL => Slot::Items(&mut self.stamina_level),
+            Hrid::BUFF_TYPE_INTELLIGENCE_LEVEL => Slot::Items(&mut self.intelligence_level),
+            Hrid::BUFF_TYPE_ATTACK_LEVEL => Slot::Items(&mut self.attack_level),
+            Hrid::BUFF_TYPE_MELEE_LEVEL => Slot::Items(&mut self.melee_level),
+            Hrid::BUFF_TYPE_DEFENSE_LEVEL => Slot::Items(&mut self.defense_level),
+            Hrid::BUFF_TYPE_RANGED_LEVEL => Slot::Items(&mut self.ranged_level),
+            Hrid::BUFF_TYPE_MAGIC_LEVEL => Slot::Items(&mut self.magic_level),
+            Hrid::BUFF_TYPE_EVASION => Slot::Items(&mut self.evasion),
+            Hrid::BUFF_TYPE_ARMOR => Slot::Items(&mut self.armor),
+            Hrid::BUFF_TYPE_WATER_RESISTANCE => Slot::Items(&mut self.water_resistance),
+            Hrid::BUFF_TYPE_NATURE_RESISTANCE => Slot::Items(&mut self.nature_resistance),
+            Hrid::BUFF_TYPE_FIRE_RESISTANCE => Slot::Items(&mut self.fire_resistance),
+            Hrid::BUFF_TYPE_MAX_HITPOINTS => Slot::Sum(&mut self.max_hitpoints),
+            Hrid::BUFF_TYPE_MAX_MANAPOINTS => Slot::Sum(&mut self.max_manapoints),
+            Hrid::BUFF_TYPE_FURY_ACCURACY => Slot::Sum(&mut self.fury_accuracy),
+            Hrid::BUFF_TYPE_FURY_DAMAGE => Slot::Sum(&mut self.fury_damage),
+            Hrid::BUFF_TYPE_ACCURACY => Slot::Sum(&mut self.accuracy),
+            Hrid::BUFF_TYPE_DAMAGE => Slot::Sum(&mut self.damage),
+            Hrid::BUFF_TYPE_DAMAGE_TAKEN => Slot::Sum(&mut self.damage_taken),
+            Hrid::BUFF_TYPE_PHYSICAL_AMPLIFY => Slot::Sum(&mut self.physical_amplify),
+            Hrid::BUFF_TYPE_WATER_AMPLIFY => Slot::Sum(&mut self.water_amplify),
+            Hrid::BUFF_TYPE_NATURE_AMPLIFY => Slot::Sum(&mut self.nature_amplify),
+            Hrid::BUFF_TYPE_FIRE_AMPLIFY => Slot::Sum(&mut self.fire_amplify),
+            Hrid::BUFF_TYPE_HEALING_AMPLIFY => Slot::Sum(&mut self.healing_amplify),
+            Hrid::BUFF_TYPE_ATTACK_SPEED => Slot::Sum(&mut self.attack_speed),
+            Hrid::BUFF_TYPE_HP_REGEN => Slot::Sum(&mut self.hp_regen),
+            Hrid::BUFF_TYPE_MP_REGEN => Slot::Sum(&mut self.mp_regen),
+            Hrid::BUFF_TYPE_LIFE_STEAL => Slot::Sum(&mut self.life_steal),
+            Hrid::BUFF_TYPE_PHYSICAL_THORNS => Slot::Sum(&mut self.physical_thorns),
+            Hrid::BUFF_TYPE_ELEMENTAL_THORNS => Slot::Sum(&mut self.elemental_thorns),
+            Hrid::BUFF_TYPE_WISDOM => Slot::Sum(&mut self.wisdom),
+            Hrid::BUFF_TYPE_CRITICAL_RATE => Slot::Sum(&mut self.critical_rate),
+            Hrid::BUFF_TYPE_CRITICAL_DAMAGE => Slot::Sum(&mut self.critical_damage),
+            Hrid::BUFF_TYPE_CAST_SPEED => Slot::Sum(&mut self.cast_speed),
+            Hrid::BUFF_TYPE_COMBAT_DROP_RATE => Slot::Sum(&mut self.combat_drop_rate),
+            Hrid::BUFF_TYPE_RARE_FIND => Slot::Sum(&mut self.rare_find),
+            Hrid::BUFF_TYPE_COMBAT_DROP_QUANTITY => Slot::Sum(&mut self.combat_drop_quantity),
+            Hrid::BUFF_TYPE_THREAT => Slot::Sum(&mut self.threat),
+            Hrid::BUFF_TYPE_RETALIATION => Slot::Sum(&mut self.retaliation),
+            Hrid::BUFF_TYPE_TENACITY => Slot::Sum(&mut self.tenacity),
+            _ => return None,
+        })
+    }
+}
+
+/// 注册表中的一个源（等价 JS `{ buff, expiresAt, sequence }`）。
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BuffSourceEntry {
+    pub buff: Buff,
+    pub expires_at: f64,
+    pub sequence: u64,
+}
+
+/// houseRooms / guildBuffs / achievements 的元素形态（仅消费其 `buffs` 数组）。
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BuffList {
+    #[serde(default)]
+    pub buffs: Vec<RawBuffInput>,
+}
+
+/// 原始增益记录（addBuff / addPermanentBuff 的输入）。
+///
+/// 逐字段可缺失，以便复刻 JS 的运行时校验顺序与报错文本；`AddBuff` 注册时
+/// **不做等级并入**（等级并入发生在 `new Buff(raw, level)`，即更早的构造点）。
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RawBuffInput {
+    #[serde(default)]
+    pub unique_hrid: Option<Hrid>,
+    #[serde(default)]
+    pub type_hrid: Option<Hrid>,
+    #[serde(default)]
+    pub ratio_boost: Option<f64>,
+    #[serde(default)]
+    pub flat_boost: Option<f64>,
+    #[serde(default)]
+    pub duration: Option<f64>,
+    #[serde(default)]
+    pub start_time: Option<f64>,
+    #[serde(default)]
+    pub multiplier_for_skill_hrid: Option<Hrid>,
+    #[serde(default)]
+    pub multiplier_per_skill_level: Option<f64>,
+}
+
+/// 玩家配置的战斗卷轴行（JS `normalizeCombatScrolls` 后的 `{ itemHrid: { quantity } }`
+/// 投影；数组顺序 = JS 对象键序。桥侧快照，Rust 不持有游戏数据）。
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CombatScrollConfig {
+    pub item_hrid: Hrid,
+    /// `None` = JS `null`（无限库存）；`Some` = 正安全整数。
+    #[serde(default)]
+    pub quantity: Option<f64>,
+}
+
+/// `removeBuff` 的源选择器（等价 JS 的 `REMOVE_ACTIVE_SOURCE` / 显式键 / `null`）。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum BuffSourceSelector {
+    /// 省略参数：定位当前活动源（含漂移防御回退）。
+    ActiveSource,
+    /// 显式参数：`None` 等价 JS 的 `null`（指向 `default` 键）。
+    Explicit(Option<Hrid>),
+}
+
+/// 战斗单位（等价 JS `CombatUnit` 的引擎相关状态）。
+#[derive(Clone, Debug)]
+pub struct CombatUnit {
+    pub is_player: bool,
+    pub is_stunned: bool,
+    pub stun_expire_time: Option<f64>,
+    pub is_blinded: bool,
+    pub blind_expire_time: Option<f64>,
+    pub is_silenced: bool,
+    pub silence_expire_time: Option<f64>,
+    pub is_out_of_mana: bool,
+    pub stamina_level: f64,
+    pub intelligence_level: f64,
+    pub attack_level: f64,
+    pub melee_level: f64,
+    pub defense_level: f64,
+    pub ranged_level: f64,
+    pub magic_level: f64,
+    pub experience: f64,
+    pub experience_rate: f64,
+    pub enrage_time: f64,
+    /// 该怪物实例的有效难度档（JS `Monster.difficultyTier` = spawn 偏移 + 区域档）。
+    /// 掉落上下文桶的 `difficultyTier` 取此值——同一 hrid 可能以多档出现，不能按 hrid 反查。
+    /// 玩家 / 探针合成单位为 `None`（等价 JS DTO 单位上的 undefined）。
+    pub difficulty_tier: Option<f64>,
+    /// JS `unit.debuffOnLevelGap`（玩家 DTO 顶层字段，怪物恒 0）：经验计算与
+    /// 掉落上下文桶按 `(1 + debuffOnLevelGap)` 缩放。由桥序列化。
+    pub debuff_on_level_gap: f64,
+    pub house_rooms: Vec<BuffList>,
+    pub guild_buffs: Vec<BuffList>,
+    pub achievements: Option<BuffList>,
+    pub zone_buffs: Vec<RawBuffInput>,
+    pub extra_buffs: Vec<RawBuffInput>,
+    /// 玩家配置的战斗卷轴（JS `player.combatScrolls` 归一投影；怪物为空）。
+    pub combat_scrolls: Vec<CombatScrollConfig>,
+    pub combat_details: CombatDetails,
+    pub base_combat_stats: Option<CombatStats>,
+    /// 「类自有」面板快照（仅 spec 标记 `classOwnedStats` 时存在）：
+    /// JS 的 `Player` / `Monster` 覆写在捕获基准前会重写类自有字段（装备 / 怪物数据），
+    /// Rust 无该覆写步骤，因此在 `clear_ccs` 的基准刷新点用它恢复这些字段。
+    pub class_base_combat_stats: Option<CombatStats>,
+    pub combat_buffs: OrderedMap<Hrid, Buff>,
+    pub permanent_buffs: OrderedMap<Hrid, Buff>,
+    pub buff_sources: OrderedMap<Hrid, OrderedMap<Hrid, BuffSourceEntry>>,
+    pub active_buff_source_keys: OrderedMap<Hrid, Hrid>,
+    pub buff_source_policies: OrderedMap<Hrid, BuffSourcePolicy>,
+    pub buff_source_sequence: u64,
+    /// `/equipment_types/two_hand` 槽位的 hrid（bulwark 判定；等价 JS `equipment?.[...]?.hrid`）。
+    pub two_hand_hrid: Option<Hrid>,
+    // -----------------------------------------------------------------------
+    // 模拟循环所需的单位状态（JS `combatUnit.js` 字段 + 模拟器写入的运行时字段）
+    // -----------------------------------------------------------------------
+    /// 单位标识（JS `unit.hrid`）；事件定位、按 hrid 查找与日志都使用它。
+    pub hrid: Hrid,
+    /// JS `isWeakened` 在整个仓库中从未被赋值（恒 undefined ⇒ 恒假），如实建模。
+    pub is_weakened: bool,
+    /// JS `weakenPercentage` 同样从未赋值；`processAttack` 的命中惩罚分支恒不触发。
+    pub weaken_percentage: f64,
+    /// JS 模拟器写入的 `source.weakenExpireTime`（写入后无读取点，仅保持状态完整）。
+    pub weaken_expire_time: Option<f64>,
+    /// 技能槽（JS 固定 4 个，未装备为 null）。
+    ///
+    /// 注：曾试验把这里改成 `Rc<Ability>`（省掉施法路径的快照深拷贝）：原生 prof 快约 11%，
+    /// 但 **WASM 端到端反而慢 5%–15%**（多一层指针追逐 + 每个单位多若干次堆分配），
+    /// 故保持裸值。
+    pub abilities: Vec<Option<Ability>>,
+    /// 食物 / 饮料槽（JS 各 3 个）。
+    pub food: Vec<Option<Consumable>>,
+    pub drinks: Vec<Option<Consumable>>,
+    /// 每个技能累计消耗的魔法值（JS `abilityManaCosts` Map，仅玩家记账）。
+    pub ability_mana_costs: OrderedMap<Hrid, f64>,
+    /// 重生池键（`"<hrid>|<tier 键>"`，迷宫为 `"<hrid>|lab"`）。
+    /// 仅由 `instantiate_templates` / 升变产物写入——`Some` 的怪物死亡后其槽位可入池、
+    /// 被同键重生**原地复用**；玩家与探针合成单位恒 `None`（永不入池/复用）。
+    pub respawn_pool_key: Option<String>,
+}
+
+impl Default for CombatUnit {
+    fn default() -> Self {
+        Self {
+            is_player: false,
+            is_stunned: false,
+            stun_expire_time: None,
+            is_blinded: false,
+            blind_expire_time: None,
+            is_silenced: false,
+            silence_expire_time: None,
+            is_out_of_mana: false,
+            stamina_level: 1.0,
+            intelligence_level: 1.0,
+            attack_level: 1.0,
+            melee_level: 1.0,
+            defense_level: 1.0,
+            ranged_level: 1.0,
+            magic_level: 1.0,
+            experience: 0.0,
+            experience_rate: 0.0,
+            enrage_time: 0.0,
+            difficulty_tier: None,
+            debuff_on_level_gap: 0.0,
+            house_rooms: Vec::new(),
+            guild_buffs: Vec::new(),
+            achievements: None,
+            zone_buffs: Vec::new(),
+            extra_buffs: Vec::new(),
+            combat_scrolls: Vec::new(),
+            combat_details: CombatDetails::default(),
+            base_combat_stats: None,
+            class_base_combat_stats: None,
+            combat_buffs: OrderedMap::new(),
+            permanent_buffs: OrderedMap::new(),
+            buff_sources: OrderedMap::new(),
+            active_buff_source_keys: OrderedMap::new(),
+            buff_source_policies: OrderedMap::new(),
+            buff_source_sequence: 0,
+            two_hand_hrid: None,
+            hrid: Hrid::EMPTY,
+            is_weakened: false,
+            weaken_percentage: 0.0,
+            weaken_expire_time: None,
+            abilities: vec![None, None, None, None],
+            food: vec![None, None, None],
+            drinks: vec![None, None, None],
+            ability_mana_costs: OrderedMap::new(),
+            respawn_pool_key: None,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 源选择（JS 70-162 行）
+// ---------------------------------------------------------------------------
+
+fn pick_latest_buff_source(sources: &OrderedMap<Hrid, BuffSourceEntry>) -> Option<(&Hrid, &BuffSourceEntry)> {
+    let mut latest: Option<(&Hrid, &BuffSourceEntry)> = None;
+    for (source_key, entry) in sources.iter() {
+        if latest.is_none() || entry.sequence > latest.expect("latest checked").1.sequence {
+            latest = Some((source_key, entry));
+        }
+    }
+    latest
+}
+
+fn pick_strongest_buff_source(
+    sources: &OrderedMap<Hrid, BuffSourceEntry>,
+) -> Result<Option<(&Hrid, &BuffSourceEntry)>, UnitError> {
+    let mut best: Option<(&Hrid, &BuffSourceEntry)> = None;
+    for (source_key, entry) in sources.iter() {
+        // 完全相等的 ratio/flat 刻意不算「更强」：迭代保留最先注册的源（平局规则）。
+        if is_stronger_party_aura_buff(Some(&entry.buff), best.map(|(_, best_entry)| &best_entry.buff))? {
+            best = Some((source_key, entry));
+        }
+    }
+    Ok(best)
+}
+
+fn pick_active_buff_source<'a>(
+    sources: &'a OrderedMap<Hrid, BuffSourceEntry>,
+    policy: BuffSourcePolicy,
+    preferred_source_key: Option<Hrid>,
+) -> Result<Option<(&'a Hrid, &'a BuffSourceEntry)>, UnitError> {
+    if policy == BuffSourcePolicy::Strongest {
+        return pick_strongest_buff_source(sources);
+    }
+    if let Some(preferred) = preferred_source_key {
+        if let Some(entry) = sources.iter().find(|(source_key, _)| **source_key == preferred) {
+            return Ok(Some(entry));
+        }
+    }
+    Ok(pick_latest_buff_source(sources))
+}
+
+fn normalize_buff_source_policy(policy: Option<&str>) -> Result<BuffSourcePolicy, UnitError> {
+    match policy {
+        None => Ok(BuffSourcePolicy::Replace),
+        Some("replace") => Ok(BuffSourcePolicy::Replace),
+        Some("strongest") => Ok(BuffSourcePolicy::Strongest),
+        Some(other) => Err(UnitError::type_error(format!("Unsupported buff source policy: {other}"))),
+    }
+}
+
+pub fn policy_name(policy: BuffSourcePolicy) -> &'static str {
+    match policy {
+        BuffSourcePolicy::Replace => "replace",
+        BuffSourcePolicy::Strongest => "strongest",
+    }
+}
+
+fn read_non_empty_hrid(value: Option<Hrid>, field_name: &str) -> Result<Hrid, UnitError> {
+    match value {
+        Some(hrid) if with_hrid(hrid, |text| !text.trim().is_empty()) => Ok(hrid),
+        _ => Err(UnitError::type_error(format!(
+            "CombatUnit buff {field_name} must be a non-empty string"
+        ))),
+    }
+}
+
+fn read_finite_number(value: Option<f64>, field_name: &str, unique_hrid: Hrid) -> Result<f64, UnitError> {
+    match value.filter(|candidate| candidate.is_finite()) {
+        Some(number) => Ok(number),
+        None => Err(UnitError::type_error(format!(
+            "CombatUnit buff {field_name} must be a finite number for {unique_hrid}"
+        ))),
+    }
+}
+
+fn raw_buff_from_input(input: &RawBuffInput, start_time: Option<f64>) -> Buff {
+    // JS 侧缺失字段为 undefined；此处 ratio/flat 以 NaN 兜底（消费端 NaN 语义一致，
+    // 探针轨迹两边都归一为 null），其余字段按 `?? ''` / `?? 0` 归一。
+    Buff {
+        unique_hrid: input.unique_hrid.unwrap_or(Hrid::EMPTY),
+        type_hrid: input.type_hrid.unwrap_or(Hrid::EMPTY),
+        ratio_boost: input.ratio_boost.unwrap_or(f64::NAN),
+        flat_boost: input.flat_boost.unwrap_or(f64::NAN),
+        duration: input.duration,
+        start_time,
+        multiplier_for_skill_hrid: input.multiplier_for_skill_hrid.unwrap_or(Hrid::EMPTY),
+        multiplier_per_skill_level: input.multiplier_per_skill_level.unwrap_or(0.0),
+    }
+}
+
+/// 单个等级字段的结算（等价 JS 对某 COMBAT_LEVEL_FIELDS 项的累加循环）。
+fn settled_level(base_level: f64, boosts: &[BuffBoost]) -> f64 {
+    let mut value = base_level;
+    for boost in boosts {
+        value += base_level * boost.ratio_boost;
+        value += boost.flat_boost;
+    }
+    value
+}
+
+impl CombatUnit {
+    /// 重生槽位复用：把全部字段恢复为 `Default` 形态，**原地**保留
+    /// `abilities` / `food` / `drinks` 等 Vec 的已分配容量。
+    ///
+    /// 字段清单与 `Default for CombatUnit` 一一对应——**新增字段时必须同步维护两处**
+    /// （`build_unit_from_spec` 的写入字段与 default 形态共同构成复用的覆盖面）。
+    pub fn reset_to_default_in_place(&mut self) {
+        self.reset_to_default_impl(true);
+    }
+
+    /// 重生复用专用变体——**保留 loadout 槽位内容**（abilities / food / drinks）。
+    ///
+    /// `restore_for_respawn` 紧随其后调用 `apply_unit_spec`：槽位由 `clone_from_reuse`
+    /// 同形态覆盖（复用内层 Vec 分配），超出 spec 长度的槽位由 apply 清空并归位长度；
+    /// 最终字段值与 `reset_to_default_in_place` + 全新克隆逐位一致（等价性由
+    /// `respawn_reuse_matches_non_reuse_round_trip` 锁定）。
+    pub fn reset_to_default_keep_loadout(&mut self) {
+        self.reset_to_default_impl(false);
+    }
+
+    /// `reset_to_default_in_place` 的公共主体。
+    ///
+    /// `clear_loadout_slots = true` 时把 abilities / food / drinks 恢复为默认槽位形态
+    /// （长度 4/3/3 且全空）；`false` 时跳过这三组槽位的清理，留给调用方覆盖写入。
+    /// 字段清单与 `Default for CombatUnit` 一一对应——**新增字段时必须同步维护两处**
+    /// （`build_unit_from_spec` 的写入字段与 default 形态共同构成复用的覆盖面）。
+    fn reset_to_default_impl(&mut self, clear_loadout_slots: bool) {
+        self.is_player = false;
+        self.is_stunned = false;
+        self.stun_expire_time = None;
+        self.is_blinded = false;
+        self.blind_expire_time = None;
+        self.is_silenced = false;
+        self.silence_expire_time = None;
+        self.is_out_of_mana = false;
+        self.stamina_level = 1.0;
+        self.intelligence_level = 1.0;
+        self.attack_level = 1.0;
+        self.melee_level = 1.0;
+        self.defense_level = 1.0;
+        self.ranged_level = 1.0;
+        self.magic_level = 1.0;
+        self.experience = 0.0;
+        self.experience_rate = 0.0;
+        self.enrage_time = 0.0;
+        self.difficulty_tier = None;
+        self.debuff_on_level_gap = 0.0;
+        self.house_rooms.clear();
+        self.guild_buffs.clear();
+        self.achievements = None;
+        self.zone_buffs.clear();
+        self.extra_buffs.clear();
+        self.combat_scrolls.clear();
+        self.combat_details = CombatDetails::default();
+        self.base_combat_stats = None;
+        self.class_base_combat_stats = None;
+        // OrderedMap 一律 clear()——保留已分配的桶缓冲，避免每次重生重新分配。
+        self.combat_buffs.clear();
+        self.permanent_buffs.clear();
+        self.buff_sources.clear();
+        self.active_buff_source_keys.clear();
+        self.buff_source_policies.clear();
+        self.buff_source_sequence = 0;
+        self.two_hand_hrid = None;
+        self.hrid = Hrid::EMPTY;
+        self.is_weakened = false;
+        self.weaken_percentage = 0.0;
+        self.weaken_expire_time = None;
+        if clear_loadout_slots {
+            // Vec 容量保留：先按默认槽位数截断/补齐，再逐槽清空（旧值随之释放）。
+            self.abilities.resize(4, None);
+            for slot in self.abilities.iter_mut() {
+                *slot = None;
+            }
+            self.food.resize(3, None);
+            for slot in self.food.iter_mut() {
+                *slot = None;
+            }
+            self.drinks.resize(3, None);
+            for slot in self.drinks.iter_mut() {
+                *slot = None;
+            }
+        }
+        self.ability_mana_costs.clear();
+        self.respawn_pool_key = None;
+    }
+
+    // -----------------------------------------------------------------------
+    // 基准属性（JS 368-404 行）
+    // -----------------------------------------------------------------------
+
+    /// 等价 JS `refreshBaseCombatStats`：把当前面板捕获为「纯净基准」。
+    pub fn refresh_base_combat_stats(&mut self) {
+        self.base_combat_stats = Some(self.combat_details.combat_stats.clone());
+    }
+
+    /// 等价 JS `resetCombatStatsToBase`：无基准则先捕获，然后整体恢复。
+    pub fn reset_combat_stats_to_base(&mut self) {
+        if self.base_combat_stats.is_none() {
+            self.refresh_base_combat_stats();
+        }
+        if let Some(base) = &self.base_combat_stats {
+            self.combat_details.combat_stats = base.clone();
+        }
+    }
+
+    /// 等价 JS `updateCombatDetails`：构建增益汇总 → 结算。
+    pub fn update_combat_details(&mut self) {
+        let _prof = crate::prof::start("unit.update_details");
+        // 优先复用线程内暂存（见 SETTLEMENT_BOOSTS_SCRATCH 注释）；不可用
+        //（极端重入 / 线程销毁中）时退回独立构建——两条路径的输出逐位恒等。
+        let handled = SETTLEMENT_BOOSTS_SCRATCH.try_with(|cell| {
+            if let Ok(mut boosts) = cell.try_borrow_mut() {
+                boosts.rebuild(&self.combat_buffs);
+                self.update_combat_details_with_boosts(&boosts);
+                true
+            } else {
+                false
+            }
+        });
+        if !matches!(handled, Ok(true)) {
+            let boosts = SettlementBoosts::build(&self.combat_buffs);
+            self.update_combat_details_with_boosts(&boosts);
+        }
+    }
+
+    /// 结算主体（等价 JS `updateCombatDetailsFromBuffs`，忽略 FRESH_COMBAT_STATS 微优化）。
+    pub fn update_combat_details_with_boosts(&mut self, boosts: &SettlementBoosts) {
+        let _prof = crate::prof::start("unit.update_details_full");
+        self.reset_combat_stats_to_base();
+
+        if self.is_player {
+            self.combat_details.combat_stats.hp_regen_per10 += 0.01;
+            self.combat_details.combat_stats.mp_regen_per10 += 0.01;
+        }
+
+        // COMBAT_LEVEL_FIELDS（JS 164-172 行）——加成基数取单位自身等级字段。
+        let stamina_level = settled_level(self.stamina_level, &boosts.stamina_level);
+        let intelligence_level = settled_level(self.intelligence_level, &boosts.intelligence_level);
+        let attack_level = settled_level(self.attack_level, &boosts.attack_level);
+        let melee_level = settled_level(self.melee_level, &boosts.melee_level);
+        let defense_level = settled_level(self.defense_level, &boosts.defense_level);
+        let ranged_level = settled_level(self.ranged_level, &boosts.ranged_level);
+        let magic_level = settled_level(self.magic_level, &boosts.magic_level);
+
+        let is_bulwark = self.two_hand_hrid.is_some_and(|hrid| with_hrid(hrid, |text| text.contains("bulwark")));
+        let cd = &mut self.combat_details;
+
+        cd.stamina_level = stamina_level;
+        cd.intelligence_level = intelligence_level;
+        cd.attack_level = attack_level;
+        cd.melee_level = melee_level;
+        cd.defense_level = defense_level;
+        cd.ranged_level = ranged_level;
+        cd.magic_level = magic_level;
+
+        let max_hitpoints_boost = boosts.max_hitpoints;
+        let max_manapoints_boost = boosts.max_manapoints;
+        cd.max_hitpoints = (((10.0 * (10.0 + cd.stamina_level)) + cd.combat_stats.max_hitpoints)
+            + max_hitpoints_boost.flat_boost)
+            * (((1.0 + cd.combat_stats.max_hitpoints_ratio) + max_hitpoints_boost.ratio_boost));
+        cd.max_hitpoints = cd.max_hitpoints.floor();
+        cd.max_manapoints = (((10.0 * (10.0 + cd.intelligence_level)) + cd.combat_stats.max_manapoints)
+            + max_manapoints_boost.flat_boost)
+            * (((1.0 + cd.combat_stats.max_manapoints_ratio) + max_manapoints_boost.ratio_boost));
+        cd.max_manapoints = cd.max_manapoints.floor();
+
+        let accuracy_ratio_boost_from_fury = boosts.fury_accuracy.ratio_boost;
+        let damage_ratio_boost_from_fury = boosts.fury_damage.ratio_boost;
+        let accuracy_ratio_boost = boosts.accuracy.ratio_boost;
+        let damage_ratio_boost = boosts.damage.ratio_boost;
+
+        let evasion_boosts = &boosts.evasion;
+        // MELEE_STYLE_FIELDS（stab / slash / smash）
+        cd.stab_accuracy_rating = (10.0 + cd.attack_level)
+            * (1.0 + cd.combat_stats.stab_accuracy)
+            * (1.0 + accuracy_ratio_boost)
+            * (1.0 + accuracy_ratio_boost_from_fury);
+        cd.stab_max_damage = (10.0 + cd.melee_level)
+            * (1.0 + cd.combat_stats.stab_damage)
+            * (1.0 + damage_ratio_boost)
+            * (1.0 + damage_ratio_boost_from_fury);
+        let base_evasion = (10.0 + cd.defense_level) * (1.0 + cd.combat_stats.stab_evasion);
+        cd.stab_evasion_rating = base_evasion;
+        for boost in evasion_boosts {
+            cd.stab_evasion_rating += boost.flat_boost;
+            cd.stab_evasion_rating += base_evasion * boost.ratio_boost;
+        }
+
+        cd.slash_accuracy_rating = (10.0 + cd.attack_level)
+            * (1.0 + cd.combat_stats.slash_accuracy)
+            * (1.0 + accuracy_ratio_boost)
+            * (1.0 + accuracy_ratio_boost_from_fury);
+        cd.slash_max_damage = (10.0 + cd.melee_level)
+            * (1.0 + cd.combat_stats.slash_damage)
+            * (1.0 + damage_ratio_boost)
+            * (1.0 + damage_ratio_boost_from_fury);
+        let base_evasion = (10.0 + cd.defense_level) * (1.0 + cd.combat_stats.slash_evasion);
+        cd.slash_evasion_rating = base_evasion;
+        for boost in evasion_boosts {
+            cd.slash_evasion_rating += boost.flat_boost;
+            cd.slash_evasion_rating += base_evasion * boost.ratio_boost;
+        }
+
+        cd.smash_accuracy_rating = (10.0 + cd.attack_level)
+            * (1.0 + cd.combat_stats.smash_accuracy)
+            * (1.0 + accuracy_ratio_boost)
+            * (1.0 + accuracy_ratio_boost_from_fury);
+        cd.smash_max_damage = (10.0 + cd.melee_level)
+            * (1.0 + cd.combat_stats.smash_damage)
+            * (1.0 + damage_ratio_boost)
+            * (1.0 + damage_ratio_boost_from_fury);
+        let base_evasion = (10.0 + cd.defense_level) * (1.0 + cd.combat_stats.smash_evasion);
+        cd.smash_evasion_rating = base_evasion;
+        for boost in evasion_boosts {
+            cd.smash_evasion_rating += boost.flat_boost;
+            cd.smash_evasion_rating += base_evasion * boost.ratio_boost;
+        }
+
+        cd.defensive_max_damage = (10.0 + cd.defense_level)
+            * (1.0 + cd.combat_stats.defensive_damage)
+            * (1.0 + damage_ratio_boost)
+            * (1.0 + damage_ratio_boost_from_fury);
+
+        // 装备 bulwark（壁垒盾）时，闪击最大伤害叠加防御伤害。
+        if is_bulwark {
+            cd.smash_max_damage += cd.defensive_max_damage;
+        }
+
+        cd.ranged_accuracy_rating = (10.0 + cd.attack_level)
+            * (1.0 + cd.combat_stats.ranged_accuracy)
+            * (1.0 + accuracy_ratio_boost)
+            * (1.0 + accuracy_ratio_boost_from_fury);
+        cd.ranged_max_damage = (10.0 + cd.ranged_level)
+            * (1.0 + cd.combat_stats.ranged_damage)
+            * (1.0 + damage_ratio_boost)
+            * (1.0 + damage_ratio_boost_from_fury);
+
+        let base_ranged_evasion = (10.0 + cd.defense_level) * (1.0 + cd.combat_stats.ranged_evasion);
+        cd.ranged_evasion_rating = base_ranged_evasion;
+        for boost in evasion_boosts {
+            cd.ranged_evasion_rating += boost.flat_boost;
+            cd.ranged_evasion_rating += base_ranged_evasion * boost.ratio_boost;
+        }
+
+        cd.combat_stats.damage_taken = boosts.damage_taken.flat_boost;
+
+        cd.magic_accuracy_rating = (10.0 + cd.attack_level)
+            * (1.0 + cd.combat_stats.magic_accuracy)
+            * (1.0 + accuracy_ratio_boost)
+            * (1.0 + accuracy_ratio_boost_from_fury);
+        cd.magic_max_damage = (10.0 + cd.magic_level)
+            * (1.0 + cd.combat_stats.magic_damage)
+            * (1.0 + damage_ratio_boost)
+            * (1.0 + damage_ratio_boost_from_fury);
+
+        let base_magic_evasion = (10.0 + cd.defense_level) * (1.0 + cd.combat_stats.magic_evasion);
+        cd.magic_evasion_rating = base_magic_evasion;
+        for boost in evasion_boosts {
+            cd.magic_evasion_rating += boost.flat_boost;
+            cd.magic_evasion_rating += base_magic_evasion * boost.ratio_boost;
+        }
+
+        cd.combat_stats.physical_amplify += boosts.physical_amplify.flat_boost;
+        cd.combat_stats.water_amplify += boosts.water_amplify.flat_boost;
+        cd.combat_stats.nature_amplify += boosts.nature_amplify.flat_boost;
+        cd.combat_stats.fire_amplify += boosts.fire_amplify.flat_boost;
+        cd.combat_stats.healing_amplify += boosts.healing_amplify.flat_boost;
+
+        cd.combat_stats.attack_interval /= 1.0 + cd.attack_level / 2000.0;
+
+        let base_attack_speed = cd.combat_stats.attack_speed;
+        cd.combat_stats.attack_interval /= 1.0 + base_attack_speed;
+        // fold(0.0) 与汇总槽「0.0 起按序 +=」的浮点序列逐位一致，直接读汇总。
+        let attack_interval_ratio_boost = boosts.attack_speed.ratio_boost;
+        cd.combat_stats.attack_interval /= 1.0 + attack_interval_ratio_boost;
+
+        let base_armor = 0.2 * cd.defense_level + cd.combat_stats.armor;
+        cd.total_armor = base_armor;
+        for boost in &boosts.armor {
+            cd.total_armor += boost.flat_boost;
+            cd.total_armor += base_armor * boost.ratio_boost;
+        }
+
+        let base_water_resistance = 0.2 * cd.defense_level + cd.combat_stats.water_resistance;
+        cd.total_water_resistance = base_water_resistance;
+        for boost in &boosts.water_resistance {
+            cd.total_water_resistance += boost.flat_boost;
+            cd.total_water_resistance += base_water_resistance * boost.ratio_boost;
+        }
+
+        let base_nature_resistance = 0.2 * cd.defense_level + cd.combat_stats.nature_resistance;
+        cd.total_nature_resistance = base_nature_resistance;
+        for boost in &boosts.nature_resistance {
+            cd.total_nature_resistance += boost.flat_boost;
+            cd.total_nature_resistance += base_nature_resistance * boost.ratio_boost;
+        }
+
+        let base_fire_resistance = 0.2 * cd.defense_level + cd.combat_stats.fire_resistance;
+        cd.total_fire_resistance = base_fire_resistance;
+        for boost in &boosts.fire_resistance {
+            cd.total_fire_resistance += boost.flat_boost;
+            cd.total_fire_resistance += base_fire_resistance * boost.ratio_boost;
+        }
+
+        let hp_regen_boosts = boosts.hp_regen;
+        cd.combat_stats.hp_regen_per10 += cd.combat_stats.hp_regen_per10 * hp_regen_boosts.ratio_boost;
+        cd.combat_stats.hp_regen_per10 += hp_regen_boosts.flat_boost;
+
+        let mp_regen_boosts = boosts.mp_regen;
+        cd.combat_stats.mp_regen_per10 += cd.combat_stats.mp_regen_per10 * mp_regen_boosts.ratio_boost;
+        cd.combat_stats.mp_regen_per10 += mp_regen_boosts.flat_boost;
+
+        cd.combat_stats.life_steal += boosts.life_steal.flat_boost;
+        cd.combat_stats.physical_thorns += boosts.physical_thorns.flat_boost;
+        cd.combat_stats.elemental_thorns += boosts.elemental_thorns.flat_boost;
+        cd.combat_stats.combat_experience += boosts.wisdom.flat_boost;
+        cd.combat_stats.critical_rate += boosts.critical_rate.flat_boost;
+        cd.combat_stats.critical_damage += boosts.critical_damage.flat_boost;
+
+        cd.combat_stats.cast_speed += boosts.cast_speed.flat_boost;
+        cd.combat_stats.cast_speed += cd.attack_level / 2000.0;
+
+        let combat_drop_rate_boosts = boosts.combat_drop_rate;
+        cd.combat_stats.combat_drop_rate += (1.0 + cd.combat_stats.combat_drop_rate) * combat_drop_rate_boosts.ratio_boost;
+        cd.combat_stats.combat_drop_rate += combat_drop_rate_boosts.flat_boost;
+        let combat_rare_find_boosts = boosts.rare_find;
+        cd.combat_stats.combat_rare_find += (1.0 + cd.combat_stats.combat_rare_find) * combat_rare_find_boosts.ratio_boost;
+        cd.combat_stats.combat_rare_find += combat_rare_find_boosts.flat_boost;
+        let combat_drop_quantity_boosts = boosts.combat_drop_quantity;
+        cd.combat_stats.combat_drop_quantity +=
+            (1.0 + cd.combat_stats.combat_drop_quantity) * combat_drop_quantity_boosts.ratio_boost;
+        cd.combat_stats.combat_drop_quantity += combat_drop_quantity_boosts.flat_boost;
+
+        let base_threat = 100.0 + cd.combat_stats.threat;
+        cd.total_threat = base_threat;
+        let threat_boosts = boosts.threat;
+        if threat_boosts.ratio_boost != 0.0 {
+            cd.combat_stats.threat += base_threat * threat_boosts.ratio_boost;
+        } else {
+            cd.combat_stats.threat = base_threat;
+        }
+        cd.combat_stats.threat += threat_boosts.flat_boost;
+
+        cd.combat_stats.retaliation += boosts.retaliation.flat_boost;
+        // JS：combatStats.tenacity 缺失时为 undefined，`undefined + x` 得 NaN（键随之出现且此后保持）。
+        cd.combat_stats.tenacity = Some(match cd.combat_stats.tenacity {
+            Some(value) => value + boosts.tenacity.flat_boost,
+            None => f64::NAN,
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // 增益生命周期（JS 615-966 行）
+    // -----------------------------------------------------------------------
+
+    /// 等价 JS `addBuff(buff, currentTime, sourceHrid = null, { sourcePolicy })`。
+    ///
+    /// `source_policy` 传原始策略字符串（`"replace"` / `"strongest"`），
+    /// 以便复刻 JS 对未知策略值的 TypeError（`panic` 风格的错误文本逐字一致）。
+    pub fn add_buff(
+        &mut self,
+        input: &RawBuffInput,
+        current_time: f64,
+        source_hrid: Option<Hrid>,
+        source_policy: Option<&str>,
+    ) -> Result<(), UnitError> {
+        let _prof = crate::prof::start("unit.add_buff");
+        if !current_time.is_finite() {
+            return Err(UnitError::type_error("CombatUnit.addBuff requires a finite numeric currentTime"));
+        }
+
+        let unique_hrid = read_non_empty_hrid(input.unique_hrid, "uniqueHrid")?;
+        let type_hrid = read_non_empty_hrid(input.type_hrid, "typeHrid")?;
+        let ratio_boost = read_finite_number(input.ratio_boost, "ratioBoost", unique_hrid)?;
+        let flat_boost = read_finite_number(input.flat_boost, "flatBoost", unique_hrid)?;
+        let duration = read_finite_number(input.duration, "duration", unique_hrid)?;
+
+        // 注册副本：调用方对象不被修改，startTime 由注册时刻决定。
+        let registered_buff = Buff {
+            unique_hrid,
+            type_hrid,
+            ratio_boost,
+            flat_boost,
+            duration: Some(duration),
+            start_time: Some(current_time),
+            multiplier_for_skill_hrid: input.multiplier_for_skill_hrid.unwrap_or(Hrid::EMPTY),
+            multiplier_per_skill_level: input.multiplier_per_skill_level.unwrap_or(0.0),
+        };
+        let source_key = source_hrid.unwrap_or(Hrid::DEFAULT);
+        let expires_at = current_time + duration;
+        let normalized_policy = normalize_buff_source_policy(source_policy)?;
+        if normalized_policy == BuffSourcePolicy::Strongest {
+            // 先校验再改源注册表：不支持/形状漂移的光环必须大声失败。
+            get_party_aura_buff_strength(&registered_buff)?;
+        }
+
+        // JS 语义：源注册表先建（即便随后策略冲突抛错也会留下空表）。
+        // 注册表扫描合并——源表 contains+set 与策略表 get+set 各压成一次查找。
+        let sources = self.buff_sources.get_or_insert_with(&unique_hrid, OrderedMap::new);
+        match self.buff_source_policies.get_mut(&unique_hrid) {
+            Some(existing_policy) => {
+                if *existing_policy != normalized_policy {
+                    return Err(UnitError::error(format!(
+                        "CombatUnit buff source policy mismatch for {unique_hrid}: {} vs {}",
+                        policy_name(*existing_policy),
+                        policy_name(normalized_policy)
+                    )));
+                }
+                *existing_policy = normalized_policy;
+            }
+            None => self.buff_source_policies.set(unique_hrid, normalized_policy),
+        }
+        self.buff_source_sequence += 1;
+        let sequence = self.buff_source_sequence;
+        sources.set(source_key, BuffSourceEntry { buff: registered_buff, expires_at, sequence });
+
+        self.reconcile_buff_source_live(unique_hrid, normalized_policy, true, Some(source_key))?;
+        Ok(())
+    }
+
+    /// 等价 JS `reconcileBuffSource(uniqueHrid, sources, { updateDetails, preferredSourceKey })`。
+    pub fn reconcile_buff_source(
+        &mut self,
+        unique_hrid: Hrid,
+        sources: Option<&OrderedMap<Hrid, BuffSourceEntry>>,
+        update_details: bool,
+        preferred_source_key: Option<Hrid>,
+    ) -> Result<bool, UnitError> {
+        let previous_active_buff = self.combat_buffs.get(&unique_hrid).cloned();
+        let policy = self.buff_source_policies.get(&unique_hrid).copied().unwrap_or(BuffSourcePolicy::Replace);
+        let next_active_source = match sources {
+            Some(sources) if !sources.is_empty() => pick_active_buff_source(sources, policy, preferred_source_key)?,
+            _ => None,
+        };
+        let next_active_buff = next_active_source.map(|(_, entry)| entry.buff.clone());
+
+        if let Some((source_key, entry)) = next_active_source {
+            self.active_buff_source_keys.set(unique_hrid, *source_key);
+            self.combat_buffs.set(unique_hrid, entry.buff.clone());
+        } else {
+            self.active_buff_source_keys.delete(&unique_hrid);
+            self.combat_buffs.delete(&unique_hrid);
+        }
+
+        let active_buff_changed = !buffs_affect_stats_equally(next_active_buff.as_ref(), previous_active_buff.as_ref());
+        if active_buff_changed && update_details {
+            self.update_combat_details();
+        }
+
+        Ok(active_buff_changed)
+    }
+
+    /// `reconcileBuffSource` 的「直接读自身源注册表」变体（免快照）。
+    ///
+    /// 调用方（addBuff / removeBuff / 过期清理）在调用前已完成对 `self.buff_sources` 的
+    /// 全部改动，原实现传入的 `sources` 快照与实时表逐字段相同；此处直接借用实时表，
+    /// 省掉「每注册一次增益就深拷贝整张源表（含所有 Buff）」的开销。策略值由
+    /// 调用方注入（调用方在改源注册表时已读取该值），再省一次策略表查找。可观察行为不变。
+    fn reconcile_buff_source_live(
+        &mut self,
+        unique_hrid: Hrid,
+        policy: BuffSourcePolicy,
+        update_details: bool,
+        preferred_source_key: Option<Hrid>,
+    ) -> Result<bool, UnitError> {
+        let next_active_source = match self.buff_sources.get(&unique_hrid) {
+            Some(sources) if !sources.is_empty() => pick_active_buff_source(sources, policy, preferred_source_key)?,
+            _ => None,
+        };
+        let next_active = next_active_source.map(|(key, entry)| (*key, entry.buff.clone()));
+
+        let active_buff_changed = {
+            let previous_active_buff = self.combat_buffs.get(&unique_hrid);
+            !buffs_affect_stats_equally(next_active.as_ref().map(|(_, buff)| buff), previous_active_buff)
+        };
+
+        if let Some((source_key, buff)) = next_active {
+            self.active_buff_source_keys.set(unique_hrid, source_key);
+            self.combat_buffs.set(unique_hrid, buff);
+        } else {
+            self.active_buff_source_keys.delete(&unique_hrid);
+            self.combat_buffs.delete(&unique_hrid);
+        }
+
+        if active_buff_changed && update_details {
+            self.update_combat_details();
+        }
+
+        Ok(active_buff_changed)
+    }
+
+    /// JS `unit.buffSources?.[uniqueHrid]?.has(sourceKey)`（卷轴活跃 buff 恢复判定）。
+    pub fn has_buff_source(&self, unique_hrid: Hrid, source_key: Hrid) -> bool {
+        self.buff_sources.get(&unique_hrid).is_some_and(|sources| sources.contains_key(&source_key))
+    }
+
+    /// 等价 JS `removeBuff(buff, sourceHrid = REMOVE_ACTIVE_SOURCE)`（`uniqueHrid` 为空则不动作）。
+    pub fn remove_buff(&mut self, unique_hrid: Option<Hrid>, selector: BuffSourceSelector) -> Result<(), UnitError> {
+        let Some(unique_hrid) = unique_hrid.filter(|hrid| !hrid_is_empty(*hrid)) else {
+            return Ok(());
+        };
+        self.remove_buff_by_unique_hrid(unique_hrid, selector)
+    }
+
+    /// 等价 JS `removeBuffByUniqueHrid(uniqueHrid, sourceHrid = REMOVE_ACTIVE_SOURCE)`。
+    pub fn remove_buff_by_unique_hrid(
+        &mut self,
+        unique_hrid: Hrid,
+        selector: BuffSourceSelector,
+    ) -> Result<(), UnitError> {
+        let _prof = crate::prof::start("unit.remove_buff");
+        let sources_snapshot = self.buff_sources.get(&unique_hrid).cloned();
+
+        let mut source_key: Option<Hrid> = None;
+        match selector {
+            BuffSourceSelector::ActiveSource => {
+                let active_source_key = self.active_buff_source_keys.get(&unique_hrid).copied();
+                let use_active = active_source_key.is_some_and(|active| {
+                    sources_snapshot.as_ref().map_or(true, |sources| sources.contains_key(&active))
+                });
+                if use_active {
+                    source_key = active_source_key;
+                } else if let Some(sources) = sources_snapshot.as_ref() {
+                    if !sources.is_empty() {
+                        // 恢复/遗留状态：推导与对账相同的活动源，而不是静默返回空操作。
+                        let policy =
+                            self.buff_source_policies.get(&unique_hrid).copied().unwrap_or(BuffSourcePolicy::Replace);
+                        source_key = pick_active_buff_source(sources, policy, None)?.map(|(key, _)| *key);
+                    }
+                }
+            }
+            BuffSourceSelector::Explicit(explicit) => source_key = explicit,
+        }
+        let source_key = source_key.unwrap_or(Hrid::DEFAULT);
+
+        if let Some(sources) = sources_snapshot.as_ref() {
+            if !sources.contains_key(&source_key) {
+                return Ok(());
+            }
+
+            let policy = self.buff_source_policies.get(&unique_hrid).copied().unwrap_or(BuffSourcePolicy::Replace);
+            let source_was_active =
+                self.active_buff_source_keys.get(&unique_hrid).is_some_and(|active| *active == source_key);
+            let mut remaining = sources.len();
+            if let Some(live_sources) = self.buff_sources.get_mut(&unique_hrid) {
+                if live_sources.delete(&source_key) {
+                    remaining -= 1;
+                }
+            }
+
+            if policy == BuffSourcePolicy::Replace && source_was_active {
+                // 后写覆盖的增益被移除时不揭示旧值：级联清除该 uniqueHrid 的全部源。
+                self.buff_sources.delete(&unique_hrid);
+                self.buff_source_policies.delete(&unique_hrid);
+                self.reconcile_buff_source(unique_hrid, None, true, None)?;
+            } else if remaining == 0 {
+                self.buff_sources.delete(&unique_hrid);
+                self.buff_source_policies.delete(&unique_hrid);
+                self.reconcile_buff_source(unique_hrid, None, true, None)?;
+            } else if source_was_active || self.active_buff_source_keys.get(&unique_hrid).is_none() {
+                self.reconcile_buff_source_live(unique_hrid, policy, true, None)?;
+            }
+            return Ok(());
+        }
+
+        // 早于源注册机制的旧式增益兼容回退。
+        if self.combat_buffs.contains_key(&unique_hrid) {
+            self.combat_buffs.delete(&unique_hrid);
+            self.active_buff_source_keys.delete(&unique_hrid);
+            self.buff_source_policies.delete(&unique_hrid);
+            self.update_combat_details();
+        }
+        Ok(())
+    }
+
+    /// 等价 JS `addPermanentBuff`：按 typeHrid 累加 ratio/flat，首次写入克隆后存储。
+    pub fn add_permanent_buff(&mut self, input: &RawBuffInput) {
+        // JS 对象键会把 undefined 字符串化为 "undefined"；探针脚本始终给出合法
+        // typeHrid，此处复刻该字符串化以保持两侧一致。
+        let type_key = input.type_hrid.unwrap_or(Hrid::UNDEFINED);
+        let ratio_boost = input.ratio_boost.unwrap_or(f64::NAN);
+        let flat_boost = input.flat_boost.unwrap_or(f64::NAN);
+        if let Some(existing) = self.permanent_buffs.get_mut(&type_key) {
+            existing.flat_boost += flat_boost;
+            existing.ratio_boost += ratio_boost;
+        } else {
+            self.permanent_buffs.set(type_key, raw_buff_from_input(input, input.start_time));
+        }
+    }
+
+    /// 等价 JS `generatePermanentBuffs`（顺序：houseRooms → guildBuffs → achievements → zoneBuffs → extraBuffs）。
+    pub fn generate_permanent_buffs(&mut self) {
+        // 克隆输入以避开 &self 输入 / &mut self 方法的借用冲突（数据量小，代价可忽略）。
+        let house_room_buffs: Vec<RawBuffInput> =
+            self.house_rooms.iter().flat_map(|room| room.buffs.iter().cloned()).collect();
+        for buff in &house_room_buffs {
+            self.add_permanent_buff(buff);
+        }
+
+        let guild_buffs: Vec<RawBuffInput> =
+            self.guild_buffs.iter().flat_map(|guild| guild.buffs.iter().cloned()).collect();
+        for buff in &guild_buffs {
+            self.add_permanent_buff(buff);
+        }
+
+        if let Some(achievements) = self.achievements.as_ref() {
+            let achievement_buffs: Vec<RawBuffInput> = achievements.buffs.clone();
+            for buff in &achievement_buffs {
+                self.add_permanent_buff(buff);
+            }
+        }
+
+        let zone_buffs: Vec<RawBuffInput> = self.zone_buffs.clone();
+        for buff in &zone_buffs {
+            self.add_permanent_buff(buff);
+        }
+
+        let extra_buffs: Vec<RawBuffInput> = self.extra_buffs.clone();
+        for buff in &extra_buffs {
+            self.add_permanent_buff(buff);
+        }
+    }
+
+    /// 等价 JS `removeExpiredBuffByUniqueHrid(uniqueHrid, currentTime, { updateDetails })`。
+    /// 返回「派生属性是否变脏」（JS 布尔返回值，逐字保留）。
+    pub fn remove_expired_buff_by_unique_hrid(
+        &mut self,
+        unique_hrid: Hrid,
+        current_time: f64,
+        update_details: bool,
+    ) -> Result<bool, UnitError> {
+        if hrid_is_empty(unique_hrid) {
+            return Ok(false);
+        }
+
+        let mut details_dirty = false;
+        // 过期源单趟 retain 删除（零分配）——原实现先收集 `expired_keys`
+        // 再逐个 delete；本变体把 contains/get/get_mut 的多趟小表扫描压成一趟，
+        // `remaining` / `active_key_missing` 直接取自同一可变借用。
+        let active_source_key = self.active_buff_source_keys.get(&unique_hrid).copied();
+        let policy = self.buff_source_policies.get(&unique_hrid).copied().unwrap_or(BuffSourcePolicy::Replace);
+        let expired_state = match self.buff_sources.get_mut(&unique_hrid) {
+            Some(sources) => {
+                let mut active_source_expired = false;
+                sources.retain(|source_key, entry| {
+                    if entry.expires_at <= current_time {
+                        if active_source_key == Some(*source_key) {
+                            active_source_expired = true;
+                        }
+                        false
+                    } else {
+                        true
+                    }
+                });
+                let remaining = sources.len();
+                let active_key_missing = match active_source_key {
+                    Some(active) => !sources.contains_key(&active),
+                    None => true,
+                };
+                Some((active_source_expired, remaining, active_key_missing))
+            }
+            None => None,
+        };
+
+        if let Some((active_source_expired, remaining, active_key_missing)) = expired_state {
+            if policy == BuffSourcePolicy::Replace && active_source_expired {
+                self.buff_sources.delete(&unique_hrid);
+                self.buff_source_policies.delete(&unique_hrid);
+                details_dirty =
+                    self.reconcile_buff_source(unique_hrid, None, false, None)? || details_dirty;
+            } else if remaining == 0 {
+                self.buff_sources.delete(&unique_hrid);
+                self.buff_source_policies.delete(&unique_hrid);
+                details_dirty =
+                    self.reconcile_buff_source(unique_hrid, None, false, None)? || details_dirty;
+            } else if active_source_expired || active_key_missing {
+                details_dirty = self.reconcile_buff_source_live(unique_hrid, policy, false, None)? || details_dirty;
+            }
+        } else {
+            // 与源注册机制引入前由旧调用方恢复的运行时增益保持兼容。
+            let buff = self.combat_buffs.get(&unique_hrid).cloned();
+            if let Some(buff) = buff {
+                if is_timed_buff_expired(&buff, current_time) {
+                    self.combat_buffs.delete(&unique_hrid);
+                    self.active_buff_source_keys.delete(&unique_hrid);
+                    self.buff_source_policies.delete(&unique_hrid);
+                    details_dirty = true;
+                }
+            }
+        }
+
+        if details_dirty && update_details {
+            self.update_combat_details();
+        }
+
+        Ok(details_dirty)
+    }
+
+    /// 等价 JS `removeExpiredBuffs(currentTime, { updateDetails })`。
+    pub fn remove_expired_buffs(&mut self, current_time: f64, update_details: bool) -> Result<bool, UnitError> {
+        let _prof = crate::prof::start("unit.remove_expired_buffs");
+        let mut details_dirty = false;
+        // Object.keys 快照：先收集再逐项处理（处理过程会删除条目）。
+        let unique_hrids: Vec<Hrid> = self.buff_sources.keys().copied().collect();
+        for unique_hrid in unique_hrids {
+            details_dirty = self.remove_expired_buff_by_unique_hrid(unique_hrid, current_time, false)? || details_dirty;
+        }
+
+        // 与未在 buffSources 中表示、由旧调用方恢复的运行时增益保持兼容。
+        // 只收集命中的键（原实现克隆全部 Buff 值）；判定谓词与逐项路径一致。
+        let expired_legacy_keys: Vec<Hrid> = self
+            .combat_buffs
+            .iter()
+            .filter(|(unique_hrid, buff)| {
+                !self.buff_sources.contains_key(unique_hrid) && is_timed_buff_expired(buff, current_time)
+            })
+            .map(|(unique_hrid, _)| *unique_hrid)
+            .collect();
+        for unique_hrid in expired_legacy_keys {
+            self.combat_buffs.delete(&unique_hrid);
+            self.active_buff_source_keys.delete(&unique_hrid);
+            self.buff_source_policies.delete(&unique_hrid);
+            details_dirty = true;
+        }
+
+        if details_dirty && update_details {
+            self.update_combat_details();
+        }
+
+        Ok(details_dirty)
+    }
+
+    /// 等价 JS `clearBuffs`：combatBuffs 重置为 permanentBuffs 的深拷贝，源注册表清空。
+    pub fn clear_buffs(&mut self) {
+        let _prof = crate::prof::start("unit.clear_buffs");
+        // JS 对「非玩家 + 空 permanentBuffs」用全新 {}（与 structuredClone 内容一致），此处统一克隆。
+        // clone_from 复用自身已分配缓冲；三张附属表改 clear() 保留容量。
+        self.combat_buffs.clone_from_map(&self.permanent_buffs);
+        self.buff_sources.clear();
+        self.active_buff_source_keys.clear();
+        self.buff_source_policies.clear();
+        self.buff_source_sequence = 0;
+        self.update_combat_details();
+    }
+
+    /// 等价 JS `clearCCs`。
+    ///
+    /// JS 语义：只清 CC 标志 + live 面板 `damageTaken = 0`，再捕获基准；**live 面板
+    /// 保留最近一次结算的派生值**（threat 等），直到下次 `updateCombatDetails` 从基准
+    /// 重算。此前实现把 live 整体回滚到构造期快照（派生前的 threat=0）——玩家复活
+    /// （`clearBuffs` → 结算 → `clearCCs`）后 threat 归零，单玩家威胁选靶 `rng*0=0`
+    /// 不满足 `>= 0 && < 0`，复刻出 JS 的 `.player` TypeError（已修复）。
+    ///
+    /// JS 里 `Player` / `Monster` 覆写总在下次 `updateCombatDetails` 开头重写类自有
+    /// 字段、`refreshBaseCombatStats` 因此捕获干净基准；Rust 无类覆写，故改为把
+    /// 构造期快照恢复进**基准**（等价 JS 下次 update 的输入），live 不回滚。
+    /// 合成单位（探针）无类自有快照，维持与 JS 逐字等价的「从 live 捕获基准」。
+    pub fn clear_ccs(&mut self) {
+        self.is_stunned = false;
+        self.stun_expire_time = None;
+        self.is_silenced = false;
+        self.silence_expire_time = None;
+        self.is_blinded = false;
+        self.blind_expire_time = None;
+        self.combat_details.combat_stats.damage_taken = 0.0;
+        if let Some(class_base) = &self.class_base_combat_stats {
+            let mut base = class_base.clone();
+            base.damage_taken = 0.0;
+            self.base_combat_stats = Some(base);
+        } else {
+            self.refresh_base_combat_stats();
+        }
+    }
+
+    /// 等价 JS `getBuffBoosts(type)`（无快照路径：按 combatBuffs 遍历序投影）。
+    pub fn get_buff_boosts(&self, type_hrid: Hrid) -> Vec<BuffBoost> {
+        let _prof = crate::prof::start("unit.get_buff_boosts");
+        self.combat_buffs
+            .values()
+            .filter(|buff| buff.type_hrid == type_hrid)
+            .map(|buff| BuffBoost { ratio_boost: buff.ratio_boost, flat_boost: buff.flat_boost })
+            .collect()
+    }
+
+    /// 等价 JS `getBuffBoost(type)`（无快照路径：`?? 0` 归一后逐项累加）。
+    pub fn get_buff_boost(&self, type_hrid: Hrid) -> BuffBoost {
+        let mut boost = BuffBoost::ZERO;
+        for buff in self.combat_buffs.values().filter(|buff| buff.type_hrid == type_hrid) {
+            boost.ratio_boost += buff.ratio_boost;
+            boost.flat_boost += buff.flat_boost;
+        }
+        boost
+    }
+}
+
+/// 等价 JS 定时过期判定：startTime / duration 均为有限数且 `startTime + duration <= currentTime`。
+fn is_timed_buff_expired(buff: &Buff, current_time: f64) -> bool {
+    match (buff.start_time, buff.duration) {
+        (Some(start_time), Some(duration)) if start_time.is_finite() && duration.is_finite() => {
+            start_time + duration <= current_time
+        }
+        _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::hrid::hrid_to_string;
+
+    fn raw(unique_hrid: &str, type_hrid: &str, ratio: f64, flat: f64, duration: f64) -> RawBuffInput {
+        RawBuffInput {
+            unique_hrid: Some(intern_hrid(unique_hrid)),
+            type_hrid: Some(intern_hrid(type_hrid)),
+            ratio_boost: Some(ratio),
+            flat_boost: Some(flat),
+            duration: Some(duration),
+            ..Default::default()
+        }
+    }
+
+    fn fierce_aura(flat: f64) -> RawBuffInput {
+        raw("/buff_uniques/fierce_aura", "/buff_types/fierce_aura", 0.0, flat, 10000.0)
+    }
+
+    #[test]
+    fn default_panel_matches_js_initial_values() {
+        let unit = CombatUnit::default();
+        assert_eq!(unit.combat_details.max_hitpoints, 110.0);
+        assert_eq!(unit.combat_details.current_manapoints, 110.0);
+        assert_eq!(unit.combat_details.stab_accuracy_rating, 11.0);
+        assert_eq!(unit.combat_details.total_armor, 0.2);
+        assert_eq!(unit.combat_details.total_fire_resistance, 0.4);
+        assert_eq!(unit.combat_details.total_threat, 100.0);
+        assert_eq!(unit.combat_details.combat_stats.attack_interval, 3000000000.0);
+        assert_eq!(unit.combat_details.combat_stats.threat, 100.0);
+        assert_eq!(unit.combat_details.combat_stats.hp_regen_per10, 0.01);
+        assert_eq!(unit.combat_details.combat_stats.food_slots, 1.0);
+        assert_eq!(unit.combat_details.combat_stats.combat_style_hrid, Hrid::COMBAT_STYLE_SMASH);
+        assert!(unit.base_combat_stats.is_none());
+        assert_eq!(unit.buff_source_sequence, 0);
+    }
+
+    #[test]
+    fn player_regen_bonus_and_level_buffs_are_idempotent() {
+        let mut unit = CombatUnit { is_player: true, ..Default::default() };
+        unit.refresh_base_combat_stats();
+        unit.update_combat_details();
+        assert_eq!(unit.combat_details.combat_stats.hp_regen_per10, 0.02);
+        assert_eq!(unit.combat_details.combat_stats.mp_regen_per10, 0.02);
+
+        unit.add_buff(&raw("/buff_uniques/level_up", "/buff_types/stamina_level", 0.5, 2.0, 1000.0), 0.0, None, None)
+            .expect("registers");
+        // 等级 = base(1) + 1*0.5 + 2
+        assert_eq!(unit.combat_details.stamina_level, 3.5);
+        // maxHitpoints = floor((10*(10+3.5) + 0 + 0) * (1 + 0 + 0))
+        assert_eq!(unit.combat_details.max_hitpoints, 135.0);
+        // 幂等：重复结算从基准快照恢复
+        unit.update_combat_details();
+        assert_eq!(unit.combat_details.stamina_level, 3.5);
+        assert_eq!(unit.combat_details.max_hitpoints, 135.0);
+    }
+
+    #[test]
+    fn threat_ratio_zero_branch_overrides_base_then_adds_flat() {
+        let mut unit = CombatUnit::default();
+        unit.refresh_base_combat_stats();
+        unit.add_buff(&raw("/buff_uniques/t_zero", "/buff_types/threat", 0.0, 25.0, 1000.0), 0.0, None, None)
+            .expect("registers");
+        // base = 100 + combatStats.threat(100) = 200；ratio 为 0 → 覆盖为 base，再 + flat
+        assert_eq!(unit.combat_details.total_threat, 200.0);
+        assert_eq!(unit.combat_details.combat_stats.threat, 225.0);
+        // 重复结算幂等（基准快照把 threat 还原为 100）
+        unit.update_combat_details();
+        assert_eq!(unit.combat_details.combat_stats.threat, 225.0);
+    }
+
+    #[test]
+    fn threat_ratio_branch_scales_base() {
+        let mut unit = CombatUnit::default();
+        unit.refresh_base_combat_stats();
+        unit.add_buff(&raw("/buff_uniques/t_ratio", "/buff_types/threat", 0.25, 5.0, 1000.0), 0.0, None, None)
+            .expect("registers");
+        // base = 200 → 100 + 200*0.25 + 5 = 155
+        assert_eq!(unit.combat_details.total_threat, 200.0);
+        assert_eq!(unit.combat_details.combat_stats.threat, 155.0);
+    }
+
+    /// 回归：`clearCCs` 不得回滚 live 面板（JS 语义：保留派生值）。
+    /// 生产快照路径的玩家 spec 面板 threat=0（Player.updateCombatDetails 的装备合计
+    /// 覆写了默认 100），构造期 class_base 捕获 threat=0、结算后 live threat=100。
+    /// 旧实现把 live 回滚到 class_base（threat=0）→ 玩家复活后单玩家威胁选靶
+    /// `rng*0=0` 不满足 `>=0 && <0`，pick_threat_target 复刻出 JS 的 `.player` TypeError。
+    #[test]
+    fn clear_ccs_keeps_live_derived_threat_for_class_owned_units() {
+        let mut unit = CombatUnit::default();
+        unit.combat_details.combat_stats.threat = 0.0;
+        unit.class_base_combat_stats = Some(unit.combat_details.combat_stats.clone());
+        unit.refresh_base_combat_stats();
+        unit.update_combat_details();
+        assert_eq!(unit.combat_details.combat_stats.threat, 100.0);
+
+        // JS clearCCs：live 保留派生值（damageTaken 置 0），基准恢复为构造期快照。
+        unit.combat_details.combat_stats.damage_taken = 0.3;
+        unit.clear_ccs();
+        assert_eq!(unit.combat_details.combat_stats.threat, 100.0);
+        assert_eq!(unit.combat_details.combat_stats.damage_taken, 0.0);
+        let base = unit.base_combat_stats.as_ref().expect("base captured");
+        assert_eq!(base.threat, 0.0);
+        assert_eq!(base.damage_taken, 0.0);
+
+        // 下次结算从构造期基准重算，threat 仍为 100（不累积）。
+        unit.update_combat_details();
+        assert_eq!(unit.combat_details.combat_stats.threat, 100.0);
+    }
+
+    #[test]
+    fn strongest_policy_hands_off_and_ties_keep_incumbent() {
+        let mut unit = CombatUnit::default();
+        unit.refresh_base_combat_stats();
+        fn active(unit: &CombatUnit) -> Option<String> {
+            unit.active_buff_source_keys
+                .get(&intern_hrid("/buff_uniques/fierce_aura"))
+                .map(|key| hrid_to_string(*key))
+        }
+
+        unit.add_buff(&fierce_aura(0.2), 0.0, Some(intern_hrid("ally_a")), Some("strongest"))
+            .expect("registers");
+        unit.add_buff(&fierce_aura(0.1), 100.0, Some(intern_hrid("ally_b")), Some("strongest"))
+            .expect("registers");
+        // 新源更弱：不交接
+        assert_eq!(active(&unit).as_deref(), Some("ally_a"));
+
+        // 平局：保留先注册的 ally_a（迭代顺序决定，而非「后写覆盖」）
+        unit.add_buff(&fierce_aura(0.2), 200.0, Some(intern_hrid("ally_c")), Some("strongest"))
+            .expect("registers");
+        assert_eq!(active(&unit).as_deref(), Some("ally_a"));
+
+        // 明确更强：交接
+        unit.add_buff(&fierce_aura(0.3), 300.0, Some(intern_hrid("ally_d")), Some("strongest"))
+            .expect("registers");
+        assert_eq!(active(&unit).as_deref(), Some("ally_d"));
+
+        // 移除活动源 → 交接给剩余最强（ally_a 与 ally_c 平局 → 先注册的 ally_a）
+        unit.remove_buff(Some(intern_hrid("/buff_uniques/fierce_aura")), BuffSourceSelector::ActiveSource)
+            .expect("removes");
+        assert_eq!(active(&unit).as_deref(), Some("ally_a"));
+        assert_eq!(unit.buff_source_sequence, 4);
+    }
+
+    #[test]
+    fn replace_policy_active_removal_cascades_and_clears_sources() {
+        let mut unit = CombatUnit::default();
+        unit.refresh_base_combat_stats();
+        unit.add_buff(&raw("/scrolls/x", "/buff_types/damage", 0.1, 0.0, 1000.0), 0.0, None, None).expect("registers");
+        unit.add_buff(&raw("/scrolls/x", "/buff_types/damage", 0.2, 0.0, 5000.0), 100.0, Some(intern_hrid("scroll:x")), None)
+            .expect("registers");
+        assert_eq!(
+            unit.active_buff_source_keys.get(&intern_hrid("/scrolls/x")).map(|key| hrid_to_string(*key)),
+            Some("scroll:x".to_string())
+        );
+
+        unit.remove_buff(Some(intern_hrid("/scrolls/x")), BuffSourceSelector::ActiveSource).expect("removes");
+        // REPLACE + 活动源移除 → 级联清除：无休眠交接
+        assert!(!unit.combat_buffs.contains_key(&intern_hrid("/scrolls/x")));
+        assert!(!unit.buff_sources.contains_key(&intern_hrid("/scrolls/x")));
+        assert!(!unit.buff_source_policies.contains_key(&intern_hrid("/scrolls/x")));
+        assert!(unit.active_buff_source_keys.is_empty());
+    }
+
+    #[test]
+    fn expired_replace_source_cascades_and_reports_dirty() {
+        let mut unit = CombatUnit::default();
+        unit.add_buff(&raw("/u/expire", "/buff_types/damage", 1.0, 0.0, 500.0), 0.0, None, None).expect("registers");
+        assert!(!unit.remove_expired_buffs(100.0, true).expect("scans"));
+        assert!(unit.remove_expired_buffs(500.0, true).expect("scans"));
+        assert!(!unit.combat_buffs.contains_key(&intern_hrid("/u/expire")));
+        assert!(!unit.buff_sources.contains_key(&intern_hrid("/u/expire")));
+        assert!(!unit
+            .remove_expired_buff_by_unique_hrid(Hrid::EMPTY, 9999.0, true)
+            .expect("ignores empty hrid"));
+    }
+
+    #[test]
+    fn legacy_buff_without_sources_expires_by_start_time() {
+        let mut unit = CombatUnit::default();
+        unit.combat_buffs.set(
+            intern_hrid("/u/legacy"),
+            Buff {
+                unique_hrid: intern_hrid("/u/legacy"),
+                type_hrid: Hrid::BUFF_TYPE_DAMAGE,
+                ratio_boost: 0.5,
+                flat_boost: 0.0,
+                duration: Some(100.0),
+                start_time: Some(50.0),
+                multiplier_for_skill_hrid: Hrid::EMPTY,
+                multiplier_per_skill_level: 0.0,
+            },
+        );
+        assert!(!unit.remove_expired_buffs(149.0, false).expect("scans"));
+        assert!(unit.remove_expired_buffs(150.0, false).expect("scans"));
+        assert!(!unit.combat_buffs.contains_key(&intern_hrid("/u/legacy")));
+    }
+
+    #[test]
+    fn permanent_buffs_accumulate_by_type_and_survive_clear() {
+        let mut unit = CombatUnit::default();
+        unit.add_permanent_buff(&RawBuffInput {
+            type_hrid: Some(Hrid::BUFF_TYPE_DAMAGE),
+            unique_hrid: Some(intern_hrid("/u/house")),
+            ratio_boost: Some(0.1),
+            flat_boost: Some(5.0),
+            ..Default::default()
+        });
+        unit.add_permanent_buff(&RawBuffInput {
+            type_hrid: Some(Hrid::BUFF_TYPE_DAMAGE),
+            unique_hrid: Some(intern_hrid("/u/guild")),
+            ratio_boost: Some(0.05),
+            flat_boost: Some(2.0),
+            ..Default::default()
+        });
+        let merged = unit
+            .permanent_buffs
+            .get(&Hrid::BUFF_TYPE_DAMAGE)
+            .expect("permanent buff stored");
+        assert_eq!(merged.ratio_boost, 0.15000000000000002);
+        assert_eq!(merged.flat_boost, 7.0);
+        // 首次写入克隆：保留首个记录的 uniqueHrid，累加只作用于本单位副本
+        assert_eq!(hrid_to_string(merged.unique_hrid), "/u/house");
+
+        unit.clear_buffs();
+        assert!(unit.combat_buffs.contains_key(&Hrid::BUFF_TYPE_DAMAGE));
+        assert_eq!(unit.permanent_buffs.len(), 1);
+        assert!(unit.buff_sources.is_empty());
+        assert_eq!(unit.buff_source_sequence, 0);
+    }
+
+    #[test]
+    fn generate_permanent_buffs_follows_js_order() {
+        let mut unit = CombatUnit {
+            house_rooms: vec![BuffList {
+                buffs: vec![RawBuffInput {
+                    type_hrid: Some(Hrid::BUFF_TYPE_MAX_HITPOINTS),
+                    unique_hrid: Some(intern_hrid("/house/room")),
+                    ratio_boost: Some(0.0),
+                    flat_boost: Some(30.0),
+                    ..Default::default()
+                }],
+            }],
+            guild_buffs: vec![BuffList {
+                buffs: vec![RawBuffInput {
+                    type_hrid: Some(Hrid::BUFF_TYPE_MAX_HITPOINTS),
+                    unique_hrid: Some(intern_hrid("/guild/buff")),
+                    ratio_boost: Some(0.0),
+                    flat_boost: Some(20.0),
+                    ..Default::default()
+                }],
+            }],
+            achievements: Some(BuffList {
+                buffs: vec![RawBuffInput {
+                    type_hrid: Some(Hrid::BUFF_TYPE_EVASION),
+                    unique_hrid: Some(intern_hrid("/achievements/a")),
+                    ratio_boost: Some(0.05),
+                    flat_boost: Some(0.0),
+                    ..Default::default()
+                }],
+            }),
+            zone_buffs: vec![RawBuffInput {
+                type_hrid: Some(Hrid::BUFF_TYPE_EVASION),
+                unique_hrid: Some(intern_hrid("/zone/buff")),
+                ratio_boost: Some(0.01),
+                flat_boost: Some(2.0),
+                ..Default::default()
+            }],
+            extra_buffs: vec![RawBuffInput {
+                type_hrid: Some(Hrid::BUFF_TYPE_EVASION),
+                unique_hrid: Some(intern_hrid("/extra/buff")),
+                ratio_boost: Some(0.02),
+                flat_boost: Some(1.0),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        unit.generate_permanent_buffs();
+        assert_eq!(unit.permanent_buffs.len(), 2);
+        let hitpoints = unit
+            .permanent_buffs
+            .get(&Hrid::BUFF_TYPE_MAX_HITPOINTS)
+            .expect("merged");
+        assert_eq!(hitpoints.flat_boost, 50.0);
+        assert_eq!(hrid_to_string(hitpoints.unique_hrid), "/house/room");
+        let evasion = unit.permanent_buffs.get(&Hrid::BUFF_TYPE_EVASION).expect("merged");
+        assert_eq!(evasion.ratio_boost, 0.05 + 0.01 + 0.02);
+        assert_eq!(evasion.flat_boost, 3.0);
+    }
+
+    #[test]
+    fn bulwark_adds_defensive_damage_to_smash() {
+        let mut plain = CombatUnit::default();
+        plain.refresh_base_combat_stats();
+        plain.update_combat_details();
+        assert_eq!(plain.combat_details.defensive_max_damage, 11.0);
+        assert_eq!(plain.combat_details.smash_max_damage, 11.0);
+
+        let mut bulwark_unit =
+            CombatUnit { two_hand_hrid: Some(intern_hrid("x_bulwark_shield")), ..Default::default() };
+        bulwark_unit.refresh_base_combat_stats();
+        bulwark_unit.update_combat_details();
+        assert_eq!(bulwark_unit.combat_details.defensive_max_damage, 11.0);
+        assert_eq!(bulwark_unit.combat_details.smash_max_damage, 22.0);
+    }
+
+    #[test]
+    fn policy_mismatch_and_strongest_validation_fail_loudly() {
+        let mut unit = CombatUnit::default();
+        unit.add_buff(&fierce_aura(0.1), 0.0, None, None).expect("registers with default policy");
+        let mismatch = unit.add_buff(&fierce_aura(0.2), 100.0, None, Some("strongest")).expect_err("policy conflict");
+        assert_eq!(mismatch.kind, UnitErrorKind::Error);
+        assert_eq!(
+            mismatch.message,
+            "CombatUnit buff source policy mismatch for /buff_uniques/fierce_aura: replace vs strongest"
+        );
+
+        let mut other = CombatUnit::default();
+        let unsupported = other
+            .add_buff(&raw("/u/not_aura", "/buff_types/damage", 0.0, 1.0, 100.0), 0.0, None, Some("strongest"))
+            .expect_err("unsupported aura");
+        assert_eq!(unsupported.kind, UnitErrorKind::TypeError);
+        assert_eq!(unsupported.message, "Strongest-source policy is unsupported for /u/not_aura");
+
+        let bogus = other
+            .add_buff(&raw("/u/b", "/buff_types/damage", 0.0, 1.0, 100.0), 0.0, None, Some("bogus"))
+            .expect_err("bogus policy");
+        assert_eq!(bogus.kind, UnitErrorKind::TypeError);
+        assert_eq!(bogus.message, "Unsupported buff source policy: bogus");
+
+        let bad_duration = other
+            .add_buff(&RawBuffInput { duration: None, ..raw("/u/c", "/buff_types/damage", 0.0, 1.0, 100.0) }, 0.0, None, None)
+            .expect_err("missing duration");
+        assert_eq!(bad_duration.message, "CombatUnit buff duration must be a finite number for /u/c");
+    }
+
+    #[test]
+    fn settlement_boosts_accumulate_in_iteration_order() {
+        let mut unit = CombatUnit::default();
+        unit.add_buff(&raw("/u/a", "/buff_types/damage", 0.1, 1.0, 1000.0), 0.0, None, None).expect("registers");
+        unit.add_buff(&raw("/u/b", "/buff_types/damage", 0.2, 2.0, 1000.0), 1.0, None, None).expect("registers");
+        unit.add_buff(&raw("/u/c", "/buff_types/armor", 0.0, 0.5, 1000.0), 2.0, None, None).expect("registers");
+        // 结算体不消费的类型：分派跳过，不影响任何槽位。
+        unit.add_buff(&raw("/u/d", "/buff_types/not_consumed", 0.5, 5.0, 1000.0), 3.0, None, None).expect("registers");
+        let boosts = SettlementBoosts::build(&unit.combat_buffs);
+        assert_eq!(boosts.damage.ratio_boost, 0.1 + 0.2);
+        assert_eq!(boosts.damage.flat_boost, 3.0);
+        assert_eq!(boosts.armor.len(), 1);
+        assert_eq!(boosts.armor[0].flat_boost, 0.5);
+    }
+
+    #[test]
+    fn settlement_boosts_rebuild_clears_previous_contents() {
+        // 原地重建必须丢弃上一轮的全部槽位内容（暂存复用的脏读回归锚点）。
+        let mut first = CombatUnit::default();
+        first.add_buff(&raw("/u/a", "/buff_types/damage", 0.5, 5.0, 1000.0), 0.0, None, None).expect("registers");
+        let mut second = CombatUnit::default();
+        second.add_buff(&raw("/u/b", "/buff_types/armor", 0.25, 0.5, 1000.0), 0.0, None, None).expect("registers");
+        let mut boosts = SettlementBoosts::default();
+        boosts.rebuild(&first.combat_buffs);
+        boosts.rebuild(&second.combat_buffs);
+        assert_eq!(boosts.damage, BuffBoost::ZERO);
+        assert_eq!(boosts.armor.len(), 1);
+        assert_eq!(boosts.armor[0].ratio_boost, 0.25);
+        assert_eq!(boosts.armor[0].flat_boost, 0.5);
+    }
+
+    #[test]
+    fn update_combat_details_is_stable_across_repeated_calls() {
+        // 连续两次结算（第二次走暂存复用路径）结果逐位一致。
+        // 注：`combat_stats.tenacity` 可能为 `Some(NaN)`（parity 契约），NaN != NaN 使
+        // 整体 PartialEq 恒假，故用 Debug 表示逐位核对。
+        let mut unit = CombatUnit::default();
+        unit.add_buff(&raw("/u/a", "/buff_types/damage", 0.1, 1.0, 1000.0), 0.0, None, None).expect("registers");
+        unit.add_buff(&raw("/u/b", "/buff_types/armor", 0.2, 2.0, 1000.0), 0.0, None, None).expect("registers");
+        unit.update_combat_details();
+        let first = format!("{:?}", unit.combat_details.combat_stats);
+        unit.update_combat_details();
+        assert_eq!(first, format!("{:?}", unit.combat_details.combat_stats));
+    }
+
+    #[test]
+    fn remove_buff_with_explicit_null_targets_default_source() {
+        let mut unit = CombatUnit::default();
+        unit.add_buff(&raw("/u/default_key", "/buff_types/damage", 0.3, 0.0, 1000.0), 0.0, None, None).expect("registers");
+        unit.remove_buff(Some(intern_hrid("/u/default_key")), BuffSourceSelector::Explicit(None))
+            .expect("removes default");
+        assert!(!unit.combat_buffs.contains_key(&intern_hrid("/u/default_key")));
+        assert!(!unit.buff_sources.contains_key(&intern_hrid("/u/default_key")));
+    }
+}

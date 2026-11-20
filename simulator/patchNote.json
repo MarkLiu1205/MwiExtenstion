@@ -1,463 +1,1468 @@
 {
-    "2026年7月16日（v1.0.28）": {
-        "label": {
-            "zh": "2026年7月16日（v1.0.28）",
-            "en": "July 16, 2026 (v1.0.28)"
-        },
-        "notes": {
-            "zh": [
-                "生活技能升级路线改为按目标等级区间汇总展示。",
-                "生活技能计算新增“单项 / 全部”范围选择。",
-                "优化生活技能工具栏的响应式布局。"
-            ],
-            "en": [
-                "Changed Skilling upgrade routes to summarize the target level range.",
-                "Added Single / All calculation scope to the Skilling planner.",
-                "Improved the responsive layout of the Skilling toolbar."
-            ]
-        }
+  "2026年10月26日（v3.2.2）": {
+    "label": {
+      "zh": "2026年10月26日（v3.2.2）",
+      "en": "October 26, 2026 (v3.2.2)"
     },
-    "2026年7月16日（v1.0.27）": {
-        "label": {
-            "zh": "2026年7月16日（v1.0.27）",
-            "en": "July 16, 2026 (v1.0.27)"
-        },
-        "notes": {
-            "zh": [
-                "生活技能模拟新增采摘。",
-                "新增采摘加工效果暂未计入的提示。",
-                "强化模拟导入快照改为仅在当前页面会话保留。"
-            ],
-            "en": [
-                "Added Foraging to the Skilling planner.",
-                "Added a notice that Foraging processing effects are not yet included.",
-                "Changed imported Enhancement snapshots to remain only for the current page session."
-            ]
-        }
+    "newFeatures": {
+      "zh": [
+        "主站导入脚本改为随站点分发，导航栏新增脚本安装状态与更新渠道选择。",
+        "首页新增配装切换，可一键套用主站导入的装备、食物、饮品、技能与触发器。"
+      ],
+      "en": [
+        "The main-site import script is now hosted on this site, with an install-status row and update-channel picker in the sidebar.",
+        "New loadout switcher on Home: apply the equipment, food, drinks, abilities and triggers imported from the main site in one click."
+      ]
     },
-    "2026年7月16日（v1.0.26）": {
-        "label": {
-            "zh": "2026年7月16日（v1.0.26）",
-            "en": "July 16, 2026 (v1.0.26)"
-        },
-        "notes": {
-            "zh": [
-                "新增生活技能优化模式。",
-                "升级路线改为整级模拟与逐级重算。",
-                "完善生活技能候选与路线展示。",
-                "生活技能导入快照改为仅在当前页面会话保留。"
-            ],
-            "en": [
-                "Added Skilling optimization modes.",
-                "Changed upgrade routes to full-level simulation and per-level recalculation.",
-                "Improved Skilling candidate and route presentation.",
-                "Changed imported Skilling snapshots to remain only for the current page session."
-            ]
-        }
+    "improvements": {
+      "zh": [
+        "导入弹窗展示站内脚本版本与 SHA-256，构建时自动同步脚本并校验分发副本一致性。",
+        "导入脚本更新到 0.1.51：透传配装与全量技能等级，并跟随配装增删改。"
+      ],
+      "en": [
+        "The import dialog now shows the site script version and SHA-256; builds sync the script automatically and verify the distributed copy byte for byte.",
+        "Import script updated to 0.1.51: carries loadouts and full ability levels, and follows loadout updates."
+      ]
     },
-    "2026年7月15日（v1.0.25）": {
-        "label": {
-            "zh": "2026年7月15日（v1.0.25）",
-            "en": "July 15, 2026 (v1.0.25)"
-        },
-        "notes": {
-            "zh": [
-                "新增生活技能升级推荐器。",
-                "新增生活技能路线总览与逐级明细。",
-                "主站一键导入脚本新增生活技能导入。"
-            ],
-            "en": [
-                "Added the Skilling Upgrade Planner.",
-                "Added Skilling route overviews and per-level details.",
-                "Added Skilling imports to the main-site import script."
-            ]
-        }
+    "bugFixes": {
+      "zh": ["修复切换配装后，不在当前槽位的技能等级回落到 1 级的问题。"],
+      "en": [
+        "Fixed ability levels falling back to level 1 after switching loadouts when the ability is not in the current slots."
+      ]
+    }
+  },
+  "2026年10月16日（v3.2.1）": {
+    "label": {
+      "zh": "2026年10月16日（v3.2.1）",
+      "en": "October 16, 2026 (v3.2.1)"
     },
-    "2026年7月13日（v1.0.24）": {
-        "label": {
-            "zh": "2026年7月13日（v1.0.24）",
-            "en": "July 13, 2026 (v1.0.24)"
-        },
-        "notes": {
-            "zh": [
-                "战斗模拟器新增公会神龛增益：可为每名角色配置力量、节奏、精神、稀有和学者五项战斗 Buff，并计入普通区域、地下城与迷宫模拟。",
-                "主站导入脚本现在会结合角色已购买等级和当前公会神龛等级，自动导入实际生效的神龛 Buff。",
-                "统一模拟器中的游戏实体名称为官方翻译，修复强化茶饮、装备槽、战斗属性及地下城/迷宫等位置仍使用本地自建词条的问题。"
-            ],
-            "en": [
-                "Added guild shrine buffs to combat simulation. Force, Tempo, Spirit, Rarity, and Scholar combat buffs can be configured per player and now affect zones, dungeons, and labyrinths.",
-                "The main-site import script now combines purchased buff levels with the current guild shrine caps to import each effective shrine buff level.",
-                "Unified game entity names across the simulator with the official translations, replacing remaining local labels for enhancement teas, equipment slots, combat stats, dungeons, and labyrinths."
-            ]
-        }
+    "bugFixes": {
+      "zh": [
+        "修复预算优化器把「估值不足以抵扣旧件卖出」的低估值升级项误当免费项选中（界面显示花费 0）的问题，现改按缺价跳过。",
+        "修复预算优化器用商店卖店价充当买入成本估值的问题。"
+      ],
+      "en": [
+        "Fixed the budget optimizer wrongly selecting upgrades whose estimate cannot out-value the old item's sale credit as free picks (shown as costing 0); they are now skipped as unpriced.",
+        "Fixed the budget optimizer using shop sell prices as buy-side cost estimates."
+      ]
     },
-    "2026年7月13日（v1.0.23）": {
-        "label": {
-            "zh": "2026年7月13日（v1.0.23）",
-            "en": "July 13, 2026 (v1.0.23)"
-        },
-        "notes": {
-            "zh": [
-                "游戏词条改为使用官网当前发布的中英文翻译快照，统一物品、技能、能力、动作、怪物、住宅、成就和战斗触发条件等名称。",
-                "强化模拟和设置页的物品搜索现在可同时匹配官方中文名、英文名和 HRID。",
-                "翻译资源现在随版本离线加载，并新增发布前的官方词条同步、来源记录和完整性校验流程。"
-            ],
-            "en": [
-                "Game terminology now uses snapshots of the official English and Chinese translations, unifying names for items, skills, abilities, actions, monsters, housing, achievements, and combat trigger metadata.",
-                "Item search on the Enhancement and Settings pages can now match official Chinese names, English names, and HRIDs at the same time.",
-                "Translation resources are now loaded offline with each release, backed by a pre-release synchronization, source-recording, and integrity-validation workflow."
-            ]
-        }
+    "improvements": {
+      "zh": ["缺价候选明细新增原因说明：区分「完全无价」与「估值不足以支撑正净支出」。"],
+      "en": [
+        "Skipped-candidate details now distinguish a truly missing price from an estimate that cannot support a positive net spend."
+      ]
+    }
+  },
+  "2026年10月16日（v3.2.0）": {
+    "label": {
+      "zh": "2026年10月16日（v3.2.0）",
+      "en": "October 16, 2026 (v3.2.0)"
     },
-    "2026年7月13日（v1.0.22）": {
-        "label": {
-            "zh": "2026年7月13日（v1.0.22）",
-            "en": "July 13, 2026 (v1.0.22)"
-        },
-        "notes": {
-            "zh": [
-                "主站导入脚本新增强化模拟页入口，可导入当前角色的强化等级、强化装备、饮品、房间、社区 Buff 和成就加成。",
-                "强化装备导入现在同时读取穿戴栏和背包；背包中没有穿戴装备的槽位会自动选择等级最高的装备。"
-            ],
-            "en": [
-                "The main-site import script now adds an Enhancement-page entry for importing the current character's enhancing level, gear, drinks, housing, community buffs, and achievement bonuses.",
-                "Enhancement gear imports now include both equipped and inventory items; when a slot has no equipped support gear, the highest-level inventory item is selected automatically."
-            ]
-        }
+    "newFeatures": {
+      "zh": [
+        "新增「地下城收益计算器」：核算四个地下城各难度档的宝箱收益，含市场税费、钥匙成本与掉落加成，支持手动改价。",
+        "新增「地牢总览」：按「地牢 × 档位」设置每轮分钟，以「购买 / 制作」双口径对比每日成本与收益，可排序、可点行切换。",
+        "支持用导入队伍一键模拟全部 12 个组合，按平均每轮时长与实测消耗写回配置。",
+        "新增「牛铃不计算收益」「披风不计算收益」开关，并展示当前游戏数据版本。"
+      ],
+      "en": [
+        "New Dungeon Profit Calculator: chest income across all four dungeons and tiers, including market fees, key costs and drop buffs, with manual price overrides.",
+        "New Dungeon Overview: minutes per run per dungeon and tier, with Buy / Craft daily cost and profit comparison, sortable and click-to-switch.",
+        "Simulate all 12 combinations from your imported party, writing back the average minutes per run and the measured consumables cost.",
+        "New Exclude cowbell and Exclude cape profit switches, plus a game data version display."
+      ]
     },
-    "2026年7月12日（v1.0.21）": {
-        "label": {
-            "zh": "2026年7月12日（v1.0.21）",
-            "en": "July 12, 2026 (v1.0.21)"
-        },
-        "notes": {
-            "zh": [
-                "新增强化模拟器：可选择目标装备、起始与目标强化等级，并结合强化等级、辅助装备、饮品、住宅、社区增益和成就计算成功率、耗时与经验。",
-                "新增保护策略对比：自动比较不保护及不同保护起始等级，结合市场价格、保护物、材料、金币和工时成本推荐最低期望投入方案。",
-                "新增贤者之镜制作规划与强化装备分解价值参考，并支持不可交易装备的地下城宝箱获取估值。",
-                "新增成本风险分析：通过蒙特卡洛模拟或矩估计近似展示 P25–P99 成本分位、预算内成功率、随机种子和模拟进度。",
-                "强化页面支持中英文界面、配置与收藏持久化、价格覆盖及官方物品图标。"
-            ],
-            "en": [
-                "Added the Enhancement Simulator for selecting target equipment and enhancement levels, with success rate, time, and experience calculations covering skill level, support gear, drinks, housing, community buffs, and achievements.",
-                "Added protection strategy comparisons across no-protection and multiple protection thresholds, recommending the lowest expected investment using market, protection, material, coin, and labor costs.",
-                "Added Philosopher's Mirror build planning, enhanced-item decomposition value references, and dungeon chest acquisition estimates for non-tradable equipment.",
-                "Added cost risk analysis with Monte Carlo simulation or moment-based approximation, including P25–P99 cost percentiles, success-within-budget probability, seeded runs, and progress reporting.",
-                "The Enhancement page includes bilingual UI, persistent configuration and favorites, price overrides, and official item icons."
-            ]
-        }
+    "improvements": {
+      "zh": [
+        "计算器批量模拟纳入统一运行互斥：运行期间其它模拟入口显示繁忙，「停止全部模拟」会一并停止。",
+        "补充官方动作图标（地牢图标）加载，与物品图标同源。"
+      ],
+      "en": [
+        "The calculator's batch simulation joins the shared busy gate: other simulation entries report busy while it runs, and Stop all simulations also stops it.",
+        "Added official action icon loading (dungeon icons), sharing the source with item icons."
+      ]
+    }
+  },
+  "2026年10月9日（v3.1.0）": {
+    "label": {
+      "zh": "2026年10月9日（v3.1.0）",
+      "en": "October 9, 2026 (v3.1.0)"
     },
-    "2026年5月28日（v1.0.20）": {
-        "label": {
-            "zh": "2026年5月28日（v1.0.20）",
-            "en": "May 28, 2026 (v1.0.20)"
-        },
-        "notes": {
-            "zh": [
-                "修复配装与技能页中部分 95 级鞋子显示英文的问题；开路靴、探路靴、寻路靴以及它们的精炼版现在都会正确显示中文。",
-                "补齐相关制作项和材料名称的中文显示，查看配装、材料和制作信息时更容易对上装备。"
-            ],
-            "en": [
-                "Fixed some level 95 boots showing English names on the Loadout & Skills page. Pathbreaker, Pathfinder, and Pathseeker Boots, including refined versions, now show Chinese names correctly.",
-                "Added Chinese names for the related crafting entries and materials, making loadouts, materials, and crafting info easier to match."
-            ]
-        }
+    "newFeatures": {
+      "zh": [
+        "新增「预算优化」：设定预算后自动逐条购入性价比最高的升级项（装备 / 技能书 / 房子）直到预算花完，结果自动写回配置，可一键撤销。"
+      ],
+      "en": [
+        "New Budget Optimizer: set a budget and it buys the best value-per-coin upgrades (gear / ability books / houses) one by one until the budget is spent, then writes the result back to your character with one-click undo."
+      ]
     },
-    "2026年5月14日（v1.0.19）": {
-        "label": {
-            "zh": "2026年5月14日（v1.0.19）",
-            "en": "May 14, 2026 (v1.0.19)"
-        },
-        "notes": {
-            "zh": [
-                "推荐刷图扫描更稳：默认快速扫描轮数由 1 提升到 3，复核轮数由 10 提升到 20，同一目标多次扫描的排名波动明显减小；扫描耗时相应增加约 2.3 倍。",
-                "推荐刷图设置新增“快速扫描轮次”（可在 1–10 之间调节），按需在速度和精度之间权衡。",
-                "排名公式优化：收益高但每轮波动稍大的目标不再被过度压低，排名更贴近实际收益预期。"
-            ],
-            "en": [
-                "Advisor scans are more stable: default quick-scan rounds raised from 1 to 3 and refine rounds from 10 to 20, noticeably reducing ranking swings between consecutive scans of the same target. Scan time roughly 2.3x.",
-                "Added a Quick Rounds setting under Advisor (range 1–10), letting you trade off scan speed against precision.",
-                "Tuned the ranking formula so high-yield targets with naturally noisier per-run results are no longer over-penalised and rank closer to their real expected payoff."
-            ]
-        }
+    "bugFixes": {
+      "zh": [
+        "修复触发器优化器把「立即释放」误显示为默认触发器的问题。",
+        "修复触发器优化器队友勾选在刷新后残留的问题。"
+      ],
+      "en": [
+        "Fixed the trigger optimizer showing an 'instant cast' configuration as the default triggers.",
+        "Fixed stale teammate selections in the trigger optimizer persisting across reloads."
+      ]
+    }
+  },
+  "2026年10月4日（v3.0.8）": {
+    "label": {
+      "zh": "2026年10月4日（v3.0.8）",
+      "en": "October 4, 2026 (v3.0.8)"
     },
-    "2026年4月27日（v1.0.18）": {
-        "label": {
-            "zh": "2026年4月27日（v1.0.18）",
-            "en": "April 27, 2026 (v1.0.18)"
-        },
-        "notes": {
-            "zh": [
-                "同步官方最新游戏数据：护符类装备（基础/进阶/专家/宗师）补充描述文案，明确说明其将战斗经验聚焦到对应技能",
-                "多件护甲装备新增\u201c反伤伤害\u201d属性，精炼加成同步包含该属性",
-                "迷宫卷轴（采集/美食/加工/稀有发现/智慧）描述更新，明确标注仅在迷宫外生效；新增迷宫代币分解产物",
-                "成就\u201c地下城精炼师\u201d更名为\u201c精炼师\u201d，描述扩展为包含迷宫装备精炼"
-            ],
-            "en": [
-                "Synced with the latest official game data: charm equipment (Basic/Advanced/Expert/Grandmaster) now has descriptions clarifying that they focus combat experience to the corresponding skill",
-                "Multiple armor items now include a defensive damage stat, with enhancement bonuses also covering this attribute",
-                "Labyrinth scrolls (Gathering/Gourmet/Processing/Rare Find/Wisdom) descriptions updated to note they are only effective outside the Labyrinth; they can now be decomposed into labyrinth tokens",
-                "Achievement \"Dungeon Refiner\" renamed to \"Refiner\" with expanded description including labyrinth equipment refining"
-            ]
-        }
+    "improvements": {
+      "zh": [
+        "队列基准与队列项改为逐轮配对模拟（共享随机种子），提升读数更稳、同配置重跑结果一致；「基准轮次」并入「轮次」设置。",
+        "队列轮次下限提高：预设最低 20 轮、自定义最低 10 轮，避免小样本误导。"
+      ],
+      "en": [
+        "Queue baseline and items now run paired round by round (sharing one seed set) for steadier, reproducible gains; the baseline round setting is merged into Rounds.",
+        "Queue round floors raised: presets start at 20 rounds and custom input requires at least 10."
+      ]
     },
-    "2026年4月21日（v1.0.17）": {
-        "label": {
-            "zh": "2026年4月21日（v1.0.17）",
-            "en": "April 21, 2026 (v1.0.17)"
-        },
-        "notes": {
-            "zh": [
-                "设置页新增“成本分口径”，现在可以在严格成本和综合成本之间切换。",
-                "设置页的队列配置重组为“评分模型 / 执行与线程 / 采样与统计”三块，并新增“性能分内部优先级”，可以用收益和 XP 权重决定剩余权重如何自动分配到 DPS 与 Kills。",
-                "多轮结果页和导出表头会显示当前使用的成本分口径，排名规则更容易看懂。",
-                "多轮结果页现在也会展示当前性能子权重与中位数融合比例，综合成本和稳健聚合的计算方式更直观。",
-                "调整评分权重、性能分内部优先级、中位数融合比例或成本分口径后，已有多轮结果会立即按新规则重新排名，不用重新模拟。"
-            ],
-            "en": [
-                "Added a Cost Score Metric option in Settings, so you can switch between Strict and Composite cost scoring.",
-                "Reorganized Queue Configuration in Settings into Scoring, Execution, and Sampling sections, and added Performance Priorities so Profit and XP weights can control how the remaining share is automatically split into DPS and Kills.",
-                "Multi-round Results and export headers now show the current cost-score metric, making the ranking easier to understand.",
-                "Multi-round Results now also show the active performance subweights and median-blend breakdown, so the composite cost metric and robust aggregation are easier to interpret.",
-                "Changing score weights, performance priorities, median blend, or the cost-score metric now reranks existing multi-round results immediately, without rerunning simulations."
-            ]
-        }
+    "bugFixes": {
+      "zh": ["修复大批量运行时后台模拟线程未及时释放、内存持续累积的问题。"],
+      "en": [
+        "Fixed background simulation workers not being released during large batch runs, which let memory pile up."
+      ]
+    }
+  },
+  "2026年10月3日（v3.0.7）": {
+    "label": {
+      "zh": "2026年10月3日（v3.0.7）",
+      "en": "October 3, 2026 (v3.0.7)"
     },
-    "2026年4月19日（v1.0.16）": {
-        "label": {
-            "zh": "2026年4月19日（v1.0.16）",
-            "en": "April 19, 2026 (v1.0.16)"
-        },
-        "notes": {
-            "zh": [
-                "队列新增独立“基准轮次”设置，“设为基准”现在会按该轮数执行多轮基准聚合；设置页、多轮结果页和相关摘要也会同步显示基准轮次与完成样本数。",
-                "基准轮次默认值调整为 1；首次从顶部点击“设为基准”时会弹出提醒，明确显示当前基准轮数，并提供“我已知晓，并不再弹出”和“去设置”两个操作。",
-                "修复“每0.01%提升所需金币”在负提升场景下会静默剔除非正值、导致均值严重偏差的问题；现在只有当 DPS、利润、XP/h 和击杀/h 四项最终稳健增幅全部为正时才显示严格成本，否则统一记为 N/A。",
-                "多轮结果新增“综合每0.01%所需金币”参考列，并同步优化严格成本列的命名、说明文案与导出展示，帮助更直观地区分严格口径和综合口径。"
-            ],
-            "en": [
-                "Queue runs now have an independent Baseline Rounds setting, and Set Baseline performs a multi-round aggregated baseline using that count. Settings, Multi-round Results, and related summaries now also show baseline rounds and completed samples.",
-                "The default baseline round count is now 1. On the first top-bar Set Baseline click, a reminder dialog shows the current baseline round count and offers both \"I understand, don't show again\" and \"Go to Settings\" actions.",
-                "Fixed the Gold per 0.01% metric silently dropping non-positive gains in negative-upgrade cases, which could heavily skew the average. The strict cost metric now appears only when the final robust DPS, profit, XP/h, and kills/h deltas are all positive; otherwise it is shown as N/A.",
-                "Added a new Composite Gold per 0.01% reference column in Multi-round Results, and clarified the strict-cost column naming, explanatory copy, and export display so strict and composite cost views are easier to distinguish."
-            ]
-        }
+    "improvements": {
+      "zh": [
+        "英文语言包改为按需加载：默认中文界面不再预下载英文翻译，首屏更轻。",
+        "英文物品名检索改读官方英文索引，不再显示成物品 ID。",
+        "优化语言切换体验：切换中按钮自动禁用，失败给出明确提示。"
+      ],
+      "en": [
+        "The English locale is now loaded on demand, so the default Chinese UI ships a lighter first page.",
+        "English item names now resolve through the official English index instead of raw item IDs.",
+        "Language switching: the button is disabled while switching, and failures show a clear error."
+      ]
     },
-    "2026年4月13日（v1.0.15）": {
-        "label": {
-            "zh": "2026年4月13日（v1.0.15）",
-            "en": "April 13, 2026 (v1.0.15)"
-        },
-        "notes": {
-            "zh": [
-                "战斗区域遭遇节奏重新对齐官方通用规则：普通 Zone 的下一场遭遇固定按 3 秒刷新，不再把地图基础行动耗时误当成每场遭遇之间的冷却时间。",
-                "多怪区刷怪逻辑重新校准为按权重可重复抽取，并在首次超出怪物总强度上限时停止，修复在单人和多人模拟下战斗次数与总经验偏差过大的问题。"
-            ],
-            "en": [
-                "Zone encounter cadence has been realigned with the official generic rule set: regular zone encounters now always respawn after a fixed 3 seconds, instead of incorrectly treating each map's baseTimeCost as the cooldown between every encounter.",
-                "Multi-monster spawn generation has been recalibrated to use weighted repeatable rolls that stop on the first maxTotalStrength overflow, Fixed the issue where the number of battles and total experience deviated too much in single and multiplayer simulations."
-            ]
-        }
+    "bugFixes": {
+      "zh": [
+        "修复语言包未就绪就切换语言、整页文案显示成键名的问题。",
+        "修复上次选英文但加载失败时应用白屏：自动降级中文，下次启动重试。"
+      ],
+      "en": [
+        "Fixed switching languages before the bundle was ready, which rendered raw translation keys.",
+        "Fixed a blank page when the saved English bundle failed to load; now falls back to Chinese and retries next start."
+      ]
+    }
+  },
+  "2026年10月2日（v3.0.6）": {
+    "label": {
+      "zh": "2026年10月2日（v3.0.6）",
+      "en": "October 2, 2026 (v3.0.6)"
     },
-    "2026年4月11日（v1.0.14）": {
-        "label": {
-            "zh": "2026年4月11日（v1.0.14）",
-            "en": "April 11, 2026 (v1.0.14)"
-        },
-        "notes": {
-            "zh": [
-                "战斗模拟现在会读取地图基础行动耗时，并将每场遭遇的最短节奏纳入下一波敌人刷新时间，避免刷图节奏被计算得过快。",
-                "这项节奏修正已同步应用到刷图推荐、首页 Zone 模拟与队列推荐模拟，相关收益、击杀频率与排行结果会更接近官方实际表现。",
-                "补充官方节奏对齐回归测试，覆盖遭遇节奏下限与 Jungle Planet 的 EPH 区间，便于后续继续校验模拟精度。"
-            ],
-            "en": [
-                "Combat simulation now reads each zone's baseTimeCost and applies the minimum encounter cadence to the next enemy respawn timing, preventing farming pace from being simulated too quickly.",
-                "This cadence fix now applies to Advisor recommendations, Home zone simulations, and queue recommendation runs, so profit, kill frequency, and rankings better match official behavior.",
-                "Added regression coverage for official cadence parity, including the encounter cadence floor and the Jungle Planet EPH band, to keep future simulation accuracy easier to verify."
-            ]
-        }
+    "improvements": {
+      "zh": [
+        "模拟运行环境改为跨次复用：连续模拟不再重复初始化引擎，开始模拟的等待明显缩短。",
+        "运行环境闲置数分钟后自动回收，长时间不使用时不再占用内存。",
+        "优化引擎资源加载与静态资源缓存：去掉一次无效的引擎请求，构建产物可长期缓存，重复访问加载更快。"
+      ],
+      "en": [
+        "Simulation runtimes are now reused across runs, so consecutive simulations skip engine re-initialization and start noticeably faster.",
+        "Idle runtimes are released automatically after a few minutes instead of being held in memory.",
+        "Optimized engine resource loading and static asset caching: a redundant engine request is gone and build assets can be cached long term, so repeat visits load faster."
+      ]
     },
-    "2026年4月5日（v1.0.13）": {
-        "label": {
-            "zh": "2026年4月5日（v1.0.13）",
-            "en": "April 5, 2026 (v1.0.13)"
-        },
-        "notes": {
-            "zh": [
-                "首页“战斗属性”预览现在会按当前地图或迷宫上下文计算，并同步计入房屋常驻加成、MooPass、社区经验/掉落 Buff 与迷宫箱子效果，展示结果更接近真实开战状态。",
-                "食物、饮料、技能与任务徽章现在会在战斗属性面板中标出各自带来的属性变化；饮料与技能高亮会按触发条件、开场顺序和目标敌人重新计算，避免显示实际不会生效的增益链。",
-                "兼容保留旧版导入与主站导入中的任务徽章数据，用于首页预览任务伤害加成；该预览数据不会写入正式战斗模拟装备，避免展示专用效果误入实战模拟。"
-            ],
-            "en": [
-                "The Home \"Battle Attributes\" preview now evaluates stats in the active zone or labyrinth context, including housing permanent bonuses, MooPass, community XP/drop buffs, and labyrinth crate effects, so the panel better matches real combat start state.",
-                "Foods, drinks, abilities, and task badges now show per-source stat deltas in the Battle Attributes panel. Drink and ability highlights are recalculated from effective trigger state, opener order, and targeted enemies so inactive buff chains are no longer shown as active.",
-                "Legacy and main-site imports now preserve task badge data for Home preview-only task damage highlights, without carrying those preview-only items into actual combat simulation loadouts."
-            ]
-        }
+    "bugFixes": {
+      "zh": [
+        "修复手动「全迷宫 / 全区域」模拟与其他功能缺少互斥判定的问题，避免两处运行互相抢占、结果被静默取消。",
+        "修复运行被新任务抢占后旧运行状态残留、界面可能一直停留在运行中的问题。",
+        "修复队列 / 基线运行收尾时误清除其他功能运行环境的问题。",
+        "修复运行环境被浏览器回收后，批量模拟可能永久卡住的问题。"
+      ],
+      "en": [
+        "Fixed missing mutual-exclusion checks for manual all-labyrinth / all-zone runs, which could let two runs supersede each other and silently drop results.",
+        "Fixed stale state left behind after a run was superseded, which could keep the UI stuck on \"running\".",
+        "Fixed queue / baseline runs clearing runtimes that belonged to other features when they finished.",
+        "Fixed batch simulations hanging forever when a dormant runtime had been reclaimed by the browser."
+      ]
+    }
+  },
+  "2026年10月1日（v3.0.5）": {
+    "label": {
+      "zh": "2026年10月1日（v3.0.5）",
+      "en": "October 1, 2026 (v3.0.5)"
     },
-    "2026年4月2日（v1.0.12）": {
-        "label": {
-            "zh": "2026年4月2日（v1.0.12）",
-            "en": "April 2, 2026 (v1.0.12)"
-        },
-        "notes": {
-            "zh": [
-                "队列多轮模拟现已支持将食物、饮料与技能的触发器修改加入队列，方便批量比较不同触发方案的收益与表现",
-                "队列项名称与详情中的触发器状态展示同步优化，默认、禁用、自定义之间的前后变化提示更准确"
-            ],
-            "en": [
-                "Queue multi-round simulations now support adding food, drink, and ability trigger changes into queue items, making it easier to batch-compare the returns and performance of different trigger setups.",
-                "Queue item names and trigger-state details have been refined together, with more accurate before/after hints across default, disabled, and custom states."
-            ]
-        }
+    "bugFixes": {
+      "zh": [
+        "修复副本内玩家阵亡后限时增益不再到期、导致相关技能中途停摆的问题。",
+        "修复副本完成复活后，残留的眩晕/致盲/沉默效果一直不解除、角色无法施法的问题。"
+      ],
+      "en": [
+        "Fixed timed buffs no longer expiring after a player died in a dungeon, which could stall related skills for the rest of the run.",
+        "Fixed control effects (stun, blind, silence) staying on characters revived by the dungeon-completion full restore, preventing them from casting."
+      ]
+    }
+  },
+  "2026年10月1日（v3.0.4）": {
+    "label": {
+      "zh": "2026年10月1日（v3.0.4）",
+      "en": "October 1, 2026 (v3.0.4)"
     },
-    "2026年3月30日（v1.0.11）": {
-        "label": {
-            "zh": "2026年3月30日（v1.0.11）",
-            "en": "March 30, 2026 (v1.0.11)"
-        },
-        "notes": {
-            "zh": [
-                "首页迷宫区域下拉框改为走 i18n 显示，中文环境下迷宫名称不再直接显示原始英文名",
-                "迷宫箱子区域补齐咖啡箱、食物箱与茶叶箱三类下拉框，茶叶箱现在提供基础/进阶/专家三档可选数据",
-                "“补给箱”文案调整为更明确的箱子区域展示，并补充茶叶箱相关中英文翻译词条"
-            ],
-            "en": [
-                "The Home labyrinth selector now uses i18n labels, so labyrinth names no longer show as raw English in Chinese.",
-                "The labyrinth crate section now includes coffee, food, and tea crate dropdowns, with basic, advanced, and expert tea crate options.",
-                "The \"Supply Crate\" wording has been adjusted to clearer crate-area copy, and tea-crate related Chinese and English translations have been added."
-            ]
-        }
+    "newFeatures": {
+      "zh": [
+        "首页「单目标模拟」新增「重复次数」设置（默认 1，最多 100），可按不同随机种子多轮模拟并合并结果，结论更稳定。",
+        "模拟结果新增「多轮统计」面板，汇总各轮中位数、稳健值与 95% 区间，并可展开逐轮明细；轮数大于 1 时，结果详情与时序图会标注数据取自哪一轮。"
+      ],
+      "en": [
+        "Home single-target simulations gain a Rounds setting (default 1, up to 100); merging results from multiple seeded rounds makes conclusions more stable.",
+        "Results gain a Multi-round Statistics panel with medians, robust means, and 95% intervals across rounds, plus expandable per-round details; with more than one round, result details and the timeline note which round they come from."
+      ]
     },
-    "2026年3月30日（v1.0.10）": {
-        "label": {
-            "zh": "2026年3月30日（v1.0.10）",
-            "en": "March 30, 2026 (v1.0.10)"
-        },
-        "notes": {
-            "zh": [
-                "主入口改为读取预生成的轻量游戏数据索引，首页、队列页、多轮结果页与设置页减少大体积数据直载，首次加载压力更低",
-                "首页战斗预览与设置页价格表等热点区域减少重复重算，频繁切换角色、调整配置或浏览价格时交互更流畅",
-                "Home 页批量 Zone / Labyrinth 模拟现在会正确沿用设置页保存的并行 worker 上限，刷新后再次运行也不会丢失该配置",
-                "补充优化路线与行为说明，便于后续跟踪性能调整与并行模拟配置"
-            ],
-            "en": [
-                "The main entry now loads a prebuilt lightweight game data index, reducing heavy direct data loads on Home, Queue, Multi-round Results, and Settings for a lighter first load.",
-                "Hot paths such as Home combat preview and Settings price tables now avoid repeated recomputation, making frequent character switches, config edits, and price browsing smoother.",
-                "Batch Zone / Labyrinth simulations on the Home page now correctly reuse the worker limit saved in Settings, and the setting no longer disappears after refresh.",
-                "Added optimization notes and behavior documentation to make future performance tuning and parallel simulation changes easier to track."
-            ]
-        }
+    "improvements": {
+      "zh": ["结果页大数值改为 k/m/b 缩写显示，与首页摘要口径统一；团灭事件日志的伤害与血量保持完整数值。"],
+      "en": [
+        "Large numbers on the results page now use k/m/b abbreviations, consistent with the home summary; wipe event log damage and HP stay fully expanded."
+      ]
     },
-    "2026年3月27日（v1.0.9）": {
-        "label": {
-            "zh": "2026年3月27日（v1.0.9）",
-            "en": "March 27, 2026 (v1.0.9)"
-        },
-        "notes": {
-            "zh": [
-                "队列收益模拟支持多人场景：设为基准时会冻结当前已选队伍，并在队列运行时带上队友一起参与模拟",
-                "队列变体仍只针对当前玩家生成与排序，避免多人组队时把队友收益错误叠加到当前玩家结果中",
-                "当队伍成员或队友配置在基准之后发生变化时，队列会提示重新设置基准，防止旧基准与新队伍混用",
-                "队列页、多轮结果页、设置页和顶部操作区新增“冻结队伍”摘要与过期提示，方便确认当前模拟口径"
-            ],
-            "en": [
-                "Queue profit simulations now support party play: setting a baseline freezes the currently selected party and includes teammates during queue runs.",
-                "Queue variants are still generated and ranked only for the active player, preventing teammate gains from being incorrectly folded into the active player's comparison.",
-                "When party members or teammate configs change after the baseline is set, the queue now prompts you to reset the baseline so old baselines are not mixed with a new party.",
-                "Queue, Multi-round Results, Settings, and the top action bar now show a \"locked party\" summary and stale warning so you can confirm the current simulation scope."
-            ]
-        }
+    "bugFixes": {
+      "zh": ["修复模拟出错时错误提示可能只显示 {} 的问题，现显示具体错误信息。"],
+      "en": ["Fixed simulation error messages sometimes showing only {}; the actual error is now shown."]
+    }
+  },
+  "2026年10月1日（v3.0.3）": {
+    "label": {
+      "zh": "2026年10月1日（v3.0.3）",
+      "en": "October 1, 2026 (v3.0.3)"
     },
-    "2026年3月27日（v1.0.8）": {
-        "label": {
-            "zh": "2026年3月27日（v1.0.8）",
-            "en": "March 27, 2026 (v1.0.8)"
-        },
-        "notes": {
-            "zh": [
-                "更新日志改为仅维护在 patchNote.json 中，首页弹窗与后续版本说明统一共用这一份数据源",
-                "移除设置页中的更新日志区域，入口调整为顶部悬浮栏按钮手动打开",
-                "首页更新日志不再自动弹出；存在未读版本时，顶部按钮会高亮闪烁提醒",
-                "首次切换到新未读机制时，历史更新日志默认标记为已读，避免旧版本持续闪烁"
-            ],
-            "en": [
-                "Patch notes are now maintained only in patchNote.json, and both the Home dialog and future version announcements share the same data source.",
-                "The patch notes section has been removed from Settings, and the entry is now opened manually from the top floating bar button.",
-                "Home patch notes no longer open automatically; when unread versions exist, the top button now highlights and flashes as a reminder.",
-                "When migrating to the new unread mechanism, historical patch notes are marked as read by default so old versions do not keep flashing."
-            ]
-        }
+    "newFeatures": {
+      "zh": [
+        "多轮排名表新增「提升后EPH」列，括号内显示相比基准的增减。",
+        "排名表表头支持点击排序（降序/升序/默认序），排名与变体列横向拖动时固定在左侧。"
+      ],
+      "en": [
+        "The multi-round ranking table gains an \"EPH (Upgraded)\" column with the signed change versus baseline in parentheses.",
+        "Ranking table headers are now clickable to sort, and the Rank and Variant columns stay pinned while scrolling sideways."
+      ]
     },
-    "2026年3月25日（v1.0.7）": {
-        "label": {
-            "zh": "2026年3月25日（v1.0.7）",
-            "en": "March 25, 2026 (v1.0.7)"
-        },
-        "notes": {
-            "zh": [
-                "新增版本更新公告功能：支持按公告 ID 记录已读，并将多条未读版本说明合并弹窗展示",
-                "公告支持中英文内容、顶部聚焦与独立滚动查看，长内容阅读更稳定",
-                "同一版本公告仅提醒一次；后续新版本发布后会自动补发未读内容",
-                "修复混合有/无日期公告时的排序问题，保证多版本公告展示顺序稳定"
-            ],
-            "en": [
-                "Added version announcement support: announcements can track read state by announcement ID and merge multiple unread versions into a single dialog.",
-                "Announcements now support Chinese and English content, top-focused layout, and independent scrolling for more stable reading of long content.",
-                "Each version announcement is only reminded once; newly released versions will automatically deliver any unread content later.",
-                "Fixed ordering when announcements with and without dates are mixed, keeping multi-version announcement order stable."
-            ]
-        }
+    "improvements": {
+      "zh": ["导出 Excel 的行顺序与页面当前排序一致。"],
+      "en": ["Excel export now follows the on-screen sorting order."]
+    }
+  },
+  "2026年10月1日（v3.0.2）": {
+    "label": {
+      "zh": "2026年10月1日（v3.0.2）",
+      "en": "October 1, 2026 (v3.0.2)"
     },
-    "2026年3月25日（v1.0.6）": {
-        "label": {
-            "zh": "2026年3月25日（v1.0.6）",
-            "en": "March 25, 2026 (v1.0.6)"
-        },
-        "notes": {
-            "zh": [
-                "主站导入脚本完成合规性整改：导入流程调整为“当前角色直导 + 手动缓存队友资料补全”",
-                "脚本不会主动调用游戏 HTTP API，也不会自动发送 view_profile 或自动操作玩家资料弹窗",
-                "队伍导入仅使用你手动打开并缓存过的队友资料，缺失成员会跳过并提示",
-                "补充主站导入脚本的使用方式、限制说明与隐私说明"
-            ],
-            "en": [
-                "The main-site import script has completed compliance adjustments: the import flow is now \"direct current character import + manual cached teammate profile completion\".",
-                "The script no longer actively calls game HTTP APIs, automatically sends view_profile, or auto-operates player profile dialogs.",
-                "Party import now uses only teammate profiles that you have manually opened and cached; missing members are skipped with a prompt.",
-                "Added usage instructions, limitations, and privacy notes for the main-site import script."
-            ]
-        }
+    "improvements": {
+      "zh": ["食物优化：报告过期后「应用方案」不再置灰，改为弹窗确认，可选择重新搜索或直接应用。"],
+      "en": [
+        "Food Optimizer: applying a stale report now opens a confirmation dialog instead of disabling the button; re-run the search or apply anyway."
+      ]
+    }
+  },
+  "2026年10月1日（v3.0.1）": {
+    "label": {
+      "zh": "2026年10月1日（v3.0.1）",
+      "en": "October 1, 2026 (v3.0.1)"
     },
-    "2026年2月27日":
-    [
-        "多轮评分去极值、评分排名支持无效 0 分标记",
-        "新增“设置”页：支持队列评分权重与并行线程上限配置、玩家配置快照"
-    ],
-    "2026年2月25日":
-    [
-        "多轮模拟改为“按轮次推进”，并在运行中实时更新原始数据与排名",
+    "improvements": {
+      "zh": [
+        "首次点击「开始模拟」不再卡顿：页面加载完成后会在后台空闲时自动预热模拟引擎，点击后立即全速开始模拟，首次点击与后续点击一样快。"
+      ],
+      "en": [
+        "The first \"Start Simulation\" click no longer stalls: the simulation engine is prewarmed in the background while the page is idle, so the first click starts at full speed just like every later one."
+      ]
+    }
+  },
+  "2026年10月1日（v3.0.0）": {
+    "label": {
+      "zh": "2026年10月1日（v3.0.0）",
+      "en": "October 1, 2026 (v3.0.0)"
+    },
+    "improvements": {
+      "zh": [
+        "战斗模拟引擎全面重铸并默认启用 Rust/WebAssembly 引擎：单轮模拟最高提速约 10 倍，长时模拟（24 小时）提速约 8 倍，模拟结果与原引擎保持一致。",
+        "食物优化器、技能触发器优化器等大批量任务在高配电脑上默认启用更多并行线程（8 → 12），整体完成时间进一步缩短约四分之一。",
+        "优化器内部评测路径重构（等效区间证书、跨线程轮次复用、按需并行扩容），大规模候选场景下绝大多数方案无需逐一模拟即可排除。"
+      ],
+      "en": [
+        "The combat simulation engine is rebuilt in Rust/WebAssembly and enabled by default: single runs are up to ~10x faster and 24-hour runs ~8x faster, with results identical to the previous engine.",
+        "Batch tools such as the Food Optimizer and Trigger Optimizer now use more parallel workers by default on capable machines (8 → 12), cutting total run time by roughly another quarter.",
+        "The optimizer's internal evaluation path was reworked (equivalence-range certificates, cross-worker round reuse, adaptive worker scaling), so the vast majority of candidate plans are eliminated without simulating each one."
+      ]
+    },
+    "bugFixes": {
+      "zh": [
+        "适配游戏 2026 年 9 月 28 日更新：标准市场税率由 5% 调整为 4%，装备出售抵扣、清算估价、宝箱估值等所有市场卖出估算同步按新税率计算。"
+      ],
+      "en": [
+        "Adapted to the September 28, 2026 game update: the standard market tax is now 4% (previously 5%), so sale deductions, liquidation estimates, and treasure chest valuations all use the new rate."
+      ]
+    }
+  },
+  "2026年9月27日（v2.6.0）": {
+    "label": {
+      "zh": "2026年9月27日（v2.6.0）",
+      "en": "September 27, 2026 (v2.6.0)"
+    },
+    "improvements": {
+      "zh": [
+        "战斗模拟引擎性能优化：模拟批次并行度更高、运行更快。",
+        "随机数改为可复现的种子随机，同一配置的模拟结果可稳定复现。",
+        "优化后台任务调度与运行状态管理，长任务可中途停止且不阻塞其他页面操作。"
+      ],
+      "en": [
+        "Combat simulation engine performance improvements: higher parallelism and faster runs.",
+        "Randomness now uses seeded, reproducible RNG, so simulation results for the same setup are stable.",
+        "Improved background task scheduling and run-state handling: long tasks can be stopped mid-run without blocking other pages."
+      ]
+    }
+  },
+  "2026年9月17日（v2.5.4）": {
+    "label": {
+      "zh": "2026年9月17日（v2.5.4）",
+      "en": "September 17, 2026 (v2.5.4)"
+    },
+    "newFeatures": {
+      "zh": [
+        "迷宫模拟新增「迷宫商店升级」设置：可为伤害、攻击速度、施法速度、暴击率、经验五类升级设置等级，模拟会计入对应加成。",
+        "主站一键导入会自动带上角色已购买的迷宫商店升级等级，被覆盖或清空时会当场提示。"
+      ],
+      "en": [
+        "Labyrinth simulations gain a \"Labyrinth Shop Upgrades\" setting: set levels for the five upgrades and the simulation applies the bonuses.",
+        "Main-site import now carries your character's purchased Labyrinth Shop Upgrade levels automatically, with a clear notice when they're overwritten or reset."
+      ]
+    }
+  },
+  "2026年9月15日（v2.5.3）": {
+    "label": {
+      "zh": "2026年9月15日（v2.5.3）",
+      "en": "September 15, 2026 (v2.5.3)"
+    },
+    "improvements": {
+      "zh": [
+        "食物优化器的推荐更靠谱：少带一格食物，就必须换来更少的死亡次数，不会再出现省了食物、死亡率却没降低的推荐方案。",
+        "同一条烹饪线的食物（如各口味的甜甜圈、软糖）在优化器里视为一类，一套方案最多选择其中一种。"
+      ],
+      "en": [
+        "Food Optimizer recommendations are more sensible: carrying one less food slot must result in fewer deaths, so plans that save a slot without reducing deaths are no longer recommended.",
+        "Foods from the same cooking line (such as the donut or gummy flavours) count as one family, and a plan picks at most one food from each family."
+      ]
+    }
+  },
+  "2026年9月14日（v2.5.2）": {
+    "label": {
+      "zh": "2026年9月14日（v2.5.2）",
+      "en": "September 14, 2026 (v2.5.2)"
+    },
+    "newFeatures": {
+      "zh": ["首页「基础设置」技能面板新增 ↑ / ↓ 排序按钮，技能 1–4 可与相邻技能槽互换位置（特殊技能槽固定在最前）。"],
+      "en": [
+        "On the Home page (Base Setup tab), ability slots now have ↑ / ↓ buttons, so Abilities 1–4 can be swapped with their neighbour (the special ability slot stays first)."
+      ]
+    },
+    "improvements": {
+      "zh": [
+        "技能升级成本按技能本身计算，不再随技能所在槽位变化，队列成本与排名更准确。",
+        "两格技能、食物或饮品对调时，队列对比会作为一个整体方案评估。"
+      ],
+      "en": [
+        "Ability upgrade costs now follow the ability itself instead of its slot, keeping queue costs and rankings accurate.",
+        "Swapping abilities, food, or drinks between two slots is now evaluated as a single plan in queue comparisons."
+      ]
+    }
+  },
+  "2026年9月14日（v2.5.1）": {
+    "label": {
+      "zh": "2026年9月14日（v2.5.1）",
+      "en": "September 14, 2026 (v2.5.1)"
+    },
+    "improvements": {
+      "zh": [
+        "首页「基础设置」的装备面板中，护符下拉框现在只列出能带来战斗加成的护符，只提升生活技能的生活技能护符不再出现，避免选中后发现配装没有任何战斗收益。",
+        "当前已装备的生活技能护符仍会保留在列表末尾，不会显示成空白选项或让人误以为装备丢失。"
+      ],
+      "en": [
+        "On the Equipment panel of the Home page (Base Setup tab), the charm dropdown now lists only charms with combat bonuses; life-skill-only charms no longer appear, so you can't accidentally pick one that adds nothing in combat.",
+        "A life-skill charm you already have equipped stays at the end of the list, so the dropdown never goes blank or looks like your gear is missing."
+      ]
+    }
+  },
+  "2026年9月14日（v2.5.0）": {
+    "label": {
+      "zh": "2026年9月14日（v2.5.0）",
+      "en": "September 14, 2026 (v2.5.0)"
+    },
+    "newFeatures": {
+      "zh": [
+        "新增「食物优化」页面：为当前地图与配装搜索成本最低的前 10 套食物方案，支持设置食物范围、取价方式与搜索模式，可一键应用到当前配置。"
+      ],
+      "en": [
+        "Added a Food Optimizer page: find the 10 lowest-cost food setups for your current map and build; adjust the food scope, pricing, and search mode, then apply one with a single click."
+      ]
+    },
+    "improvements": {
+      "zh": ["战斗模拟性能优化：模拟运行更快，食物优化搜索同样受益。"],
+      "en": [
+        "Combat simulation performance improvements: simulations run faster, and Food Optimizer searches benefit too."
+      ]
+    }
+  },
+  "2026年9月5日（v2.4.5）": {
+    "label": {
+      "zh": "2026年9月5日（v2.4.5）",
+      "en": "September 5, 2026 (v2.4.5)"
+    },
+    "improvements": {
+      "zh": [
+        "自定义权重会保留输入的小数值，切换推荐模式或刷新页面后仍按原设置显示。",
+        "铁牛模式支持更精确的权重输入，权重总和显示、校验和实际应用保持一致。"
+      ],
+      "en": [
+        "Custom Advisor weights now keep the decimal values you enter when switching modes or reloading the page.",
+        "Iron Cow weights now support more precise input, with the displayed total, validation, and applied values kept in sync."
+      ]
+    },
+    "bugFixes": {
+      "zh": [
+        "修复自定义权重在失焦或清空输入后被意外改写，导致推荐比例变化的问题。",
+        "修复铁牛模式负数权重显示与总和不一致，以及合法的小数权重可能无法应用的问题。"
+      ],
+      "en": [
+        "Fixed custom weights being rewritten after blur or clearing an input, which could change the recommendation balance.",
+        "Fixed negative Iron Cow weights showing a different value from the total, and valid decimal weights being rejected or applied incorrectly."
+      ]
+    }
+  },
+  "2026年9月4日（v2.4.4）": {
+    "label": {
+      "zh": "2026年9月4日（v2.4.4）",
+      "en": "September 4, 2026 (v2.4.4)"
+    },
+    "newFeatures": {
+      "zh": [
+        "新增「不可交易物估值」设置：牛铃、披风等不可交易物品按市场等价物计价，宝箱利润不再漏算。",
+        "新增「收入计税」设置：利润按市场税率计税，也可切换为不计税。"
+      ],
+      "en": [
+        "New \"Non-tradable Valuation\" setting: cowbells and capes are valued at market equivalents, so chest profits no longer miss their value.",
+        "New \"Revenue Tax\" setting: profits are taxed at market rates by default, with an optional untaxed view."
+      ]
+    },
+    "bugFixes": {
+      "zh": ["修复宝箱估值漏算牛铃价值的问题，掉落战利品宝箱的怪物利润更准确。"],
+      "en": [
+        "Fixed chest valuation omitting cowbell value; expected profits for chest-dropping monsters are now more accurate."
+      ]
+    }
+  },
+  "2026年9月4日（v2.4.3）": {
+    "label": {
+      "zh": "2026年9月4日（v2.4.3）",
+      "en": "September 4, 2026 (v2.4.3)"
+    },
+    "newFeatures": {
+      "zh": [
+        "顶部工具栏新增「市场数据」指示器：实时显示行情数据新旧，点击一键刷新。",
+        "行情未获取、已过期或刷新失败时，指示器会变色提醒。"
+      ],
+      "en": [
+        "Added a Market Data indicator to the top toolbar: see how fresh your price data is and refresh with one click.",
+        "The indicator changes color when data is missing, outdated, or a refresh fails."
+      ]
+    }
+  },
+  "2026年9月4日（v2.4.2）": {
+    "label": {
+      "zh": "2026年9月4日（v2.4.2）",
+      "en": "September 4, 2026 (v2.4.2)"
+    },
+    "newFeatures": {
+      "zh": [
+        "刷图推荐新增「铁牛」掉落模式：按所选物品的掉落、经验、安全评分，不比收益；新增「掉落/h」列（悬停看明细）。",
+        "铁牛模式可搜索勾选目标掉落物品，扫描自动只搜能掉它们的地图。",
+        "推荐结果表点击列表头即可排序，无需重新扫描。"
+      ],
+      "en": [
+        "Added an Iron Cow drop mode to the Advisor: scored on your selected items' drops, XP, and safety, with a new Drops/h column (hover for details).",
+        "Iron Cow mode lets you search and pick target drop items; scans only cover zones that can drop them.",
+        "Click any column header in the results table to sort, no re-scan needed."
+      ]
+    },
+    "improvements": {
+      "zh": [
+        "刷图推荐的模式、权重与筛选设置自动保存，刷新不丢。",
+        "「开始 / 停止推荐」移入顶部固定工具栏，进度常驻显示。",
+        "掉落预估按怪物实际难度档计算，升档怪的掉落更准。"
+      ],
+      "en": [
+        "Advisor mode, weight, and filter settings now persist across page reloads.",
+        "Run/Stop Advisor moved to the sticky top toolbar, with progress always visible.",
+        "Drop estimates now use each monster's actual difficulty tier, so upgraded spawns are more accurate."
+      ]
+    },
+    "bugFixes": {
+      "zh": [
+        "修复英文界面下「已有扫描结果」弹窗取消按钮显示中文的问题。",
+        "修复网络不佳导致模拟模块加载失败时无提示或显示英文原始报错的问题，现在会提示检查网络后重试。"
+      ],
+      "en": [
+        "Fixed the cancel button on the advisor's \"scan results exist\" dialog showing Chinese in the English UI.",
+        "Fixed silent failures when the simulation module fails to load; you'll now be prompted to check your connection and retry."
+      ]
+    }
+  },
+  "2026年9月2日（v2.4.1）": {
+    "label": {
+      "zh": "2026年9月2日（v2.4.1）",
+      "en": "September 2, 2026 (v2.4.1)"
+    },
+    "newFeatures": {
+      "zh": [
+        "饮品选择列表不再显示无法在战斗中使用的茶类饮品。",
+        "价格弹窗的镜子成本改为总成本口径（现金成本 + 基准件出售价值），多轮结果与队列合计同步采用。"
+      ],
+      "en": [
+        "The drink list no longer shows teas that cannot be used in combat.",
+        "The mirror cost in the price dialog now uses a total-cost basis (cash + baseline piece sale value), applied consistently to multi-round results and queue totals."
+      ]
+    },
+    "improvements": {
+      "zh": ["导入配置时会自动清空已失效的茶类饮品选择，避免下拉框出现空白选项。"],
+      "en": [
+        "Importing configs now clears outdated tea selections, so the drink dropdown no longer shows blank entries."
+      ]
+    },
+    "bugFixes": {
+      "zh": [
+        "修复旧配置残留茶类饮品时，战斗模拟可能一直卡住不出结果的问题。",
+        "修复镜子方案精炼装备低档输入件计价错误，现按基础物品计价。",
+        "修复镜子方案重复抵扣基准件出售值、净成本显示偏低的问题。",
+        "修复同物品 +1 升 +2 时镜子方案无法入队的问题。",
+        "价格确认失败不再关闭弹窗并清空已填写内容，修正后可直接重试。",
+        "修复基准件无市场价时悬停说明与实际提示相互矛盾的问题。"
+      ],
+      "en": [
+        "Fixed simulations hanging forever when older configs had leftover tea selections.",
+        "Fixed mirror plans pricing the lower input of refined gear as the refined item; it is now priced as the base item.",
+        "Fixed mirror plans deducting the baseline sale value twice, understating the net cost.",
+        "Fixed mirror plans for same-item +1→+2 upgrades failing to enqueue.",
+        "Price confirmation failures no longer close the dialog or wipe your entries; just fix and retry.",
+        "Fixed the baseline piece hover hint contradicting the visible text when it had no market price."
+      ]
+    }
+  },
+  "2026年9月2日（v2.4.0）": {
+    "label": {
+      "zh": "2026年9月2日（v2.4.0）",
+      "en": "September 2, 2026 (v2.4.0)"
+    },
+    "newFeatures": {
+      "zh": [
+        "新增资产分（Gear Score）：导入玩家后，玩家名称旁会显示资产分，综合衡量其装备、房屋、技能书和公会神龛的市场价值。",
+        "鼠标悬停可查看各项明细，点击可复制。"
+      ],
+      "en": [
+        "Added Gear Score: after importing a player, a score appears next to their name, summarizing the market value of their gear, house, ability books, and guild shrines.",
+        "Hover to see itemized details, or click to copy."
+      ]
+    },
+    "improvements": {
+      "zh": [
+        "资产分采用与 MWITools 相同的计算方式，优先使用官方估算和市场行情，数值贴近实际价值。",
+        "主站导入后立即显示资产分，分数随配置保存并随导出数据携带。"
+      ],
+      "en": [
+        "Gear Score uses the same calculation as MWITools, preferring official estimates and live market data, so values stay close to reality.",
+        "Scores appear right after import and are saved with configs and carried in exported data."
+      ]
+    }
+  },
+  "2026年8月30日（v2.3.0）": {
+    "label": {
+      "zh": "2026年8月30日（v2.3.0）",
+      "en": "August 30, 2026 (v2.3.0)"
+    },
+    "newFeatures": {
+      "zh": [
+        "队列价格确认弹窗重构：每件装备可选左一价、右一价、手动输入或贤者之镜合成，买卖两侧报价同列对比。",
+        "新增贤者之镜合成方案定价：自动计算最低成本合成路线，缺价件可手动补价，基准装备可顶替 1 件输入。",
+        "设置页新增「队列定价」选项：可选择基准装备出售抵扣时使用右1或左1报价。",
+        "队列列表与 Excel 导出新增价格方式明细。"
+      ],
+      "en": [
+        "Reworked the queue price dialog: each equipment can use Left 1, Right 1, Manual, or Mirror pricing, with both sides shown for comparison.",
+        "Added Mirror pricing: auto-computes the cheapest combination path, with manual input for missing pieces and baseline substitution.",
+        "Added a \"Queue Pricing\" setting: choose Right 1 or Left 1 as the sale-side quote for replaced baseline equipment.",
+        "Queue list and Excel export now show the pricing method for each item."
+      ]
+    },
+    "improvements": {
+      "zh": [
+        "价格显示统一使用紧凑格式（k/m/b）。",
+        "市场价格有更新时显示「新价格」徽标，可一键改用最新价。",
+        "确认弹窗中右一价没有实际买单（Bid）时，不再用 Ask 兜底展示：右一价列显示无价，右一价方案不可选。",
+        "确认弹窗中左一价没有任何参考价（精确 Ask、官方小时均价、历史 Ask 均缺失）时不可选，该行自动回退手动输入。"
+      ],
+      "en": [
+        "Prices now use a compact format (k/m/b).",
+        "A \"New price\" badge appears when the market price changes, with a one-click option to update.",
+        "When no real bid exists, the Right 1 quote no longer falls back to the Ask: the column shows no price and the Right 1 method is disabled.",
+        "When no reference price exists for the Left 1 quote (no exact Ask, official hourly average, or historical Ask), the Left 1 method is disabled and the row falls back to manual input."
+      ]
+    },
+    "bugFixes": {
+      "zh": ["修复弹窗中选定的定价方式被市场精确价静默覆盖，导致队列页与多轮模拟成本不一致的问题。"],
+      "en": [
+        "Fixed the chosen pricing method being silently overridden by the exact market price, causing queue and simulation costs to mismatch."
+      ]
+    }
+  },
+  "2026年8月25日（v2.2.0）": {
+    "label": {
+      "zh": "2026年8月25日（v2.2.0）",
+      "en": "August 25, 2026 (v2.2.0)"
+    },
+    "newFeatures": {
+      "zh": [
+        "主站导入脚本新增「复制角色数据」按钮：在玩家资料弹窗中一键复制该角色资料（JSON），粘贴到模拟器导入导出弹窗即可导入。",
+        "队友分享资料导入现在直接采用主站下发的实际生效公会神龛战斗增益，未拥有的增益按 0 处理。"
+      ],
+      "en": [
+        "Added a \"Copy Character Data\" button to the main-site import script: copy a character's profile (JSON) from their dialog and paste it into the simulator's Import/Export dialog.",
+        "Teammate imports now use the effective guild shrine combat buffs issued by the main site, treating missing buffs as level 0."
+      ]
+    },
+    "improvements": {
+      "zh": [
+        "优化主站弹窗检测性能，弹窗频繁开关时不再持续全量扫描。",
+        "非中英语言环境下，导入脚本界面统一回退为中文。"
+      ],
+      "en": [
+        "Optimized profile dialog detection on the main site, so frequent dialog toggling no longer triggers continuous full scans.",
+        "The import script UI now falls back to Chinese in non-Chinese/English locales."
+      ]
+    },
+    "bugFixes": {
+      "zh": [
+        "修复「复制角色数据」按钮的挂载问题：短角色名会被弹窗内其它文字误匹配、弹窗打开与扫描冷却重叠时按钮不出现。",
+        "修复队友分享资料公会增益为空时静默沿用导入者手动配置的问题，现在统一按未拥有处理。"
+      ],
+      "en": [
+        "Fixed the copy button's mount issues: short character names matching unrelated dialog text, and the button not appearing when the dialog opened during the scan cooldown.",
+        "Fixed combat buffs silently reusing the importer's manual configuration when a teammate's guild buff data is empty; they are now treated as unowned."
+      ]
+    }
+  },
+  "2026年8月24日（v2.1.0）": {
+    "label": {
+      "zh": "2026年8月24日（v2.1.0）",
+      "en": "August 24, 2026 (v2.1.0)"
+    },
+    "newFeatures": {
+      "zh": [
+        "新增未读更新预览弹窗，点击侧边栏集中预览所有未读版本。",
+        "更新日志页新增版本目录侧栏，支持跳转并高亮当前版本。",
+        "更新日志按「新功能 / 体验优化 / 缺陷修复」三分类展示。"
+      ],
+      "en": [
+        "Added an unread-updates preview dialog from the sidebar.",
+        "Added a Versions sidebar on the Patch Notes page with jump-to and current-version highlighting.",
+        "Patch notes are now grouped into New Features / Improvements / Bug Fixes."
+      ]
+    },
+    "improvements": {
+      "zh": ["细化未读标记：点击关闭或查看全部即已读，按 Esc 或点击遮罩保留未读。"],
+      "en": ["Refined unread marking: Close or View all marks as read, while Esc or the backdrop keeps them unread."]
+    },
+    "bugFixes": {
+      "zh": ["修复语言切换后未读徽标残留、在更新日志页点击入口无响应的问题。"],
+      "en": [
+        "Fixed the unread badge lingering after a language switch and the sidebar entry being unresponsive on the Patch Notes page."
+      ]
+    }
+  },
+  "2026年8月23日（v2.0.10）": {
+    "label": {
+      "zh": "2026年8月23日（v2.0.10）",
+      "en": "August 23, 2026 (v2.0.10)"
+    },
+    "newFeatures": {
+      "zh": ["组队光环预览：战斗属性面板新增队友光环带来的属性变化展示，多人施放同一光环时按最强效果生效。"],
+      "en": [
+        "Party aura preview: the Battle Attributes panel now shows stat changes from teammate auras, applying the strongest one when multiple teammates cast the same aura."
+      ]
+    },
+    "improvements": {
+      "zh": ["优化模拟性能：增益到期改为定向清理，减少无效全量扫描。"],
+      "en": ["Optimized simulation performance with targeted expiry cleanup for ability buffs."]
+    },
+    "bugFixes": {
+      "zh": [
+        "修复自身光环被队友更强光环覆盖时，属性面板重复显示来源、数值归因错误的问题。",
+        "修复队友因饮品强化再次施放同一光环时，属性面板出现重复来源的问题。"
+      ],
+      "en": [
+        "Fixed duplicate source entries and incorrect attribution when the hero's own aura is overridden by a stronger teammate aura.",
+        "Fixed duplicate source rows when a teammate recasts the same aura after a drink boost."
+      ]
+    }
+  },
+  "2026年8月18日（v2.0.9）": {
+    "label": {
+      "zh": "2026年8月18日（v2.0.9）",
+      "en": "August 18, 2026 (v2.0.9)"
+    },
+    "newFeatures": {
+      "zh": ["新增公会神龛增益归因，每个神龛单独列出影响的属性及数值变化。"],
+      "en": ["Added guild shrine attribution, listing each shrine's affected stats and their deltas separately."]
+    },
+    "improvements": {
+      "zh": [
+        "战斗属性面板改版：属性按概览、输出、防御、效果、收益分组展示，并可展开查看基础值、各来源增量与最终值。",
+        "战斗属性现在显示模拟后的最终值（含卷轴、饮品、技能触发效果）。"
+      ],
+      "en": [
+        "Redesigned the Battle Attributes panel: stats are grouped into Overview, Offense, Defense, Effects, and Rewards, with expandable base value, per-source deltas, and final value.",
+        "Battle attributes now show the post-simulation final value (including scrolls, drinks, and triggered ability effects)."
+      ]
+    }
+  },
+  "2026年8月16日（v2.0.8）": {
+    "label": {
+      "zh": "2026年8月16日（v2.0.8）",
+      "en": "August 16, 2026 (v2.0.8)"
+    },
+    "newFeatures": {
+      "zh": [
+        "新增战斗卷轴：支持统一启停、逐项选择及有限或无限库存，普通战斗中每 30 分钟自动续期。",
+        "结果页显示卷轴用量；经验和掉落按怪物死亡时的有效卷轴结算，卷轴不计入成本，迷宫和公会试炼不生效。"
+      ],
+      "en": [
+        "Added combat scrolls with a global toggle, per-scroll selection, finite or unlimited stock, and automatic 30-minute renewals in standard combat.",
+        "Results show scroll usage; experience and drops use the scrolls active when each monster dies, scrolls are excluded from costs, and they do not apply in Labyrinth or Guild Trials."
+      ]
+    },
+    "bugFixes": {
+      "zh": ["修正模拟结束边界与长时间模拟中的结算偏差，并提升卷轴续期和掉落统计性能。"],
+      "en": [
+        "Fixed simulation-end boundaries and long-run settlement discrepancies, and improved scroll renewal and drop-stat performance."
+      ]
+    }
+  },
+  "2026年8月15日（v2.0.7）": {
+    "label": {
+      "zh": "2026年8月15日（v2.0.7）",
+      "en": "August 15, 2026 (v2.0.7)"
+    },
+    "improvements": {
+      "zh": [
+        "同步游戏 8/14 市场与公会试炼更新，市场税率提高至 5%，所有市场卖出估值已扣除 5% 税。",
+        "牛铃袋 (10个) 市场卖出按官方特殊税率 18% 扣税，其余物品仍按 5%。",
+        "税后价格四舍五入取整为整数金币（官方取整规则暂未核实，集中一处可切换）。",
+        "同步神龛增益（稀有发现 1.5%/级、精华发现 3%/级）与公会试炼怪物数据。"
+      ],
+      "en": [
+        "Synced the Aug 14 game update: market tax raised to 5%, and all market-sale valuations now deduct the tax.",
+        "Bag of 10 Cowbells market sales now use the official special 18% tax rate; all other items remain at 5%.",
+        "Taxed prices are rounded to whole coins (official rounding rule unverified; centralized and switchable).",
+        "Synced shrine buffs (Rare Find 1.5% and Essence Find 3% per level) and guild trial monster data."
+      ]
+    }
+  },
+  "2026年8月12日（v2.0.6）": {
+    "label": {
+      "zh": "2026年8月12日（v2.0.6）",
+      "en": "August 12, 2026 (v2.0.6)"
+    },
+    "newFeatures": {
+      "zh": ["目标装备无市场价格时，支持手动输入买入价后加入队列。", "买入价支持整数输入与 k/m/b 单位按钮。"],
+      "en": [
+        "Enter a manual buy price when target equipment has no market price.",
+        "Buy prices support integer input with k/m/b unit buttons."
+      ]
+    },
+    "improvements": {
+      "zh": ["手动价格仅用于对应队列项。"],
+      "en": ["Manual prices apply only to the corresponding queue item."]
+    }
+  },
+  "2026年8月10日（v2.0.5）": {
+    "label": {
+      "zh": "2026年8月10日（v2.0.5）",
+      "en": "August 10, 2026 (v2.0.5)"
+    },
+    "newFeatures": {
+      "zh": ["更新日志从弹窗迁移为独立页面，进入页面后自动标记当前未读版本。"],
+      "en": [
+        "Patch notes now open on a dedicated page instead of a dialog, and current unread versions are marked as read when the page opens."
+      ]
+    },
+    "improvements": {
+      "zh": [
+        "更新日志采用左侧版本、右侧内容的双栏排版，移动端自动切换为上下布局。",
+        "放大侧边栏导航文字和图标，未读更新圆点新增轻微呼吸提示并兼容减少动态效果设置。"
+      ],
+      "en": [
+        "Updated the patch notes layout with versions on the left and release details on the right, stacking vertically on mobile.",
+        "Increased sidebar navigation text and icon sizes, and added a subtle reduced-motion-aware breathing cue for unread updates."
+      ]
+    }
+  },
+  "2026年8月10日（v2.0.4）": {
+    "label": {
+      "zh": "2026年8月10日（v2.0.4）",
+      "en": "August 10, 2026 (v2.0.4)"
+    },
+    "improvements": {
+      "zh": [
+        "官方精确 Ask 和小时均价均缺失时，可确认使用历史归档最新有效 Ask。",
+        "确认弹窗与队列警告显示价格来源和数据时间；新官方卖单仍优先。",
+        "队列仅在官方行情快照过期时刷新；新鲜快照缺少卖单时直接使用备用价格，避免重复请求。"
+      ],
+      "en": [
+        "Confirm the latest valid archived Ask when both the official exact Ask and hourly average are unavailable.",
+        "Confirmation and queue warnings show the source and data time; new official listings still take priority.",
+        "Refresh official market data only when its snapshot is stale; a fresh snapshot without a listing uses fallback pricing without a duplicate request."
+      ]
+    }
+  },
+  "2026年8月9日（v2.0.3）": {
+    "label": {
+      "zh": "2026年8月9日（v2.0.3）",
+      "en": "August 9, 2026 (v2.0.3)"
+    },
+    "newFeatures": {
+      "zh": ["缺少精确卖单时刷新官方行情，确认有效小时均价后可加入队列。"],
+      "en": [
+        "Refresh official market data when an exact sell listing is missing, then confirm a valid hourly average before adding the variant."
+      ]
+    },
+    "improvements": {
+      "zh": ["确认价格随队列项保存，运行时精确卖单优先。", "队列页显示确认价格、成交量和数据时间。"],
+      "en": [
+        "Save confirmed prices with queue items; exact listings take priority at run time.",
+        "Queue shows the confirmed price, volume, and data time."
+      ]
+    }
+  },
+  "2026年8月9日（v2.0.2）": {
+    "label": {
+      "zh": "2026年8月9日（v2.0.2）",
+      "en": "August 9, 2026 (v2.0.2)"
+    },
+    "newFeatures": {
+      "zh": ["队列页新增移除单个队列项。"],
+      "en": ["Added per-item removal to the Queue page."]
+    },
+    "improvements": {
+      "zh": [
+        "队列装备成本改为完全采用市场定价：目标强化等级无精确卖单时禁止入队。",
+        "移除装备手填升级成本，基准装备无精确盘口时按 0 计算并提示。"
+      ],
+      "en": [
+        "Queue equipment costs now use market pricing only; variants without an exact sell listing are rejected.",
+        "Removed manual equipment cost input; baseline items without an exact quote are valued at 0."
+      ]
+    }
+  },
+  "2026年8月8日（v2.0.1）": {
+    "label": {
+      "zh": "2026年8月8日（v2.0.1）",
+      "en": "August 8, 2026 (v2.0.1)"
+    },
+    "newFeatures": {
+      "zh": ["食物、饮品和技能新增内联触发条件编辑。"],
+      "en": ["Added inline trigger-condition editing for food, drinks, and abilities."]
+    },
+    "improvements": {
+      "zh": ["优化首页模拟工作台布局，完整结果改为独立标签页。", "优化战斗命令栏与吸顶交互。"],
+      "en": [
+        "Improved the Home simulation workspace layout and moved complete results to a dedicated tab.",
+        "Improved the combat command bar and sticky interactions."
+      ]
+    }
+  },
+  "2026年8月8日（v2.0.0）": {
+    "label": {
+      "zh": "2026年8月8日（v2.0.0）",
+      "en": "August 8, 2026 (v2.0.0)"
+    },
+    "newFeatures": {
+      "zh": ["新增响应式侧栏与战斗命令栏，优化各页面布局。", "新增亮暗主题并完善键盘操作与移动端适配。"],
+      "en": [
+        "Added a responsive sidebar and combat command bar, with improved page layouts.",
+        "Added light and dark themes with improved keyboard and mobile support."
+      ]
+    },
+    "improvements": {
+      "zh": ["全站界面升级为 shadcn-vue、Reka UI 与 Tailwind CSS 4。"],
+      "en": ["Upgraded the full interface to shadcn-vue, Reka UI, and Tailwind CSS 4."]
+    }
+  },
+  "2026年8月8日（v1.0.29）": {
+    "label": {
+      "zh": "2026年8月8日（v1.0.29）",
+      "en": "August 8, 2026 (v1.0.29)"
+    },
+    "newFeatures": {
+      "zh": ["新增中英文图文使用教程，覆盖首次使用与数据导入、战斗模拟、队列比较、刷图推荐、强化、生活技能与设置。"],
+      "en": [
+        "Added illustrated Chinese and English user guides covering first use and data import, combat simulation, queue comparisons, Advisor, Enhancement, Skilling, and Settings."
+      ]
+    }
+  },
+  "2026年7月16日（v1.0.28）": {
+    "label": {
+      "zh": "2026年7月16日（v1.0.28）",
+      "en": "July 16, 2026 (v1.0.28)"
+    },
+    "newFeatures": {
+      "zh": ["生活技能计算新增“单项 / 全部”范围选择。"],
+      "en": ["Added Single / All calculation scope to the Skilling planner."]
+    },
+    "improvements": {
+      "zh": ["生活技能升级路线改为按目标等级区间汇总展示。", "优化生活技能工具栏的响应式布局。"],
+      "en": [
+        "Changed Skilling upgrade routes to summarize the target level range.",
+        "Improved the responsive layout of the Skilling toolbar."
+      ]
+    }
+  },
+  "2026年7月16日（v1.0.27）": {
+    "label": {
+      "zh": "2026年7月16日（v1.0.27）",
+      "en": "July 16, 2026 (v1.0.27)"
+    },
+    "newFeatures": {
+      "zh": ["生活技能模拟新增采摘。", "新增采摘加工效果暂未计入的提示。"],
+      "en": [
+        "Added Foraging to the Skilling planner.",
+        "Added a notice that Foraging processing effects are not yet included."
+      ]
+    },
+    "improvements": {
+      "zh": ["强化模拟导入快照改为仅在当前页面会话保留。"],
+      "en": ["Changed imported Enhancement snapshots to remain only for the current page session."]
+    }
+  },
+  "2026年7月16日（v1.0.26）": {
+    "label": {
+      "zh": "2026年7月16日（v1.0.26）",
+      "en": "July 16, 2026 (v1.0.26)"
+    },
+    "newFeatures": {
+      "zh": ["新增生活技能优化模式。"],
+      "en": ["Added Skilling optimization modes."]
+    },
+    "improvements": {
+      "zh": [
+        "升级路线改为整级模拟与逐级重算。",
+        "完善生活技能候选与路线展示。",
+        "生活技能导入快照改为仅在当前页面会话保留。"
+      ],
+      "en": [
+        "Changed upgrade routes to full-level simulation and per-level recalculation.",
+        "Improved Skilling candidate and route presentation.",
+        "Changed imported Skilling snapshots to remain only for the current page session."
+      ]
+    }
+  },
+  "2026年7月15日（v1.0.25）": {
+    "label": {
+      "zh": "2026年7月15日（v1.0.25）",
+      "en": "July 15, 2026 (v1.0.25)"
+    },
+    "newFeatures": {
+      "zh": ["新增生活技能升级推荐器。", "新增生活技能路线总览与逐级明细。", "主站一键导入脚本新增生活技能导入。"],
+      "en": [
+        "Added the Skilling Upgrade Planner.",
+        "Added Skilling route overviews and per-level details.",
+        "Added Skilling imports to the main-site import script."
+      ]
+    }
+  },
+  "2026年7月13日（v1.0.24）": {
+    "label": {
+      "zh": "2026年7月13日（v1.0.24）",
+      "en": "July 13, 2026 (v1.0.24)"
+    },
+    "newFeatures": {
+      "zh": [
+        "战斗模拟器新增公会神龛增益：可为每名角色配置力量、节奏、精神、稀有和学者五项战斗 Buff，并计入普通区域、地下城与迷宫模拟。"
+      ],
+      "en": [
+        "Added guild shrine buffs to combat simulation. Force, Tempo, Spirit, Rarity, and Scholar combat buffs can be configured per player and now affect zones, dungeons, and labyrinths."
+      ]
+    },
+    "improvements": {
+      "zh": [
+        "主站导入脚本现在会结合角色已购买等级和当前公会神龛等级，自动导入实际生效的神龛 Buff。",
+        "统一模拟器中的游戏实体名称为官方翻译，修复强化茶饮、装备槽、战斗属性及地下城/迷宫等位置仍使用本地自建词条的问题。"
+      ],
+      "en": [
+        "The main-site import script now combines purchased buff levels with the current guild shrine caps to import each effective shrine buff level.",
+        "Unified game entity names across the simulator with the official translations, replacing remaining local labels for enhancement teas, equipment slots, combat stats, dungeons, and labyrinths."
+      ]
+    }
+  },
+  "2026年7月13日（v1.0.23）": {
+    "label": {
+      "zh": "2026年7月13日（v1.0.23）",
+      "en": "July 13, 2026 (v1.0.23)"
+    },
+    "newFeatures": {
+      "zh": [
+        "强化模拟和设置页的物品搜索现在可同时匹配官方中文名、英文名和 HRID。",
+        "翻译资源现在随版本离线加载，并新增发布前的官方词条同步、来源记录和完整性校验流程。"
+      ],
+      "en": [
+        "Item search on the Enhancement and Settings pages can now match official Chinese names, English names, and HRIDs at the same time.",
+        "Translation resources are now loaded offline with each release, backed by a pre-release synchronization, source-recording, and integrity-validation workflow."
+      ]
+    },
+    "improvements": {
+      "zh": [
+        "游戏词条改为使用官网当前发布的中英文翻译快照，统一物品、技能、能力、动作、怪物、住宅、成就和战斗触发条件等名称。"
+      ],
+      "en": [
+        "Game terminology now uses snapshots of the official English and Chinese translations, unifying names for items, skills, abilities, actions, monsters, housing, achievements, and combat trigger metadata."
+      ]
+    }
+  },
+  "2026年7月13日（v1.0.22）": {
+    "label": {
+      "zh": "2026年7月13日（v1.0.22）",
+      "en": "July 13, 2026 (v1.0.22)"
+    },
+    "newFeatures": {
+      "zh": ["主站导入脚本新增强化模拟页入口，可导入当前角色的强化等级、强化装备、饮品、房间、社区 Buff 和成就加成。"],
+      "en": [
+        "The main-site import script now adds an Enhancement-page entry for importing the current character's enhancing level, gear, drinks, housing, community buffs, and achievement bonuses."
+      ]
+    },
+    "improvements": {
+      "zh": ["强化装备导入现在同时读取穿戴栏和背包；背包中没有穿戴装备的槽位会自动选择等级最高的装备。"],
+      "en": [
+        "Enhancement gear imports now include both equipped and inventory items; when a slot has no equipped support gear, the highest-level inventory item is selected automatically."
+      ]
+    }
+  },
+  "2026年7月12日（v1.0.21）": {
+    "label": {
+      "zh": "2026年7月12日（v1.0.21）",
+      "en": "July 12, 2026 (v1.0.21)"
+    },
+    "newFeatures": {
+      "zh": [
+        "新增强化模拟器：可选择目标装备、起始与目标强化等级，并结合强化等级、辅助装备、饮品、住宅、社区增益和成就计算成功率、耗时与经验。",
+        "新增保护策略对比：自动比较不保护及不同保护起始等级，结合市场价格、保护物、材料、金币和工时成本推荐最低期望投入方案。",
+        "新增贤者之镜制作规划与强化装备分解价值参考，并支持不可交易装备的地下城宝箱获取估值。",
+        "新增成本风险分析：通过蒙特卡洛模拟或矩估计近似展示 P25–P99 成本分位、预算内成功率、随机种子和模拟进度。",
+        "强化页面支持中英文界面、配置与收藏持久化、价格覆盖及官方物品图标。"
+      ],
+      "en": [
+        "Added the Enhancement Simulator for selecting target equipment and enhancement levels, with success rate, time, and experience calculations covering skill level, support gear, drinks, housing, community buffs, and achievements.",
+        "Added protection strategy comparisons across no-protection and multiple protection thresholds, recommending the lowest expected investment using market, protection, material, coin, and labor costs.",
+        "Added Philosopher's Mirror build planning, enhanced-item decomposition value references, and dungeon chest acquisition estimates for non-tradable equipment.",
+        "Added cost risk analysis with Monte Carlo simulation or moment-based approximation, including P25–P99 cost percentiles, success-within-budget probability, seeded runs, and progress reporting.",
+        "The Enhancement page includes bilingual UI, persistent configuration and favorites, price overrides, and official item icons."
+      ]
+    }
+  },
+  "2026年5月28日（v1.0.20）": {
+    "label": {
+      "zh": "2026年5月28日（v1.0.20）",
+      "en": "May 28, 2026 (v1.0.20)"
+    },
+    "improvements": {
+      "zh": ["补齐相关制作项和材料名称的中文显示，查看配装、材料和制作信息时更容易对上装备。"],
+      "en": [
+        "Added Chinese names for the related crafting entries and materials, making loadouts, materials, and crafting info easier to match."
+      ]
+    },
+    "bugFixes": {
+      "zh": [
+        "修复配装与技能页中部分 95 级鞋子显示英文的问题；开路靴、探路靴、寻路靴以及它们的精炼版现在都会正确显示中文。"
+      ],
+      "en": [
+        "Fixed some level 95 boots showing English names on the Loadout & Skills page. Pathbreaker, Pathfinder, and Pathseeker Boots, including refined versions, now show Chinese names correctly."
+      ]
+    }
+  },
+  "2026年5月14日（v1.0.19）": {
+    "label": {
+      "zh": "2026年5月14日（v1.0.19）",
+      "en": "May 14, 2026 (v1.0.19)"
+    },
+    "newFeatures": {
+      "zh": ["推荐刷图设置新增“快速扫描轮次”（可在 1–10 之间调节），按需在速度和精度之间权衡。"],
+      "en": [
+        "Added a Quick Rounds setting under Advisor (range 1–10), letting you trade off scan speed against precision."
+      ]
+    },
+    "improvements": {
+      "zh": [
+        "推荐刷图扫描更稳：默认快速扫描轮数由 1 提升到 3，复核轮数由 10 提升到 20，同一目标多次扫描的排名波动明显减小；扫描耗时相应增加约 2.3 倍。",
+        "排名公式优化：收益高但每轮波动稍大的目标不再被过度压低，排名更贴近实际收益预期。"
+      ],
+      "en": [
+        "Advisor scans are more stable: default quick-scan rounds raised from 1 to 3 and refine rounds from 10 to 20, noticeably reducing ranking swings between consecutive scans of the same target. Scan time roughly 2.3x.",
+        "Tuned the ranking formula so high-yield targets with naturally noisier per-run results are no longer over-penalised and rank closer to their real expected payoff."
+      ]
+    }
+  },
+  "2026年4月27日（v1.0.18）": {
+    "label": {
+      "zh": "2026年4月27日（v1.0.18）",
+      "en": "April 27, 2026 (v1.0.18)"
+    },
+    "newFeatures": {
+      "zh": ["多件护甲装备新增“反伤伤害”属性，精炼加成同步包含该属性"],
+      "en": [
+        "Multiple armor items now include a defensive damage stat, with enhancement bonuses also covering this attribute"
+      ]
+    },
+    "improvements": {
+      "zh": [
+        "同步官方最新游戏数据：护符类装备（基础/进阶/专家/宗师）补充描述文案，明确说明其将战斗经验聚焦到对应技能",
+        "迷宫卷轴（采集/美食/加工/稀有发现/智慧）描述更新，明确标注仅在迷宫外生效；新增迷宫代币分解产物",
+        "成就“地下城精炼师”更名为“精炼师”，描述扩展为包含迷宫装备精炼"
+      ],
+      "en": [
+        "Synced with the latest official game data: charm equipment (Basic/Advanced/Expert/Grandmaster) now has descriptions clarifying that they focus combat experience to the corresponding skill",
+        "Labyrinth scrolls (Gathering/Gourmet/Processing/Rare Find/Wisdom) descriptions updated to note they are only effective outside the Labyrinth; they can now be decomposed into labyrinth tokens",
+        "Achievement \"Dungeon Refiner\" renamed to \"Refiner\" with expanded description including labyrinth equipment refining"
+      ]
+    }
+  },
+  "2026年4月21日（v1.0.17）": {
+    "label": {
+      "zh": "2026年4月21日（v1.0.17）",
+      "en": "April 21, 2026 (v1.0.17)"
+    },
+    "newFeatures": {
+      "zh": [
+        "设置页新增“成本分口径”，现在可以在严格成本和综合成本之间切换。",
+        "设置页的队列配置重组为“评分模型 / 执行与线程 / 采样与统计”三块，并新增“性能分内部优先级”，可以用收益和 XP 权重决定剩余权重如何自动分配到 DPS 与 Kills。"
+      ],
+      "en": [
+        "Added a Cost Score Metric option in Settings, so you can switch between Strict and Composite cost scoring.",
+        "Reorganized Queue Configuration in Settings into Scoring, Execution, and Sampling sections, and added Performance Priorities so Profit and XP weights can control how the remaining share is automatically split into DPS and Kills."
+      ]
+    },
+    "improvements": {
+      "zh": [
+        "多轮结果页和导出表头会显示当前使用的成本分口径，排名规则更容易看懂。",
+        "多轮结果页现在也会展示当前性能子权重与中位数融合比例，综合成本和稳健聚合的计算方式更直观。",
+        "调整评分权重、性能分内部优先级、中位数融合比例或成本分口径后，已有多轮结果会立即按新规则重新排名，不用重新模拟。"
+      ],
+      "en": [
+        "Multi-round Results and export headers now show the current cost-score metric, making the ranking easier to understand.",
+        "Multi-round Results now also show the active performance subweights and median-blend breakdown, so the composite cost metric and robust aggregation are easier to interpret.",
+        "Changing score weights, performance priorities, median blend, or the cost-score metric now reranks existing multi-round results immediately, without rerunning simulations."
+      ]
+    }
+  },
+  "2026年4月19日（v1.0.16）": {
+    "label": {
+      "zh": "2026年4月19日（v1.0.16）",
+      "en": "April 19, 2026 (v1.0.16)"
+    },
+    "newFeatures": {
+      "zh": [
+        "队列新增独立“基准轮次”设置，“设为基准”现在会按该轮数执行多轮基准聚合；设置页、多轮结果页和相关摘要也会同步显示基准轮次与完成样本数。",
+        "多轮结果新增“综合每0.01%所需金币”参考列，并同步优化严格成本列的命名、说明文案与导出展示，帮助更直观地区分严格口径和综合口径。"
+      ],
+      "en": [
+        "Queue runs now have an independent Baseline Rounds setting, and Set Baseline performs a multi-round aggregated baseline using that count. Settings, Multi-round Results, and related summaries now also show baseline rounds and completed samples.",
+        "Added a new Composite Gold per 0.01% reference column in Multi-round Results, and clarified the strict-cost column naming, explanatory copy, and export display so strict and composite cost views are easier to distinguish."
+      ]
+    },
+    "improvements": {
+      "zh": [
+        "基准轮次默认值调整为 1；首次从顶部点击“设为基准”时会弹出提醒，明确显示当前基准轮数，并提供“我已知晓，并不再弹出”和“去设置”两个操作。"
+      ],
+      "en": [
+        "The default baseline round count is now 1. On the first top-bar Set Baseline click, a reminder dialog shows the current baseline round count and offers both \"I understand, don't show again\" and \"Go to Settings\" actions."
+      ]
+    },
+    "bugFixes": {
+      "zh": [
+        "修复“每0.01%提升所需金币”在负提升场景下会静默剔除非正值、导致均值严重偏差的问题；现在只有当 DPS、利润、XP/h 和击杀/h 四项最终稳健增幅全部为正时才显示严格成本，否则统一记为 N/A。"
+      ],
+      "en": [
+        "Fixed the Gold per 0.01% metric silently dropping non-positive gains in negative-upgrade cases, which could heavily skew the average. The strict cost metric now appears only when the final robust DPS, profit, XP/h, and kills/h deltas are all positive; otherwise it is shown as N/A."
+      ]
+    }
+  },
+  "2026年4月13日（v1.0.15）": {
+    "label": {
+      "zh": "2026年4月13日（v1.0.15）",
+      "en": "April 13, 2026 (v1.0.15)"
+    },
+    "bugFixes": {
+      "zh": [
+        "战斗区域遭遇节奏重新对齐官方通用规则：普通 Zone 的下一场遭遇固定按 3 秒刷新，不再把地图基础行动耗时误当成每场遭遇之间的冷却时间。",
+        "多怪区刷怪逻辑重新校准为按权重可重复抽取，并在首次超出怪物总强度上限时停止，修复在单人和多人模拟下战斗次数与总经验偏差过大的问题。"
+      ],
+      "en": [
+        "Zone encounter cadence has been realigned with the official generic rule set: regular zone encounters now always respawn after a fixed 3 seconds, instead of incorrectly treating each map's baseTimeCost as the cooldown between every encounter.",
+        "Multi-monster spawn generation has been recalibrated to use weighted repeatable rolls that stop on the first maxTotalStrength overflow, Fixed the issue where the number of battles and total experience deviated too much in single and multiplayer simulations."
+      ]
+    }
+  },
+  "2026年4月11日（v1.0.14）": {
+    "label": {
+      "zh": "2026年4月11日（v1.0.14）",
+      "en": "April 11, 2026 (v1.0.14)"
+    },
+    "improvements": {
+      "zh": [
+        "战斗模拟现在会读取地图基础行动耗时，并将每场遭遇的最短节奏纳入下一波敌人刷新时间，避免刷图节奏被计算得过快。",
+        "这项节奏修正已同步应用到刷图推荐、首页 Zone 模拟与队列推荐模拟，相关收益、击杀频率与排行结果会更接近官方实际表现。",
+        "补充官方节奏对齐回归测试，覆盖遭遇节奏下限与 Jungle Planet 的 EPH 区间，便于后续继续校验模拟精度。"
+      ],
+      "en": [
+        "Combat simulation now reads each zone's baseTimeCost and applies the minimum encounter cadence to the next enemy respawn timing, preventing farming pace from being simulated too quickly.",
+        "This cadence fix now applies to Advisor recommendations, Home zone simulations, and queue recommendation runs, so profit, kill frequency, and rankings better match official behavior.",
+        "Added regression coverage for official cadence parity, including the encounter cadence floor and the Jungle Planet EPH band, to keep future simulation accuracy easier to verify."
+      ]
+    }
+  },
+  "2026年4月5日（v1.0.13）": {
+    "label": {
+      "zh": "2026年4月5日（v1.0.13）",
+      "en": "April 5, 2026 (v1.0.13)"
+    },
+    "improvements": {
+      "zh": [
+        "首页“战斗属性”预览现在会按当前地图或迷宫上下文计算，并同步计入房屋常驻加成、MooPass、社区经验/掉落 Buff 与迷宫箱子效果，展示结果更接近真实开战状态。",
+        "食物、饮料、技能与任务徽章现在会在战斗属性面板中标出各自带来的属性变化；饮料与技能高亮会按触发条件、开场顺序和目标敌人重新计算，避免显示实际不会生效的增益链。",
+        "兼容保留旧版导入与主站导入中的任务徽章数据，用于首页预览任务伤害加成；该预览数据不会写入正式战斗模拟装备，避免展示专用效果误入实战模拟。"
+      ],
+      "en": [
+        "The Home \"Battle Attributes\" preview now evaluates stats in the active zone or labyrinth context, including housing permanent bonuses, MooPass, community XP/drop buffs, and labyrinth crate effects, so the panel better matches real combat start state.",
+        "Foods, drinks, abilities, and task badges now show per-source stat deltas in the Battle Attributes panel. Drink and ability highlights are recalculated from effective trigger state, opener order, and targeted enemies so inactive buff chains are no longer shown as active.",
+        "Legacy and main-site imports now preserve task badge data for Home preview-only task damage highlights, without carrying those preview-only items into actual combat simulation loadouts."
+      ]
+    }
+  },
+  "2026年4月2日（v1.0.12）": {
+    "label": {
+      "zh": "2026年4月2日（v1.0.12）",
+      "en": "April 2, 2026 (v1.0.12)"
+    },
+    "newFeatures": {
+      "zh": ["队列多轮模拟现已支持将食物、饮料与技能的触发器修改加入队列，方便批量比较不同触发方案的收益与表现"],
+      "en": [
+        "Queue multi-round simulations now support adding food, drink, and ability trigger changes into queue items, making it easier to batch-compare the returns and performance of different trigger setups."
+      ]
+    },
+    "improvements": {
+      "zh": ["队列项名称与详情中的触发器状态展示同步优化，默认、禁用、自定义之间的前后变化提示更准确"],
+      "en": [
+        "Queue item names and trigger-state details have been refined together, with more accurate before/after hints across default, disabled, and custom states."
+      ]
+    }
+  },
+  "2026年3月30日（v1.0.11）": {
+    "label": {
+      "zh": "2026年3月30日（v1.0.11）",
+      "en": "March 30, 2026 (v1.0.11)"
+    },
+    "newFeatures": {
+      "zh": ["迷宫箱子区域补齐咖啡箱、食物箱与茶叶箱三类下拉框，茶叶箱现在提供基础/进阶/专家三档可选数据"],
+      "en": [
+        "The labyrinth crate section now includes coffee, food, and tea crate dropdowns, with basic, advanced, and expert tea crate options."
+      ]
+    },
+    "improvements": {
+      "zh": [
+        "首页迷宫区域下拉框改为走 i18n 显示，中文环境下迷宫名称不再直接显示原始英文名",
+        "“补给箱”文案调整为更明确的箱子区域展示，并补充茶叶箱相关中英文翻译词条"
+      ],
+      "en": [
+        "The Home labyrinth selector now uses i18n labels, so labyrinth names no longer show as raw English in Chinese.",
+        "The \"Supply Crate\" wording has been adjusted to clearer crate-area copy, and tea-crate related Chinese and English translations have been added."
+      ]
+    }
+  },
+  "2026年3月30日（v1.0.10）": {
+    "label": {
+      "zh": "2026年3月30日（v1.0.10）",
+      "en": "March 30, 2026 (v1.0.10)"
+    },
+    "improvements": {
+      "zh": [
+        "主入口改为读取预生成的轻量游戏数据索引，首页、队列页、多轮结果页与设置页减少大体积数据直载，首次加载压力更低",
+        "首页战斗预览与设置页价格表等热点区域减少重复重算，频繁切换角色、调整配置或浏览价格时交互更流畅",
+        "补充优化路线与行为说明，便于后续跟踪性能调整与并行模拟配置"
+      ],
+      "en": [
+        "The main entry now loads a prebuilt lightweight game data index, reducing heavy direct data loads on Home, Queue, Multi-round Results, and Settings for a lighter first load.",
+        "Hot paths such as Home combat preview and Settings price tables now avoid repeated recomputation, making frequent character switches, config edits, and price browsing smoother.",
+        "Added optimization notes and behavior documentation to make future performance tuning and parallel simulation changes easier to track."
+      ]
+    },
+    "bugFixes": {
+      "zh": [
+        "Home 页批量 Zone / Labyrinth 模拟现在会正确沿用设置页保存的并行 worker 上限，刷新后再次运行也不会丢失该配置"
+      ],
+      "en": [
+        "Batch Zone / Labyrinth simulations on the Home page now correctly reuse the worker limit saved in Settings, and the setting no longer disappears after refresh."
+      ]
+    }
+  },
+  "2026年3月27日（v1.0.9）": {
+    "label": {
+      "zh": "2026年3月27日（v1.0.9）",
+      "en": "March 27, 2026 (v1.0.9)"
+    },
+    "newFeatures": {
+      "zh": [
+        "队列收益模拟支持多人场景：设为基准时会冻结当前已选队伍，并在队列运行时带上队友一起参与模拟",
+        "队列页、多轮结果页、设置页和顶部操作区新增“冻结队伍”摘要与过期提示，方便确认当前模拟口径"
+      ],
+      "en": [
+        "Queue profit simulations now support party play: setting a baseline freezes the currently selected party and includes teammates during queue runs.",
+        "Queue, Multi-round Results, Settings, and the top action bar now show a \"locked party\" summary and stale warning so you can confirm the current simulation scope."
+      ]
+    },
+    "improvements": {
+      "zh": [
+        "队列变体仍只针对当前玩家生成与排序，避免多人组队时把队友收益错误叠加到当前玩家结果中",
+        "当队伍成员或队友配置在基准之后发生变化时，队列会提示重新设置基准，防止旧基准与新队伍混用"
+      ],
+      "en": [
+        "Queue variants are still generated and ranked only for the active player, preventing teammate gains from being incorrectly folded into the active player's comparison.",
+        "When party members or teammate configs change after the baseline is set, the queue now prompts you to reset the baseline so old baselines are not mixed with a new party."
+      ]
+    }
+  },
+  "2026年3月27日（v1.0.8）": {
+    "label": {
+      "zh": "2026年3月27日（v1.0.8）",
+      "en": "March 27, 2026 (v1.0.8)"
+    },
+    "improvements": {
+      "zh": [
+        "更新日志改为仅维护在 patchNote.json 中，首页弹窗与后续版本说明统一共用这一份数据源",
+        "移除设置页中的更新日志区域，入口调整为顶部悬浮栏按钮手动打开",
+        "首页更新日志不再自动弹出；存在未读版本时，顶部按钮会高亮闪烁提醒",
+        "首次切换到新未读机制时，历史更新日志默认标记为已读，避免旧版本持续闪烁"
+      ],
+      "en": [
+        "Patch notes are now maintained only in patchNote.json, and both the Home dialog and future version announcements share the same data source.",
+        "The patch notes section has been removed from Settings, and the entry is now opened manually from the top floating bar button.",
+        "Home patch notes no longer open automatically; when unread versions exist, the top button now highlights and flashes as a reminder.",
+        "When migrating to the new unread mechanism, historical patch notes are marked as read by default so old versions do not keep flashing."
+      ]
+    }
+  },
+  "2026年3月25日（v1.0.7）": {
+    "label": {
+      "zh": "2026年3月25日（v1.0.7）",
+      "en": "March 25, 2026 (v1.0.7)"
+    },
+    "newFeatures": {
+      "zh": ["新增版本更新公告功能：支持按公告 ID 记录已读，并将多条未读版本说明合并弹窗展示"],
+      "en": [
+        "Added version announcement support: announcements can track read state by announcement ID and merge multiple unread versions into a single dialog."
+      ]
+    },
+    "improvements": {
+      "zh": [
+        "公告支持中英文内容、顶部聚焦与独立滚动查看，长内容阅读更稳定",
+        "同一版本公告仅提醒一次；后续新版本发布后会自动补发未读内容"
+      ],
+      "en": [
+        "Announcements now support Chinese and English content, top-focused layout, and independent scrolling for more stable reading of long content.",
+        "Each version announcement is only reminded once; newly released versions will automatically deliver any unread content later."
+      ]
+    },
+    "bugFixes": {
+      "zh": ["修复混合有/无日期公告时的排序问题，保证多版本公告展示顺序稳定"],
+      "en": [
+        "Fixed ordering when announcements with and without dates are mixed, keeping multi-version announcement order stable."
+      ]
+    }
+  },
+  "2026年3月25日（v1.0.6）": {
+    "label": {
+      "zh": "2026年3月25日（v1.0.6）",
+      "en": "March 25, 2026 (v1.0.6)"
+    },
+    "improvements": {
+      "zh": [
+        "主站导入脚本完成合规性整改：导入流程调整为“当前角色直导 + 手动缓存队友资料补全”",
+        "脚本不会主动调用游戏 HTTP API，也不会自动发送 view_profile 或自动操作玩家资料弹窗",
+        "队伍导入仅使用你手动打开并缓存过的队友资料，缺失成员会跳过并提示",
+        "补充主站导入脚本的使用方式、限制说明与隐私说明"
+      ],
+      "en": [
+        "The main-site import script has completed compliance adjustments: the import flow is now \"direct current character import + manual cached teammate profile completion\".",
+        "The script no longer actively calls game HTTP APIs, automatically sends view_profile, or auto-operates player profile dialogs.",
+        "Party import now uses only teammate profiles that you have manually opened and cached; missing members are skipped with a prompt.",
+        "Added usage instructions, limitations, and privacy notes for the main-site import script."
+      ]
+    }
+  },
+  "2026年2月27日": {
+    "newFeatures": {
+      "zh": ["新增“设置”页：支持队列评分权重与并行线程上限配置、玩家配置快照"]
+    },
+    "improvements": {
+      "zh": ["多轮评分去极值、评分排名支持无效 0 分标记"]
+    }
+  },
+  "2026年2月25日": {
+    "newFeatures": {
+      "zh": [
         "评分排名新增“模拟次数”列（已完成/总轮次）与 Top1-Top5 分色高亮",
+        "多轮汇总新增评分指标解释，并补充中英文文案",
+        "新增迷宫模拟：支持单迷宫/全迷宫、房间等级与补给箱配置"
+      ]
+    },
+    "improvements": {
+      "zh": [
+        "多轮模拟改为“按轮次推进”，并在运行中实时更新原始数据与排名",
         "评分权重调整为：性能45% + 稳定20% + 成本35%",
         "评分并入稳健统计：Winsorize(5%)、中位数融合、置信度惩罚",
-        "多轮汇总新增评分指标解释，并补充中英文文案",
-        "修复换装后成本不显示：首页与队列结果支持按槽位净成本（买入-卖出）计算与录入",
         "优化评分排名队列项文案：换装显示“旧装备 -> 新装备(+等级)”并清理名称空格",
         "导入/导出弹窗输入框占位符接入 i18n（中英文）",
-        "调整语言切换按钮定位并更新页脚致谢",
-        "新增迷宫模拟：支持单迷宫/全迷宫、房间等级与补给箱配置"
-    ],
-    "2026年2月24日":
-    [
+        "调整语言切换按钮定位并更新页脚致谢"
+      ]
+    },
+    "bugFixes": {
+      "zh": ["修复换装后成本不显示：首页与队列结果支持按槽位净成本（买入-卖出）计算与录入"]
+    }
+  },
+  "2026年2月24日": {
+    "newFeatures": {
+      "zh": [
         "新增装备变化模拟功能",
         "新增队列多轮模拟，支持预设/自定义轮次（1-200）与并行、串行两种执行模式",
         "新增“多轮结果”页面，提供汇总信息、评分排名和每轮原始数据（含DPS/利润/XP/h/Kills/h变化）",
-        "加入多轮综合评分模型：性能55% + 稳定20% + 成本25%，用于队列项排序",
+        "加入多轮综合评分模型：性能55% + 稳定20% + 成本25%，用于队列项排序"
+      ]
+    },
+    "improvements": {
+      "zh": [
         "成本分析纳入升级成本、购买所需时间与“每0.01%提升所需金币（均值）”指标",
         "补充中英文菜单与多轮模拟相关文案，并在基准或队列变更后清空旧多轮结果避免误读"
-    ],
-    "2026年2月1日":
-    [
+      ]
+    }
+  },
+  "2026年2月1日": {
+    "improvements": {
+      "zh": ["战斗时长相关的统计现在仅计算已完成的战斗，不再包含当前未结束的战斗 by wangchyan"]
+    },
+    "bugFixes": {
+      "zh": [
         "修正战斗等级计算的精度",
         "修正地下城完成或失败后重新进入战斗的时间间隔 by wangchyan",
         "修正诅咒和削弱的持续时间 by wangchyan",
@@ -465,162 +1470,245 @@
         "修正地下城团灭重置机制的部分逻辑 by wangchyan",
         "修复守护光环和速度光环部分增益未正确受对应等级加强的异常 by wangchyan",
         "修复无敌技能未正确影响韧性数值的缺陷 by wangchyan",
-        "修复初次进入战斗时未能优先吃喝的异常 by wangchyan",
-        "战斗时长相关的统计现在仅计算已完成的战斗，不再包含当前未结束的战斗 by wangchyan"
-    ],
-    "2026年1月11日":
-    [
-        "修复trigger错误计算已阵亡单位的问题 by wangchyan"
-    ],
-    "2025年12月31日":
-    [
-        "实验性功能新增HP/MP可视化图表 by wangchyan",
+        "修复初次进入战斗时未能优先吃喝的异常 by wangchyan"
+      ]
+    }
+  },
+  "2026年1月11日": {
+    "bugFixes": {
+      "zh": ["修复trigger错误计算已阵亡单位的问题 by wangchyan"]
+    }
+  },
+  "2025年12月31日": {
+    "newFeatures": {
+      "zh": ["实验性功能新增HP/MP可视化图表 by wangchyan"]
+    },
+    "bugFixes": {
+      "zh": [
         "修复防御伤害未正确受damge加成的异常 by wangchyan",
         "修复守护光环的治疗加成效果未生效的异常 by wangchyan",
         "修复快速治疗等技能未正确选择最低%生命为目标的错误 by wangchyan"
-    ],
-    "2025年12月30日":
-    [
-        "地下城增加最短完成时间记录"
-    ],
-    "2025年12月24日":
-    [
-        "修复技能释放选择的缺陷，之前可能存在异常缺蓝等情况"
-    ],
-    "2025年12月18日":
-    [
-        "支持成就系统及对应buff效果",
-        "地下城怪物的掉落不再生效"
-    ],
-    "2025年12月6日": [
-        "修复游戏更新后技能在无trigger情况下由[]变为null时造成的异常"
-    ],
-    "2025年11月7日": [
-        "兼容支持从CN镜像站调用API获取价格"
-    ],
-    "2025年10月14日": [
-        "修复怪物攻击间隔数值未能适配攻击等级的问题"
-    ],
-    "2025年9月17日": [
-        "修复暴击光环的trigger缺陷"
-    ],
-    "2025年9月9日":[
-        "复活时不再错误的清空所有buff",
-        "团灭日志增加反伤、荆棘和DOT伤害记录"
-    ],
-    "2025年8月21日": [
-        "增加单挑战斗批量模拟和对应怪物选项",
-        "增加MooPass和社区buff的选项及对应功能",
-        "精炼装备数值加强",
-        "秘法主教属性削弱",
-        "init_client_info_v1.20250819.0.json游戏数据更新"
-    ],
-    "2025年8月20日": [
-        "修复经验和掉落计算在极端情况下的可能异常"
-    ],
-    "2025年8月19日": [
-        "合并Test和Temp分支的rework内容",
-        "init_client_info_v1.20250818.0.json游戏数据更新"
-    ],
-    "2025年8月18日": [
-        "修复贯穿技能可能对相同目标造成重复伤害的问题",
-        "修复团灭日志在黑夜模式下的显示异常",
-        "战斗等级公式更新",
-        "钟乳石魔像的荆棘数值调整",
-        "init_client_info_v1.20250626.0_0817.json游戏数据更新"
-    ],
-    "2025年8月16日": [
-        "增加停止模拟按钮 by BKN46",
-        "增加技能顺序调整按钮 by BKN46",
-        "增加团灭日志 by TruthLight",
-        "怪物属性更新",
-        "奥术反射更名为报应",
-        "init_client_info_v1.20250626.0_0815.json游戏数据更新"
-    ],
-    "2025年8月14日": [
+      ]
+    }
+  },
+  "2025年12月30日": {
+    "newFeatures": {
+      "zh": ["地下城增加最短完成时间记录"]
+    }
+  },
+  "2025年12月24日": {
+    "bugFixes": {
+      "zh": ["修复技能释放选择的缺陷，之前可能存在异常缺蓝等情况"]
+    }
+  },
+  "2025年12月18日": {
+    "newFeatures": {
+      "zh": ["支持成就系统及对应buff效果"]
+    },
+    "improvements": {
+      "zh": ["地下城怪物的掉落不再生效"]
+    }
+  },
+  "2025年12月6日": {
+    "bugFixes": {
+      "zh": ["修复游戏更新后技能在无trigger情况下由[]变为null时造成的异常"]
+    }
+  },
+  "2025年11月7日": {
+    "improvements": {
+      "zh": ["兼容支持从CN镜像站调用API获取价格"]
+    }
+  },
+  "2025年10月14日": {
+    "bugFixes": {
+      "zh": ["修复怪物攻击间隔数值未能适配攻击等级的问题"]
+    }
+  },
+  "2025年9月17日": {
+    "bugFixes": {
+      "zh": ["修复暴击光环的trigger缺陷"]
+    }
+  },
+  "2025年9月9日": {
+    "newFeatures": {
+      "zh": ["团灭日志增加反伤、荆棘和DOT伤害记录"]
+    },
+    "bugFixes": {
+      "zh": ["复活时不再错误的清空所有buff"]
+    }
+  },
+  "2025年8月21日": {
+    "newFeatures": {
+      "zh": ["增加单挑战斗批量模拟和对应怪物选项", "增加MooPass和社区buff的选项及对应功能"]
+    },
+    "improvements": {
+      "zh": ["精炼装备数值加强", "秘法主教属性削弱", "init_client_info_v1.20250819.0.json游戏数据更新"]
+    }
+  },
+  "2025年8月20日": {
+    "bugFixes": {
+      "zh": ["修复经验和掉落计算在极端情况下的可能异常"]
+    }
+  },
+  "2025年8月19日": {
+    "improvements": {
+      "zh": ["合并Test和Temp分支的rework内容", "init_client_info_v1.20250818.0.json游戏数据更新"]
+    }
+  },
+  "2025年8月18日": {
+    "improvements": {
+      "zh": ["战斗等级公式更新", "钟乳石魔像的荆棘数值调整", "init_client_info_v1.20250626.0_0817.json游戏数据更新"]
+    },
+    "bugFixes": {
+      "zh": ["修复贯穿技能可能对相同目标造成重复伤害的问题", "修复团灭日志在黑夜模式下的显示异常"]
+    }
+  },
+  "2025年8月16日": {
+    "newFeatures": {
+      "zh": ["增加停止模拟按钮 by BKN46", "增加技能顺序调整按钮 by BKN46", "增加团灭日志 by TruthLight"]
+    },
+    "improvements": {
+      "zh": ["怪物属性更新", "奥术反射更名为报应", "init_client_info_v1.20250626.0_0815.json游戏数据更新"]
+    }
+  },
+  "2025年8月14日": {
+    "improvements": {
+      "zh": [
         "怪物属性更新",
         "远程和法师装备属性调整",
         "反伤计算上限调整",
-        "修复战斗间隔释放技能的异常",
-        "修复技能释放判断逻辑的异常",
         "法力值耗尽比例更加准确",
         "调整远程经验的15%和魔法经验的12%映射到攻击经验",
         "init_client_info_v1.20250626.0_0813.json游戏数据更新"
-    ],
-    "2025年8月11日": [
+      ]
+    },
+    "bugFixes": {
+      "zh": ["修复战斗间隔释放技能的异常", "修复技能释放判断逻辑的异常"]
+    }
+  },
+  "2025年8月11日": {
+    "improvements": {
+      "zh": [
         "怪物属性更新",
         "近战和物理技能施法时间更新",
         "盾击和重锤数值调整",
         "双手盾防御经验加成调整",
         "init_client_info_v1.20250626.0_0811.json游戏数据更新"
-    ],
-    "2025年8月8日": [
+      ]
+    }
+  },
+  "2025年8月8日": {
+    "newFeatures": {
+      "zh": [
         "实现组队等级差过大时对掉落和经验的惩罚",
         "实现怪物经验随狂暴进度百分比增加",
-        "暴击光环数值调整",
         "增加战斗等级数值显示",
-        "增加等级差距惩罚数值显示",
-        "init_client_info_v1.20250626.0_0807.json游戏数据更新"
-    ],
-    "2025年8月7日": [
-        "修复组队战斗时一些重复物品掉落数量异常的缺陷 by contr4l",
-        "init_client_info_v1.20250626.0_0806.json游戏数据更新"
-    ],
-    "2025年8月3日": [
+        "增加等级差距惩罚数值显示"
+      ]
+    },
+    "improvements": {
+      "zh": ["暴击光环数值调整", "init_client_info_v1.20250626.0_0807.json游戏数据更新"]
+    }
+  },
+  "2025年8月7日": {
+    "improvements": {
+      "zh": ["init_client_info_v1.20250626.0_0806.json游戏数据更新"]
+    },
+    "bugFixes": {
+      "zh": ["修复组队战斗时一些重复物品掉落数量异常的缺陷 by contr4l"]
+    }
+  },
+  "2025年8月3日": {
+    "improvements": {
+      "zh": [
         "怪物狂暴机制及对应trigger生效",
         "精炼装备更新，护符数值调整，守护光环增加闪避率",
         "init_client_info_v1.20250626.0_0802.json游戏数据更新",
-        "狂怒层数修正为5层",
         "招架结算机制调整"
-    ],
-    "2025年7月31日": [
+      ]
+    },
+    "bugFixes": {
+      "zh": ["狂怒层数修正为5层"]
+    }
+  },
+  "2025年7月31日": {
+    "newFeatures": {
+      "zh": ["涟漪特效增加10MP恢复"]
+    },
+    "improvements": {
+      "zh": [
         "物品数据和怪物属性更新",
         "尖刺外壳和奥术反射重做",
         "强化数值更新",
         "删除异常trigger",
         "狮鹫盾的虚弱重做",
         "君王剑招架对队友生效",
-        "狂怒特效最大层数修正为6层",
-        "涟漪特效增加10MP恢复",
-        "反伤正确显示其命中率",
         "反伤机制调整",
         "同步双手盾属性和反伤荆棘技能数值的调整"
-    ],
-    "2025年7月22日": [
-        "暴击光环受远程等级加成",
-        "光环基础数值和等级加成调整"
-    ],
-    "2025年7月17日": [
-        "批量模拟支持勾选星球",
+      ]
+    },
+    "bugFixes": {
+      "zh": ["狂怒特效最大层数修正为6层", "反伤正确显示其命中率"]
+    }
+  },
+  "2025年7月22日": {
+    "improvements": {
+      "zh": ["暴击光环受远程等级加成", "光环基础数值和等级加成调整"]
+    }
+  },
+  "2025年7月17日": {
+    "newFeatures": {
+      "zh": ["批量模拟支持勾选星球"]
+    },
+    "improvements": {
+      "zh": [
         "经验分配比例调整至30%+70%",
         "光环及对应trigger，并按对应技能等级百分比加成",
         "水火自然默认调整为元素光环",
         "init_client_info_v1.20250626.0_0717.json游戏数据更新"
-    ],
-    "2025年7月11日": [
+      ]
+    }
+  },
+  "2025年7月11日": {
+    "improvements": {
+      "zh": [
         "怪物经验和技能等级公式更新",
         "闪避和抗性计算公式更新",
         "力量更替为近战以及对应的兼容",
         "init_client_info_v1.20250626.0_0711.json游戏数据更新"
-    ],
-    "2025年7月10日": [
-        "修复贯穿技能由敌人释放时可能多次击中相同目标的缺陷"
-    ],
-    "2025年7月9日": [
+      ]
+    }
+  },
+  "2025年7月10日": {
+    "bugFixes": {
+      "zh": ["修复贯穿技能由敌人释放时可能多次击中相同目标的缺陷"]
+    }
+  },
+  "2025年7月9日": {
+    "improvements": {
+      "zh": [
         "掉落和掉率调整",
         "经验调整",
         "疫病射击和破甲之刺调整",
         "怪物自动恢复移除",
         "疫病射击trigger调整",
         "获取价格使用官方API"
-    ],
-    "2025年7月7日": [
-        "怪物属性缩放和地图多难度",
+      ]
+    }
+  },
+  "2025年7月7日": {
+    "newFeatures": {
+      "zh": ["怪物属性缩放和地图多难度"]
+    },
+    "improvements": {
+      "zh": [
         "法师技能调整和装备上'技能伤害'词缀生效",
         "攻击等级和房屋等级对施法速度的影响生效",
         "物品调整",
         "精准重做以攻击等级计算",
         "TEST 远程魔法经验的10%映射到攻击经验！",
         "经验重做和护符装备"
-    ]
+      ]
+    }
+  }
 }

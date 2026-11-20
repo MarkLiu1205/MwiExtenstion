@@ -1,229 +1,632 @@
 <template>
   <section class="space-y-4">
-    <div class="panel">
-      <h2 class="font-heading text-lg font-semibold text-amber-200">{{ t("common:multiRound.summaryTitle", "Multi-round Summary") }}</h2>
-      <p class="mt-2 text-sm text-slate-300">{{ t("common:vue.queue.activePlayer", "Active player", { name: simulator.activePlayer.name }) }}</p>
-      <p v-if="queuePartySummaryText" class="mt-1 text-xs text-slate-400">
-        {{ t("common:queue.partyLockedMembers", "Locked party") }}:
-        <span class="ml-1 text-slate-200">{{ queuePartySummaryText }}</span>
+    <div class="surface-panel">
+      <h2 class="font-heading text-lg font-semibold text-primary">
+        {{ t('common:multiRound.summaryTitle', 'Multi-round Summary') }}
+      </h2>
+      <p class="mt-2 text-sm text-foreground/85">
+        {{ t('common:vue.queue.activePlayer', 'Active player', { name: simulator.activePlayer.name }) }}
       </p>
-      <p v-if="queuePartyWarningText" class="mt-2 text-sm text-amber-300">{{ queuePartyWarningText }}</p>
+      <p v-if="queuePartySummaryText" class="mt-1 text-xs text-muted-foreground">
+        {{ t('common:queue.partyLockedMembers', 'Locked party') }}:
+        <span class="ml-1 text-foreground">{{ queuePartySummaryText }}</span>
+      </p>
+      <p v-if="queuePartyWarningText" class="mt-2 text-sm text-primary">{{ queuePartyWarningText }}</p>
 
-      <div class="mt-3 grid gap-3 border-t border-white/10 pt-3 text-xs text-slate-300 md:grid-cols-2">
-        <div class="rounded-lg border border-white/10 bg-white/[0.03] p-3">
-          <p class="uppercase tracking-[0.14em] text-slate-400">{{ t("common:multiRound.scoreModel", "Score Model") }}</p>
+      <div class="mt-3 grid gap-3 border-t border-border pt-3 text-xs text-foreground/85 md:grid-cols-2">
+        <div class="rounded-lg border border-border bg-muted/40 p-3">
+          <p class="uppercase text-muted-foreground">{{ t('common:multiRound.scoreModel', 'Score Model') }}</p>
           <div class="mt-2 space-y-1">
-            <p>{{ t("common:multiRound.scoreModelValue", "Performance/Stability/Cost weighted by configured settings (quantile mapped to 5-95, with confidence penalty)") }}</p>
-            <p>{{ t("common:multiRound.scoreModelWeightsValue", "Score weights", queueRuntimeWeightText) }}</p>
-            <p>{{ t("common:multiRound.scoreModelParamPerformance", "Performance: DPS, No RNG Profit/day, XP/h and Kills/h gains are rank-mapped within the batch to 5-95, then combined using the current queue subweights. Higher is better.") }}</p>
-            <p>{{ t("common:multiRound.scoreModelParamPerformanceSubweights", "", queuePerformanceSubweightText) }}</p>
-            <p>{{ t("common:multiRound.scoreModelParamStability", "Stability: the average CV across the four metrics is rank-mapped within the batch to 5-95. Lower volatility scores higher.") }}</p>
-            <p>{{ t("common:multiRound.scoreModelParamCost", "Cost: upgrade cost, purchase time and the selected gold per 0.01% metric are each mapped to 5-95 (cost metrics use log scaling first). Lower cost scores higher.") }}</p>
-            <p>{{ t("common:multiRound.scoreModelParamCostGoldMetricSelected", "", { mode: currentCostScoreModeLabel }) }}</p>
-            <p>{{ t("common:multiRound.scoreModelParamGoldPerPointValidity", "Strict gold per 0.01% is shown only when the final robust deltas for DPS, No RNG Profit/day, XP/h and Kills/h are all positive. Otherwise it is marked N/A.") }}</p>
-            <p>{{ t("common:multiRound.scoreModelParamCompositeGoldPerPoint", "", queuePerformanceSubweightText) }}</p>
-            <p>{{ t("common:multiRound.scoreModelParamRobustWinsorize", "Robust winsorize setting", { winsorPct: 5 }) }}</p>
-            <p>{{ t("common:multiRound.scoreModelParamRobustMedianBlend", "Robust median blend setting", queueMedianBlendText) }}</p>
-            <p>{{ t("common:multiRound.scoreModelParamRobustConfidencePenalty", "Robust confidence penalty setting", {
-              baseWeight: 65,
-              penaltyWeight: 35,
-            }) }}</p>
-          </div>
-        </div>
-        <div class="rounded-lg border border-white/10 bg-white/[0.03] p-3">
-          <p class="uppercase tracking-[0.14em] text-slate-400">{{ t("common:queue.baselineSummary", "Baseline Summary") }}</p>
-          <div v-if="baselineSummaryRows.length > 0" class="mt-2 space-y-1">
-            <p v-for="row in baselineSummaryRows" :key="row.key">
-              <span class="text-slate-400">{{ row.label }}:</span> {{ row.value }}
+            <p>
+              {{
+                t(
+                  'common:multiRound.scoreModelValue',
+                  'Performance/Stability/Cost weighted by configured settings (quantile mapped to 5-95, with confidence penalty)',
+                )
+              }}
+            </p>
+            <p>{{ t('common:multiRound.scoreModelWeightsValue', 'Score weights', queueRuntimeWeightText) }}</p>
+            <p>
+              {{
+                t(
+                  'common:multiRound.scoreModelParamPerformance',
+                  'Performance: DPS, No RNG Profit/day, XP/h and Kills/h gains are rank-mapped within the batch to 5-95, then combined using the current queue subweights. Higher is better.',
+                )
+              }}
+            </p>
+            <p>{{ t('common:multiRound.scoreModelParamPerformanceSubweights', '', queuePerformanceSubweightText) }}</p>
+            <p>
+              {{
+                t(
+                  'common:multiRound.scoreModelParamStability',
+                  'Stability: the average CV across the four metrics is rank-mapped within the batch to 5-95. Lower volatility scores higher.',
+                )
+              }}
+            </p>
+            <p>
+              {{
+                t(
+                  'common:multiRound.scoreModelParamCost',
+                  'Cost: upgrade cost, purchase time and the selected gold per 0.01% metric are each mapped to 5-95 (cost metrics use log scaling first). Lower cost scores higher.',
+                )
+              }}
+            </p>
+            <p>
+              {{
+                t('common:multiRound.scoreModelParamCostGoldMetricSelected', '', { mode: currentCostScoreModeLabel })
+              }}
+            </p>
+            <p>
+              {{
+                t(
+                  'common:multiRound.scoreModelParamGoldPerPointValidity',
+                  'Strict gold per 0.01% is shown only when the final robust deltas for DPS, No RNG Profit/day, XP/h and Kills/h are all positive. Otherwise it is marked N/A.',
+                )
+              }}
+            </p>
+            <p>{{ t('common:multiRound.scoreModelParamCompositeGoldPerPoint', '', queuePerformanceSubweightText) }}</p>
+            <p>
+              {{ t('common:multiRound.scoreModelParamRobustWinsorize', 'Robust winsorize setting', { winsorPct: 5 }) }}
+            </p>
+            <p>
+              {{
+                t(
+                  'common:multiRound.scoreModelParamRobustMedianBlend',
+                  'Robust median blend setting',
+                  queueMedianBlendText,
+                )
+              }}
+            </p>
+            <p>
+              {{
+                t('common:multiRound.scoreModelParamRobustConfidencePenalty', 'Robust confidence penalty setting', {
+                  baseWeight: 65,
+                  penaltyWeight: 35,
+                })
+              }}
             </p>
           </div>
-          <p v-if="baselineSummaryRows.length > 0" class="mt-2 text-slate-400">
-            {{ t("common:queue.baselineSummaryAggregationHint", "Baseline values shown here come from multi-round robust aggregation: the simulator runs the configured baseline rounds and blends winsorized means with medians instead of showing a single sample.") }}
+        </div>
+        <div class="rounded-lg border border-border bg-muted/40 p-3">
+          <p class="uppercase text-muted-foreground">{{ t('common:queue.baselineSummary', 'Baseline Summary') }}</p>
+          <div v-if="baselineSummaryRows.length > 0" class="mt-2 space-y-1">
+            <p v-for="row in baselineSummaryRows" :key="row.key">
+              <span class="text-muted-foreground">{{ row.label }}:</span> {{ row.value }}
+            </p>
+          </div>
+          <p v-if="baselineSummaryRows.length > 0" class="mt-2 text-muted-foreground">
+            {{
+              t(
+                'common:queue.baselineSummaryAggregationHint',
+                'Baseline values shown here come from multi-round robust aggregation: the simulator runs the configured baseline rounds and blends winsorized means with medians instead of showing a single sample.',
+              )
+            }}
           </p>
-          <p v-else class="mt-2 text-slate-400">
-            {{ t("common:queue.emptyBaseline", "No baseline yet. Click 'Set Baseline' to run and lock one.") }}
+          <p v-else class="mt-2 text-muted-foreground">
+            {{ t('common:queue.emptyBaseline', "No baseline yet. Click 'Set Baseline' to run and lock one.") }}
           </p>
         </div>
       </div>
     </div>
 
-    <div v-if="!hasMultiData" class="panel">
-      <div
-        v-if="showRunningPlaceholder"
-        class="flex flex-col justify-center gap-5"
-        :style="runningPlaceholderStyle"
-      >
+    <div v-if="!hasMultiData" class="surface-panel">
+      <div v-if="showRunningPlaceholder" class="flex flex-col justify-center gap-5" :style="runningPlaceholderStyle">
         <div>
-          <p class="text-xs uppercase tracking-[0.14em] text-slate-400">{{ t("common:queue.queueRunning", "Running queue...") }}</p>
-          <h3 class="mt-2 font-heading text-xl font-semibold text-amber-200">
+          <p class="text-xs uppercase text-muted-foreground">
+            {{ t('common:queue.queueRunning', 'Running queue...') }}
+          </p>
+          <h3 class="mt-2 font-heading text-xl font-semibold text-primary">
             {{ runningPlaceholderTitle }}
           </h3>
-          <p class="mt-2 max-w-3xl text-sm text-slate-300">
+          <p class="mt-2 max-w-3xl text-sm text-foreground/85">
             {{ runningPlaceholderDescription }}
           </p>
         </div>
 
         <div class="grid gap-3 sm:grid-cols-3">
-          <div class="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-            <p class="text-xs uppercase tracking-[0.14em] text-slate-400">{{ t("common:vue.queue.queueProgress", "Queue Progress") }}</p>
-            <p class="mt-2 font-heading text-2xl text-slate-100">{{ queueProgressPercentText }}</p>
+          <div class="rounded-md border border-border bg-muted/40 p-4">
+            <p class="text-xs uppercase text-muted-foreground">
+              {{ t('common:vue.queue.queueProgress', 'Queue Progress') }}
+            </p>
+            <p class="mt-2 font-heading text-2xl text-foreground">{{ queueProgressPercentText }}</p>
           </div>
-          <div class="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-            <p class="text-xs uppercase tracking-[0.14em] text-slate-400">{{ t("common:multiRound.simCount", "Sim Count") }}</p>
-            <p class="mt-2 font-heading text-2xl text-slate-100">{{ completedSimCountText }}</p>
+          <div class="rounded-md border border-border bg-muted/40 p-4">
+            <p class="text-xs uppercase text-muted-foreground">{{ t('common:multiRound.simCount', 'Sim Count') }}</p>
+            <p class="mt-2 font-heading text-2xl text-foreground">{{ completedSimCountText }}</p>
           </div>
-          <div class="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-            <p class="text-xs uppercase tracking-[0.14em] text-slate-400">{{ t("common:queue.queueList", "Queue List") }}</p>
-            <p class="mt-2 font-heading text-2xl text-slate-100">{{ queueState.items?.length ?? 0 }}</p>
+          <div class="rounded-md border border-border bg-muted/40 p-4">
+            <p class="text-xs uppercase text-muted-foreground">{{ t('common:queue.queueList', 'Queue List') }}</p>
+            <p class="mt-2 font-heading text-2xl text-foreground">{{ queueState.items?.length ?? 0 }}</p>
           </div>
         </div>
 
         <div class="space-y-2">
-          <div class="flex flex-wrap items-center justify-between gap-2 text-xs uppercase tracking-[0.14em] text-slate-400">
-            <span>{{ t("common:vue.queue.queueProgress", "Queue Progress") }}</span>
-            <span class="text-slate-200">{{ queueProgressPercentText }} | {{ lastRunText }}</span>
+          <div class="flex flex-wrap items-center justify-between gap-2 text-xs uppercase text-muted-foreground">
+            <span>{{ t('common:vue.queue.queueProgress', 'Queue Progress') }}</span>
+            <span class="text-foreground">{{ queueProgressPercentText }} | {{ lastRunText }}</span>
           </div>
-          <div class="h-2 overflow-hidden rounded-full bg-slate-800">
-            <div
-              class="h-full bg-gradient-to-r from-teal-400 to-amber-300 transition-all"
-              :style="{ width: queueProgressBarWidth }"
-            ></div>
-          </div>
+          <Progress :value="queueProgressPercent" />
         </div>
       </div>
 
-      <p v-else class="text-sm text-slate-400">{{ t("common:multiRound.noData", "No multi-round results yet.") }}</p>
+      <p v-else class="text-sm text-muted-foreground">
+        {{ t('common:multiRound.noData', 'No multi-round results yet.') }}
+      </p>
     </div>
 
     <template v-else>
       <div class="grid gap-3 sm:grid-cols-4">
-        <div class="panel">
-          <p class="text-xs uppercase tracking-[0.14em] text-slate-400">{{ t("common:queue.roundCount", "Rounds") }}</p>
-          <p class="mt-1 font-heading text-lg text-slate-100">{{ queueState.settings?.rounds ?? 0 }}</p>
+        <div class="surface-panel">
+          <p class="text-xs uppercase text-muted-foreground">{{ t('common:queue.roundCount', 'Rounds') }}</p>
+          <p class="mt-1 font-heading text-lg text-foreground">{{ queueState.settings?.rounds ?? 0 }}</p>
         </div>
-        <div class="panel">
-          <p class="text-xs uppercase tracking-[0.14em] text-slate-400">{{ t("common:queue.queueList", "Queue List") }}</p>
-          <p class="mt-1 font-heading text-lg text-slate-100">{{ queueState.items?.length ?? 0 }}</p>
+        <div class="surface-panel">
+          <p class="text-xs uppercase text-muted-foreground">{{ t('common:queue.queueList', 'Queue List') }}</p>
+          <p class="mt-1 font-heading text-lg text-foreground">{{ queueState.items?.length ?? 0 }}</p>
         </div>
-        <div class="panel">
-          <p class="text-xs uppercase tracking-[0.14em] text-slate-400">{{ t("common:multiRound.simCount", "Sim Count") }}</p>
-          <p class="mt-1 font-heading text-lg text-slate-100">{{ completedSimCountText }}</p>
+        <div class="surface-panel">
+          <p class="text-xs uppercase text-muted-foreground">{{ t('common:multiRound.simCount', 'Sim Count') }}</p>
+          <p class="mt-1 font-heading text-lg text-foreground">{{ completedSimCountText }}</p>
         </div>
-        <div class="panel">
-          <p class="text-xs uppercase tracking-[0.14em] text-slate-400">{{ t("common:vue.queue.lastRun", "Last Run") }}</p>
-          <p class="mt-1 font-heading text-lg text-slate-100">{{ lastRunText }}</p>
+        <div class="surface-panel">
+          <p class="text-xs uppercase text-muted-foreground">{{ t('common:vue.queue.lastRun', 'Last Run') }}</p>
+          <p class="mt-1 font-heading text-lg text-foreground">{{ lastRunText }}</p>
         </div>
       </div>
 
-      <div class="panel overflow-x-auto">
+      <div class="surface-panel overflow-x-auto">
         <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h3 class="font-heading text-sm uppercase tracking-[0.14em] text-slate-300">{{ t("common:multiRound.rankingTitle", "Scored Ranking") }}</h3>
-          <button type="button"
-            class="action-button-muted"
-           
+          <h3 class="font-heading text-sm uppercase text-foreground/85">
+            {{ t('common:multiRound.rankingTitle', 'Scored Ranking') }}
+          </h3>
+          <button
+            type="button"
+            class="button-secondary"
             :disabled="rankingRowsForDisplay.length === 0 || isExportingRankingExcel"
             @click="exportRankingRowsExcel"
           >
-            {{ t("common:exportToExcel", "Export To Excel") }}
+            {{ t('common:exportToExcel', 'Export To Excel') }}
           </button>
         </div>
-        <table class="min-w-[1880px] w-max text-sm">
-          <thead>
-            <tr class="border-b border-white/10 text-left text-xs uppercase tracking-[0.14em] text-slate-400">
-              <th class="px-2 py-2">{{ t("common:multiRound.rank", "Rank") }}</th>
-              <th class="px-2 py-2">{{ t("common:vue.queue.variant", "Variant") }}</th>
-              <th class="px-2 py-2">{{ t("common:multiRound.simCount", "Sim Count") }}</th>
-              <th class="px-2 py-2">{{ t("common:multiRound.finalScore", "Final Score") }}</th>
-              <th class="px-2 py-2">{{ t("common:multiRound.performanceScore", "Performance Score") }}</th>
-              <th class="px-2 py-2">{{ t("common:multiRound.stabilityScore", "Stability Score") }}</th>
-              <th class="px-2 py-2">{{ costScoreColumnHeader }}</th>
-              <th class="px-2 py-2">{{ t("common:vue.queue.meanProfitPerHour", "Mean Profit/h") }}</th>
-              <th class="px-2 py-2">{{ t("common:vue.queue.deltaProfitPerHour", "Delta Profit/h") }}</th>
-              <th class="px-2 py-2">{{ t("common:multiRound.deltaProfitPct", "Profit Delta%") }}</th>
-              <th class="px-2 py-2">{{ t("common:multiRound.deltaDpsPct", "DPS Delta%") }}</th>
-              <th class="px-2 py-2">{{ t("common:multiRound.deltaXpPct", "XP Delta%") }}</th>
-              <th class="px-2 py-2">{{ t("common:multiRound.deltaKillsPct", "Kills Delta%") }}</th>
-              <th class="px-2 py-2">{{ t("common:equipment.upgradeCost", "Upgrade Cost") }}</th>
-              <th class="px-2 py-2">{{ t("common:queue.purchaseTime", "Purchase Time") }}</th>
-              <th class="px-2 py-2">{{ t("common:multiRound.avgCostPerPoint01Pct", "Gold per 0.01% (all four > 0)") }}</th>
-              <th class="px-2 py-2">{{ t("common:multiRound.compositeCostPerPoint01Pct", "Gold per 0.01% (composite)") }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
+        <Table class="min-w-[2180px] w-max text-sm">
+          <TableHeader>
+            <TableRow class="border-b border-border text-left text-xs uppercase text-muted-foreground">
+              <TableHead
+                class="sticky left-0 z-20 w-[76px] min-w-[76px] bg-card px-2 py-2 shadow-[inset_-1px_0_0_var(--border)]"
+              >
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 text-left uppercase transition hover:text-foreground"
+                  @click="toggleRankingSort('rank')"
+                >
+                  <span>{{ t('common:multiRound.rank', 'Rank') }}</span>
+                  <span
+                    class="text-[10px]"
+                    :class="rankingSort.key === 'rank' ? 'text-primary' : 'text-muted-foreground'"
+                    >{{ getRankingSortIndicator('rank') }}</span
+                  >
+                </button>
+              </TableHead>
+              <TableHead class="sticky left-[76px] z-20 bg-card px-2 py-2">{{
+                t('common:vue.queue.variant', 'Variant')
+              }}</TableHead>
+              <TableHead class="px-2 py-2">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 text-left uppercase transition hover:text-foreground"
+                  @click="toggleRankingSort('rounds')"
+                >
+                  <span>{{ t('common:multiRound.simCount', 'Sim Count') }}</span>
+                  <span
+                    class="text-[10px]"
+                    :class="rankingSort.key === 'rounds' ? 'text-primary' : 'text-muted-foreground'"
+                    >{{ getRankingSortIndicator('rounds') }}</span
+                  >
+                </button>
+              </TableHead>
+              <TableHead class="px-2 py-2">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 text-left uppercase transition hover:text-foreground"
+                  @click="toggleRankingSort('finalScore')"
+                >
+                  <span>{{ t('common:multiRound.finalScore', 'Final Score') }}</span>
+                  <span
+                    class="text-[10px]"
+                    :class="rankingSort.key === 'finalScore' ? 'text-primary' : 'text-muted-foreground'"
+                    >{{ getRankingSortIndicator('finalScore') }}</span
+                  >
+                </button>
+              </TableHead>
+              <TableHead class="px-2 py-2">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 text-left uppercase transition hover:text-foreground"
+                  @click="toggleRankingSort('performanceScore')"
+                >
+                  <span>{{ t('common:multiRound.performanceScore', 'Performance Score') }}</span>
+                  <span
+                    class="text-[10px]"
+                    :class="rankingSort.key === 'performanceScore' ? 'text-primary' : 'text-muted-foreground'"
+                    >{{ getRankingSortIndicator('performanceScore') }}</span
+                  >
+                </button>
+              </TableHead>
+              <TableHead class="px-2 py-2">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 text-left uppercase transition hover:text-foreground"
+                  @click="toggleRankingSort('stabilityScore')"
+                >
+                  <span>{{ t('common:multiRound.stabilityScore', 'Stability Score') }}</span>
+                  <span
+                    class="text-[10px]"
+                    :class="rankingSort.key === 'stabilityScore' ? 'text-primary' : 'text-muted-foreground'"
+                    >{{ getRankingSortIndicator('stabilityScore') }}</span
+                  >
+                </button>
+              </TableHead>
+              <TableHead class="px-2 py-2">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 text-left uppercase transition hover:text-foreground"
+                  @click="toggleRankingSort('costScore')"
+                >
+                  <span>{{ costScoreColumnHeader }}</span>
+                  <span
+                    class="text-[10px]"
+                    :class="rankingSort.key === 'costScore' ? 'text-primary' : 'text-muted-foreground'"
+                    >{{ getRankingSortIndicator('costScore') }}</span
+                  >
+                </button>
+              </TableHead>
+              <TableHead class="px-2 py-2">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 text-left uppercase transition hover:text-foreground"
+                  @click="toggleRankingSort('dailyNoRngProfitPerDay')"
+                >
+                  <span>{{ t('common:queue.dailyNoRngProfit', 'Daily No RNG Profit') }}</span>
+                  <span
+                    class="text-[10px]"
+                    :class="rankingSort.key === 'dailyNoRngProfitPerDay' ? 'text-primary' : 'text-muted-foreground'"
+                    >{{ getRankingSortIndicator('dailyNoRngProfitPerDay') }}</span
+                  >
+                </button>
+              </TableHead>
+              <TableHead class="px-2 py-2">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 text-left uppercase transition hover:text-foreground"
+                  :title="
+                    t(
+                      'common:multiRound.upgradedEphHint',
+                      'Mean encounters per hour across rounds (kills/h), i.e. the upgraded EPH.',
+                    )
+                  "
+                  @click="toggleRankingSort('killsPerHour')"
+                >
+                  <span>{{ t('common:multiRound.upgradedEph', 'EPH (Upgraded)') }}</span>
+                  <span
+                    class="text-[10px]"
+                    :class="rankingSort.key === 'killsPerHour' ? 'text-primary' : 'text-muted-foreground'"
+                    >{{ getRankingSortIndicator('killsPerHour') }}</span
+                  >
+                </button>
+              </TableHead>
+              <TableHead class="px-2 py-2">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 text-left uppercase transition hover:text-foreground"
+                  @click="toggleRankingSort('deltaProfitPerHour')"
+                >
+                  <span>{{ t('common:vue.queue.deltaProfitPerHour', 'Delta Profit/h') }}</span>
+                  <span
+                    class="text-[10px]"
+                    :class="rankingSort.key === 'deltaProfitPerHour' ? 'text-primary' : 'text-muted-foreground'"
+                    >{{ getRankingSortIndicator('deltaProfitPerHour') }}</span
+                  >
+                </button>
+              </TableHead>
+              <TableHead class="px-2 py-2">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 text-left uppercase transition hover:text-foreground"
+                  @click="toggleRankingSort('deltaProfitPct')"
+                >
+                  <span>{{ t('common:multiRound.deltaProfitPct', 'Profit Delta%') }}</span>
+                  <span
+                    class="text-[10px]"
+                    :class="rankingSort.key === 'deltaProfitPct' ? 'text-primary' : 'text-muted-foreground'"
+                    >{{ getRankingSortIndicator('deltaProfitPct') }}</span
+                  >
+                </button>
+              </TableHead>
+              <TableHead class="px-2 py-2">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 text-left uppercase transition hover:text-foreground"
+                  @click="toggleRankingSort('deltaDpsPct')"
+                >
+                  <span>{{ t('common:multiRound.deltaDpsPct', 'DPS Delta%') }}</span>
+                  <span
+                    class="text-[10px]"
+                    :class="rankingSort.key === 'deltaDpsPct' ? 'text-primary' : 'text-muted-foreground'"
+                    >{{ getRankingSortIndicator('deltaDpsPct') }}</span
+                  >
+                </button>
+              </TableHead>
+              <TableHead class="px-2 py-2">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 text-left uppercase transition hover:text-foreground"
+                  @click="toggleRankingSort('deltaXpPct')"
+                >
+                  <span>{{ t('common:multiRound.deltaXpPct', 'XP Delta%') }}</span>
+                  <span
+                    class="text-[10px]"
+                    :class="rankingSort.key === 'deltaXpPct' ? 'text-primary' : 'text-muted-foreground'"
+                    >{{ getRankingSortIndicator('deltaXpPct') }}</span
+                  >
+                </button>
+              </TableHead>
+              <TableHead class="px-2 py-2">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 text-left uppercase transition hover:text-foreground"
+                  @click="toggleRankingSort('deltaKillsPct')"
+                >
+                  <span>{{ t('common:multiRound.deltaKillsPct', 'Kills Delta%') }}</span>
+                  <span
+                    class="text-[10px]"
+                    :class="rankingSort.key === 'deltaKillsPct' ? 'text-primary' : 'text-muted-foreground'"
+                    >{{ getRankingSortIndicator('deltaKillsPct') }}</span
+                  >
+                </button>
+              </TableHead>
+              <TableHead class="px-2 py-2">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 text-left uppercase transition hover:text-foreground"
+                  @click="toggleRankingSort('equipmentSaleValue')"
+                >
+                  <span>{{ t('common:vue.queue.equipmentSaleValue', 'Replaced Equipment Sale Value') }}</span>
+                  <span
+                    class="text-[10px]"
+                    :class="rankingSort.key === 'equipmentSaleValue' ? 'text-primary' : 'text-muted-foreground'"
+                    >{{ getRankingSortIndicator('equipmentSaleValue') }}</span
+                  >
+                </button>
+              </TableHead>
+              <TableHead class="px-2 py-2">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 text-left uppercase transition hover:text-foreground"
+                  @click="toggleRankingSort('equipmentBuyPrice')"
+                >
+                  <span>{{ t('common:vue.queue.equipmentBuyPrice', 'Target Equipment Buy Price') }}</span>
+                  <span
+                    class="text-[10px]"
+                    :class="rankingSort.key === 'equipmentBuyPrice' ? 'text-primary' : 'text-muted-foreground'"
+                    >{{ getRankingSortIndicator('equipmentBuyPrice') }}</span
+                  >
+                </button>
+              </TableHead>
+              <TableHead class="px-2 py-2">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 text-left uppercase transition hover:text-foreground"
+                  @click="toggleRankingSort('equipmentNetCost')"
+                >
+                  <span>{{ t('common:vue.queue.equipmentNetCost', 'Equipment Net Cost') }}</span>
+                  <span
+                    class="text-[10px]"
+                    :class="rankingSort.key === 'equipmentNetCost' ? 'text-primary' : 'text-muted-foreground'"
+                    >{{ getRankingSortIndicator('equipmentNetCost') }}</span
+                  >
+                </button>
+              </TableHead>
+              <TableHead
+                class="px-2 py-2"
+                :title="
+                  t(
+                    'common:vue.queue.upgradeCostComposition',
+                    'Upgrade Cost = equipment net cost + ability upgrade costs + house room upgrade costs.',
+                  )
+                "
+              >
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 text-left uppercase transition hover:text-foreground"
+                  @click="toggleRankingSort('upgradeCost')"
+                >
+                  <span>{{ t('common:equipment.upgradeCost', 'Upgrade Cost') }}</span>
+                  <span
+                    class="text-[10px]"
+                    :class="rankingSort.key === 'upgradeCost' ? 'text-primary' : 'text-muted-foreground'"
+                    >{{ getRankingSortIndicator('upgradeCost') }}</span
+                  >
+                </button>
+              </TableHead>
+              <TableHead class="px-2 py-2">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 text-left uppercase transition hover:text-foreground"
+                  @click="toggleRankingSort('purchaseDays')"
+                >
+                  <span>{{ t('common:queue.purchaseTime', 'Purchase Time') }}</span>
+                  <span
+                    class="text-[10px]"
+                    :class="rankingSort.key === 'purchaseDays' ? 'text-primary' : 'text-muted-foreground'"
+                    >{{ getRankingSortIndicator('purchaseDays') }}</span
+                  >
+                </button>
+              </TableHead>
+              <TableHead class="px-2 py-2">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 text-left uppercase transition hover:text-foreground"
+                  @click="toggleRankingSort('goldPerPoint01PctAvg')"
+                >
+                  <span>{{ t('common:multiRound.avgCostPerPoint01Pct', 'Gold per 0.01% (all four > 0)') }}</span>
+                  <span
+                    class="text-[10px]"
+                    :class="rankingSort.key === 'goldPerPoint01PctAvg' ? 'text-primary' : 'text-muted-foreground'"
+                    >{{ getRankingSortIndicator('goldPerPoint01PctAvg') }}</span
+                  >
+                </button>
+              </TableHead>
+              <TableHead class="px-2 py-2">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 text-left uppercase transition hover:text-foreground"
+                  @click="toggleRankingSort('compositeGoldPerPoint01Pct')"
+                >
+                  <span>{{ t('common:multiRound.compositeCostPerPoint01Pct', 'Gold per 0.01% (composite)') }}</span>
+                  <span
+                    class="text-[10px]"
+                    :class="rankingSort.key === 'compositeGoldPerPoint01Pct' ? 'text-primary' : 'text-muted-foreground'"
+                    >{{ getRankingSortIndicator('compositeGoldPerPoint01Pct') }}</span
+                  >
+                </button>
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow
               v-for="row in rankingRowsForDisplay"
               :key="row.id"
-              class="border-b border-white/5 text-slate-200"
+              class="border-b border-border text-foreground"
               :class="getRankRowClass(row)"
             >
-              <td class="px-2 py-2 font-semibold">
-                <span class="inline-flex min-w-12 items-center justify-center rounded-full border px-2 py-0.5 text-xs font-bold" :class="getRankBadgeClass(row.rank)">
+              <TableCell
+                class="sticky left-0 z-10 w-[76px] min-w-[76px] px-2 py-2 font-semibold shadow-[inset_-1px_0_0_var(--border)]"
+                :style="getRankStickyCellStyle(row)"
+              >
+                <span
+                  class="inline-flex min-w-12 items-center justify-center rounded-md border px-2 py-0.5 text-xs font-bold"
+                  :class="getRankBadgeClass(row.rank)"
+                >
                   #{{ row.rank }}
                 </span>
-              </td>
-              <td class="px-2 py-2">
+              </TableCell>
+              <TableCell class="sticky left-[76px] z-10 px-2 py-2" :style="getRankStickyCellStyle(row)">
                 <p>{{ formatQueueItemSummary(row) }}</p>
-                <p v-if="getHiddenChangeCount(row) > 0" class="mt-0.5 text-xs text-slate-500">
+                <p v-if="getHiddenChangeCount(row) > 0" class="mt-0.5 text-xs text-muted-foreground">
                   +{{ getHiddenChangeCount(row) }}
                 </p>
-              </td>
-              <td class="px-2 py-2">{{ formatRowSimCount(row) }}</td>
-              <td class="px-2 py-2">{{ formatNumber(row.finalScore) }}</td>
-              <td class="px-2 py-2">{{ formatNumber(row.performanceScore) }}</td>
-              <td class="px-2 py-2">{{ formatNumber(row.stabilityScore) }}</td>
-              <td class="px-2 py-2">{{ formatNumber(row.costScore) }}</td>
-              <td class="px-2 py-2">{{ formatCompactCurrency(row.meanProfitPerHour) }}</td>
-              <td class="px-2 py-2" :class="profitDeltaClass(row.deltaProfitPerHour)">{{ formatCurrency(row.deltaProfitPerHour) }}</td>
-              <td class="px-2 py-2" :class="profitDeltaClass(row.deltaProfitPct)">{{ formatSignedPercent(row.deltaProfitPct) }}</td>
-              <td class="px-2 py-2" :class="profitDeltaClass(row.deltaDpsPct)">{{ formatSignedPercent(row.deltaDpsPct) }}</td>
-              <td class="px-2 py-2" :class="profitDeltaClass(row.deltaXpPct)">{{ formatSignedPercent(row.deltaXpPct) }}</td>
-              <td class="px-2 py-2" :class="profitDeltaClass(row.deltaKillsPct)">{{ formatSignedPercent(row.deltaKillsPct) }}</td>
-              <td class="px-2 py-2">{{ formatCompactCurrency(row.costInsights?.totalUpgradeCost) }}</td>
-              <td class="px-2 py-2">{{ formatPurchaseDuration(row.costInsights?.purchaseDays) }}</td>
-              <td class="px-2 py-2">{{ formatCostPerPoint01Pct(row.costInsights?.goldPerPoint01PctAvg) }}</td>
-              <td class="px-2 py-2">{{ formatCostPerPoint01Pct(row.costInsights?.compositeGoldPerPoint01Pct) }}</td>
-            </tr>
-          </tbody>
-        </table>
+              </TableCell>
+              <TableCell class="px-2 py-2">{{ formatRowSimCount(row) }}</TableCell>
+              <TableCell class="px-2 py-2">{{ formatNumber(row.finalScore) }}</TableCell>
+              <TableCell class="px-2 py-2">{{ formatNumber(row.performanceScore) }}</TableCell>
+              <TableCell class="px-2 py-2">{{ formatNumber(row.stabilityScore) }}</TableCell>
+              <TableCell class="px-2 py-2">{{ formatNumber(row.costScore) }}</TableCell>
+              <TableCell class="px-2 py-2">{{ formatCompactCurrency(row.dailyNoRngProfitPerDay) }}</TableCell>
+              <TableCell
+                class="px-2 py-2"
+                :title="
+                  t(
+                    'common:multiRound.upgradedEphHint',
+                    'Mean encounters per hour across rounds (kills/h), i.e. the upgraded EPH.',
+                  )
+                "
+              >
+                {{ formatNumber(row.killsPerHour) }}
+                <span class="ml-0.5 text-xs" :class="profitDeltaClass(row.deltaKillsPerHour)"
+                  >({{ formatSignedNumber(row.deltaKillsPerHour) }})</span
+                >
+              </TableCell>
+              <TableCell class="px-2 py-2" :class="profitDeltaClass(row.deltaProfitPerHour)">{{
+                formatCurrency(row.deltaProfitPerHour)
+              }}</TableCell>
+              <TableCell class="px-2 py-2" :class="profitDeltaClass(row.deltaProfitPct)">{{
+                formatSignedPercent(row.deltaProfitPct)
+              }}</TableCell>
+              <TableCell class="px-2 py-2" :class="profitDeltaClass(row.deltaDpsPct)">{{
+                formatSignedPercent(row.deltaDpsPct)
+              }}</TableCell>
+              <TableCell class="px-2 py-2" :class="profitDeltaClass(row.deltaXpPct)">{{
+                formatSignedPercent(row.deltaXpPct)
+              }}</TableCell>
+              <TableCell class="px-2 py-2" :class="profitDeltaClass(row.deltaKillsPct)">{{
+                formatSignedPercent(row.deltaKillsPct)
+              }}</TableCell>
+              <TableCell class="px-2 py-2">{{ formatCompactCurrency(row.costInsights?.equipmentSaleValue) }}</TableCell>
+              <TableCell class="px-2 py-2">
+                <span>{{ formatCompactCurrency(row.costInsights?.equipmentBuyPrice) }}</span>
+                <span
+                  v-for="badge in getBuyPriceBadges(row)"
+                  :key="badge.key"
+                  class="ml-1 inline-flex items-center rounded border px-1 py-px text-[10px] font-semibold"
+                  :class="badge.class"
+                  :title="badge.tooltip"
+                >
+                  {{ badge.label }}
+                </span>
+              </TableCell>
+              <TableCell class="px-2 py-2">{{ formatCompactCurrency(row.costInsights?.equipmentNetCost) }}</TableCell>
+              <TableCell class="px-2 py-2">{{ formatCompactCurrency(row.costInsights?.totalUpgradeCost) }}</TableCell>
+              <TableCell class="px-2 py-2">{{ formatPurchaseDuration(row.costInsights?.purchaseDays) }}</TableCell>
+              <TableCell class="px-2 py-2">{{
+                formatCostPerPoint01Pct(row.costInsights?.goldPerPoint01PctAvg)
+              }}</TableCell>
+              <TableCell class="px-2 py-2">{{
+                formatCostPerPoint01Pct(row.costInsights?.compositeGoldPerPoint01Pct)
+              }}</TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
       </div>
 
       <DisclosurePanel :title="t('common:multiRound.rawTitle', 'Raw Round Data')">
         <div class="overflow-x-auto">
-          <table class="min-w-[1200px] w-max text-sm">
-            <thead>
-              <tr class="border-b border-white/10 text-left text-xs uppercase tracking-[0.14em] text-slate-400">
-                <th class="px-2 py-2">{{ t("common:vue.queue.variant", "Variant") }}</th>
-                <th class="px-2 py-2">{{ t("common:vue.queue.round", "Round") }}</th>
-                <th class="px-2 py-2">{{ t("common:queue.metricDps", "DPS") }}</th>
-                <th class="px-2 py-2">{{ t("common:multiRound.deltaDpsPct", "DPS Delta%") }}</th>
-                <th class="px-2 py-2">{{ t("common:queue.dailyNoRngProfit", "Daily No RNG Profit") }}</th>
-                <th class="px-2 py-2">{{ t("common:multiRound.deltaProfitPct", "Profit Delta%") }}</th>
-                <th class="px-2 py-2">{{ t("common:vue.queue.xpPerHour", "XP/h") }}</th>
-                <th class="px-2 py-2">{{ t("common:multiRound.deltaXpPct", "XP Delta%") }}</th>
-                <th class="px-2 py-2">{{ t("common:simulationResults.killPerHour", "Kills/h") }}</th>
-                <th class="px-2 py-2">{{ t("common:multiRound.deltaKillsPct", "Kills Delta%") }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="row in rawRowsForDisplay" :key="`${row.id}-${row.round}`" class="border-b border-white/5 text-slate-200">
-                <td class="px-2 py-2">
+          <Table class="min-w-[1200px] w-max text-sm">
+            <TableHeader>
+              <TableRow class="border-b border-border text-left text-xs uppercase text-muted-foreground">
+                <TableHead class="px-2 py-2">{{ t('common:vue.queue.variant', 'Variant') }}</TableHead>
+                <TableHead class="px-2 py-2">{{ t('common:vue.queue.round', 'Round') }}</TableHead>
+                <TableHead class="px-2 py-2">{{ t('common:queue.metricDps', 'DPS') }}</TableHead>
+                <TableHead class="px-2 py-2">{{ t('common:multiRound.deltaDpsPct', 'DPS Delta%') }}</TableHead>
+                <TableHead class="px-2 py-2">{{ t('common:queue.dailyNoRngProfit', 'Daily No RNG Profit') }}</TableHead>
+                <TableHead class="px-2 py-2">{{ t('common:multiRound.deltaProfitPct', 'Profit Delta%') }}</TableHead>
+                <TableHead class="px-2 py-2">{{ t('common:vue.queue.xpPerHour', 'XP/h') }}</TableHead>
+                <TableHead class="px-2 py-2">{{ t('common:multiRound.deltaXpPct', 'XP Delta%') }}</TableHead>
+                <TableHead class="px-2 py-2">{{ t('common:simulationResults.killPerHour', 'Kills/h') }}</TableHead>
+                <TableHead class="px-2 py-2">{{ t('common:multiRound.deltaKillsPct', 'Kills Delta%') }}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow
+                v-for="row in rawRowsForDisplay"
+                :key="`${row.id}-${row.round}`"
+                class="border-b border-border text-foreground"
+              >
+                <TableCell class="px-2 py-2">
                   <p>{{ formatQueueItemSummary(row) }}</p>
-                  <p v-if="getHiddenChangeCount(row) > 0" class="mt-0.5 text-xs text-slate-500">
+                  <p v-if="getHiddenChangeCount(row) > 0" class="mt-0.5 text-xs text-muted-foreground">
                     +{{ getHiddenChangeCount(row) }}
                   </p>
-                </td>
-                <td class="px-2 py-2">{{ row.round }}</td>
-                <td class="px-2 py-2">{{ formatNumber(row.metrics?.dps) }}</td>
-                <td class="px-2 py-2" :class="profitDeltaClass(row.deltas?.dps?.pct)">{{ formatSignedPercent(row.deltas?.dps?.pct) }}</td>
-                <td class="px-2 py-2">{{ formatCurrency(row.metrics?.dailyNoRngProfit) }}</td>
-                <td class="px-2 py-2" :class="profitDeltaClass(row.deltas?.dailyNoRngProfit?.pct)">{{ formatSignedPercent(row.deltas?.dailyNoRngProfit?.pct) }}</td>
-                <td class="px-2 py-2">{{ formatNumber(row.metrics?.xpPerHour) }}</td>
-                <td class="px-2 py-2" :class="profitDeltaClass(row.deltas?.xpPerHour?.pct)">{{ formatSignedPercent(row.deltas?.xpPerHour?.pct) }}</td>
-                <td class="px-2 py-2">{{ formatNumber(row.metrics?.killsPerHour) }}</td>
-                <td class="px-2 py-2" :class="profitDeltaClass(row.deltas?.killsPerHour?.pct)">{{ formatSignedPercent(row.deltas?.killsPerHour?.pct) }}</td>
-              </tr>
-            </tbody>
-          </table>
+                </TableCell>
+                <TableCell class="px-2 py-2">{{ row.round }}</TableCell>
+                <TableCell class="px-2 py-2">{{ formatNumber(row.metrics?.dps) }}</TableCell>
+                <TableCell class="px-2 py-2" :class="profitDeltaClass(row.deltas?.dps?.pct)">{{
+                  formatSignedPercent(row.deltas?.dps?.pct)
+                }}</TableCell>
+                <TableCell class="px-2 py-2">{{ formatCurrency(row.metrics?.dailyNoRngProfit) }}</TableCell>
+                <TableCell class="px-2 py-2" :class="profitDeltaClass(row.deltas?.dailyNoRngProfit?.pct)">{{
+                  formatSignedPercent(row.deltas?.dailyNoRngProfit?.pct)
+                }}</TableCell>
+                <TableCell class="px-2 py-2">{{ formatNumber(row.metrics?.xpPerHour) }}</TableCell>
+                <TableCell class="px-2 py-2" :class="profitDeltaClass(row.deltas?.xpPerHour?.pct)">{{
+                  formatSignedPercent(row.deltas?.xpPerHour?.pct)
+                }}</TableCell>
+                <TableCell class="px-2 py-2">{{ formatNumber(row.metrics?.killsPerHour) }}</TableCell>
+                <TableCell class="px-2 py-2" :class="profitDeltaClass(row.deltas?.killsPerHour?.pct)">{{
+                  formatSignedPercent(row.deltas?.killsPerHour?.pct)
+                }}</TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
         </div>
       </DisclosurePanel>
     </template>
@@ -231,50 +634,150 @@
 </template>
 
 <script setup>
-import { computed, ref } from "vue";
-import DisclosurePanel from "../components/DisclosurePanel.vue";
-import { resolveQueuePerformanceSubweights } from "../../shared/queuePerformanceWeights.js";
+import { computed, ref } from 'vue';
+import DisclosurePanel from '../components/DisclosurePanel.vue';
+import { resolveQueuePerformanceSubweights } from '../../shared/queuePerformanceWeights.js';
 import {
   abilityDetailIndex as abilityDetailMap,
   houseRoomDetailIndex as houseRoomDetailMap,
   itemDetailIndex as itemDetailMap,
-} from "../../shared/gameDataIndex.js";
-import { useSimulatorStore } from "../../stores/simulatorStore.js";
-import { useGameDataText } from "../composables/useGameDataText.js";
-import { useI18nText } from "../composables/useI18nText.js";
-import { isQueueRunInProgress } from "../multiResultsPresentation.js";
-import { formatQueueTriggerDetailLine } from "../queueTriggerPresentation.js";
+} from '../../shared/gameDataIndex.js';
+import { useSimulatorStore } from '../../stores/simulatorStore.js';
+import { useGameDataText } from '../composables/useGameDataText.js';
+import { useI18nText } from '../composables/useI18nText.js';
+import { Progress } from '../components/ui/progress/index.js';
+import { isQueueRunInProgress } from '../multiResultsPresentation.js';
+import { formatQueueTriggerDetailLine } from '../queueTriggerPresentation.js';
+import { buildChangedEquipmentKeys, buildSelectionKey } from '../queuePriceSelection.js';
 
 const simulator = useSimulatorStore();
 const { t, language } = useI18nText();
-const {
-  getAbilityName,
-  getActionName,
-  getEquipmentSlotName,
-  getHouseRoomName,
-  getItemName,
-  getSkillName,
-} = useGameDataText();
-const ABILITY_BOOK_CATEGORY_HRID = "/item_categories/ability_book";
+const { getAbilityName, getActionName, getEquipmentSlotName, getHouseRoomName, getItemName, getSkillName } =
+  useGameDataText();
+const ABILITY_BOOK_CATEGORY_HRID = '/item_categories/ability_book';
 const ONE_HOUR = 60 * 60 * 1e9;
 const RANKING_ROWS_LIMIT = 300;
 const RAW_ROWS_LIMIT = 800;
 
 const queueState = computed(() => simulator.activeQueueState);
-const queuePartyStatus = computed(() => simulator.activeQueuePartyStatus || { hasMismatch: false, messageKey: "", memberNames: [] });
-const queuePartySummaryText = computed(() => (
+const queuePartyStatus = computed(
+  () => simulator.activeQueuePartyStatus || { hasMismatch: false, messageKey: '', memberNames: [] },
+);
+const queuePartySummaryText = computed(() =>
   Array.isArray(queuePartyStatus.value?.memberNames) && queuePartyStatus.value.memberNames.length > 0
-    ? queuePartyStatus.value.memberNames.join(" / ")
-    : ""
-));
-const queuePartyWarningText = computed(() => (
+    ? queuePartyStatus.value.memberNames.join(' / ')
+    : '',
+);
+const queuePartyWarningText = computed(() =>
   queuePartyStatus.value?.hasMismatch
-    ? t(queuePartyStatus.value?.messageKey || "common:queue.partyChangedSinceBaseline", queuePartyStatus.value?.messageKey || "common:queue.partyChangedSinceBaseline")
-    : ""
-));
+    ? t(
+        queuePartyStatus.value?.messageKey || 'common:queue.partyChangedSinceBaseline',
+        queuePartyStatus.value?.messageKey || 'common:queue.partyChangedSinceBaseline',
+      )
+    : '',
+);
+// 排序列定义：key 同时用于取值函数与 Excel 导出。costInsights 下的成本列单独走取值器。
+const RANKING_SORT_COLUMNS = [
+  'rank',
+  'rounds',
+  'finalScore',
+  'performanceScore',
+  'stabilityScore',
+  'costScore',
+  'dailyNoRngProfitPerDay',
+  'killsPerHour',
+  'deltaProfitPerHour',
+  'deltaProfitPct',
+  'deltaDpsPct',
+  'deltaXpPct',
+  'deltaKillsPct',
+  'equipmentSaleValue',
+  'equipmentBuyPrice',
+  'equipmentNetCost',
+  'upgradeCost',
+  'purchaseDays',
+  'goldPerPoint01PctAvg',
+  'compositeGoldPerPoint01Pct',
+];
+const rankingSort = ref({ key: '', direction: 'desc' });
+
+function resolveRankingSortValue(row, key) {
+  if (!row) {
+    return null;
+  }
+  switch (key) {
+    case 'equipmentSaleValue':
+      return row.costInsights?.equipmentSaleValue ?? null;
+    case 'equipmentBuyPrice':
+      return row.costInsights?.equipmentBuyPrice ?? null;
+    case 'equipmentNetCost':
+      return row.costInsights?.equipmentNetCost ?? null;
+    case 'upgradeCost':
+      return row.costInsights?.totalUpgradeCost ?? null;
+    case 'purchaseDays':
+      return row.costInsights?.purchaseDays ?? null;
+    case 'goldPerPoint01PctAvg':
+      return row.costInsights?.goldPerPoint01PctAvg ?? null;
+    case 'compositeGoldPerPoint01Pct':
+      return row.costInsights?.compositeGoldPerPoint01Pct ?? null;
+    default: {
+      const numeric = Number(row[key]);
+      return Number.isFinite(numeric) ? numeric : null;
+    }
+  }
+}
+
+function compareRankingRows(left, right, key, directionFactor) {
+  const leftValue = resolveRankingSortValue(left, key);
+  const rightValue = resolveRankingSortValue(right, key);
+  // null（N/A 成本项）无论升序降序都恒排末尾（Excel 风格），避免降序时 N/A 挡住真实最大值。
+  if (leftValue == null && rightValue == null) return 0;
+  if (leftValue == null) return 1;
+  if (rightValue == null) return -1;
+  if (leftValue === rightValue) return 0;
+  return leftValue < rightValue ? -directionFactor : directionFactor;
+}
+
+function sortRankingRows(rows) {
+  const sortKey = String(rankingSort.value.key || '');
+  if (!sortKey || !RANKING_SORT_COLUMNS.includes(sortKey)) {
+    return rows;
+  }
+  // 稳定排序：先按原始顺序（默认排名序）稳定分层，再按当前列比较。
+  const directionFactor = rankingSort.value.direction === 'asc' ? 1 : -1;
+  return rows
+    .map((row, index) => ({ row, index }))
+    .sort((a, b) => compareRankingRows(a.row, b.row, sortKey, directionFactor) || a.index - b.index)
+    .map((entry) => entry.row);
+}
+
+function toggleRankingSort(columnKey) {
+  if (!RANKING_SORT_COLUMNS.includes(columnKey)) {
+    return;
+  }
+  if (rankingSort.value.key === columnKey) {
+    if (rankingSort.value.direction === 'desc') {
+      rankingSort.value.direction = 'asc';
+      return;
+    }
+    // 再次点击同一列：恢复默认排名序。
+    rankingSort.value = { key: '', direction: 'desc' };
+    return;
+  }
+  rankingSort.value = { key: columnKey, direction: 'desc' };
+}
+
+function getRankingSortIndicator(columnKey) {
+  if (rankingSort.value.key !== columnKey) {
+    return '<>';
+  }
+  return rankingSort.value.direction === 'asc' ? '^' : 'v';
+}
+
 const rankingRowsForDisplay = computed(() => {
   const rows = Array.isArray(queueState.value?.ranking) ? queueState.value.ranking : [];
-  return rows.length > RANKING_ROWS_LIMIT ? rows.slice(0, RANKING_ROWS_LIMIT) : rows;
+  const limited = rows.length > RANKING_ROWS_LIMIT ? rows.slice(0, RANKING_ROWS_LIMIT) : rows;
+  return sortRankingRows(limited);
 });
 const rawRowsForDisplay = computed(() => {
   const rows = Array.isArray(queueState.value?.rawRuns) ? queueState.value.rawRuns : [];
@@ -296,33 +799,30 @@ const queueProgressPercent = computed(() => {
   return Math.max(0, Math.min(100, Math.floor(progress * 100)));
 });
 const queueProgressPercentText = computed(() => `${queueProgressPercent.value}%`);
-const queueProgressBarWidth = computed(() => `${queueProgressPercent.value}%`);
 const runningPlaceholderStyle = computed(() => ({
-  minHeight: "max(320px, calc(100vh - 32rem))",
+  minHeight: 'max(320px, calc(100vh - 32rem))',
 }));
-const runningPlaceholderTitle = computed(() => (
-  language.value === "zh"
-    ? "多轮排行正在准备中"
-    : "Multi-round ranking is being prepared"
-));
-const runningPlaceholderDescription = computed(() => (
-  language.value === "zh"
-    ? "队列产生首批有效样本后，排行表和原始轮次数据会显示在这里。"
-    : "The ranking and raw round tables will appear here as soon as the queue finishes the first useful samples."
-));
+const runningPlaceholderTitle = computed(() =>
+  language.value === 'zh' ? '多轮排行正在准备中' : 'Multi-round ranking is being prepared',
+);
+const runningPlaceholderDescription = computed(() =>
+  language.value === 'zh'
+    ? '队列产生首批有效样本后，排行表和原始轮次数据会显示在这里。'
+    : 'The ranking and raw round tables will appear here as soon as the queue finishes the first useful samples.',
+);
 const rawRunCount = computed(() => Math.max(0, Number(queueState.value?.rawRuns?.length || 0)));
 const completedSimCountText = computed(() => `${rawRunCount.value}/${totalRunCount.value}`);
-const currentCostScoreGoldMetricMode = computed(() => (
-  simulator.queueRuntime?.costScoreGoldPerPointMode === "composite" ? "composite" : "strict"
-));
-const currentCostScoreModeLabel = computed(() => (
-  currentCostScoreGoldMetricMode.value === "composite"
-    ? t("common:multiRound.costScoreModeComposite", "Composite")
-    : t("common:multiRound.costScoreModeStrict", "Strict")
-));
-const costScoreColumnHeader = computed(() => (
-  t("common:multiRound.costScoreWithMode", "Cost Score ({{mode}})", { mode: currentCostScoreModeLabel.value })
-));
+const currentCostScoreGoldMetricMode = computed(() =>
+  simulator.queueRuntime?.costScoreGoldPerPointMode === 'composite' ? 'composite' : 'strict',
+);
+const currentCostScoreModeLabel = computed(() =>
+  currentCostScoreGoldMetricMode.value === 'composite'
+    ? t('common:multiRound.costScoreModeComposite', 'Composite')
+    : t('common:multiRound.costScoreModeStrict', 'Strict'),
+);
+const costScoreColumnHeader = computed(() =>
+  t('common:multiRound.costScoreWithMode', 'Cost Score ({{mode}})', { mode: currentCostScoreModeLabel.value }),
+);
 const queueRuntimeWeightText = computed(() => {
   const finalWeights = simulator.queueRuntime?.finalWeights || {};
   const toPct = (value, fallback) => Number((Number(value ?? fallback) * 100).toFixed(2));
@@ -351,16 +851,13 @@ const queueMedianBlendText = computed(() => {
 });
 const actionNameFallbackMap = computed(() => {
   const map = {};
-  const actionOptions = [
-    ...(simulator.options?.zones || []),
-    ...(simulator.options?.dungeons || []),
-  ];
+  const actionOptions = [...(simulator.options?.zones || []), ...(simulator.options?.dungeons || [])];
   for (const option of actionOptions) {
-    const hrid = String(option?.hrid || "");
+    const hrid = String(option?.hrid || '');
     if (!hrid || Object.prototype.hasOwnProperty.call(map, hrid)) {
       continue;
     }
-    map[hrid] = String(option?.name || "");
+    map[hrid] = String(option?.name || '');
   }
   return map;
 });
@@ -372,53 +869,56 @@ const baselineSummaryRows = computed(() => {
   const metrics = baseline.metrics || {};
   return [
     {
-      key: "zone",
-      label: t("common:queue.settingZone", "Zone"),
+      key: 'zone',
+      label: t('common:queue.settingZone', 'Zone'),
       value: resolveBaselineZoneName(baseline),
     },
     {
-      key: "difficulty",
-      label: t("common:queue.settingDifficulty", "Difficulty"),
+      key: 'difficulty',
+      label: t('common:queue.settingDifficulty', 'Difficulty'),
       value: resolveBaselineDifficultyText(baseline),
     },
     {
-      key: "duration",
-      label: t("common:queue.settingDuration", "Duration"),
+      key: 'duration',
+      label: t('common:queue.settingDuration', 'Duration'),
       value: resolveBaselineDurationText(baseline),
     },
     {
-      key: "baselineRounds",
-      label: t("common:queue.baselineRoundCount", "Baseline Rounds"),
+      key: 'rounds',
+      label: t('common:queue.roundCount', 'Rounds'),
       value: resolveBaselineConfiguredRoundsText(baseline),
     },
     {
-      key: "baselineCompletedRounds",
-      label: t("common:queue.baselineCompletedSamples", "Completed Samples"),
+      key: 'baselineCompletedRounds',
+      label: t('common:queue.baselineCompletedSamples', 'Completed Samples'),
       value: resolveBaselineCompletedRoundsText(baseline),
     },
     {
-      key: "dps",
-      label: t("common:queue.metricDps", "DPS"),
+      key: 'dps',
+      label: t('common:queue.metricDps', 'DPS'),
       value: formatNumber(metrics?.dps),
     },
     {
-      key: "dailyNoRngProfit",
-      label: t("common:queue.dailyNoRngProfit", "Daily No RNG Profit"),
-      value: formatCurrency(metrics?.dailyNoRngProfit),
+      key: 'dailyNoRngProfit',
+      label: t('common:queue.dailyNoRngProfit', 'Daily No RNG Profit'),
+      value: formatCompactCurrency(metrics?.dailyNoRngProfit),
     },
     {
-      key: "xpPerHour",
-      label: t("common:vue.queue.xpPerHour", "XP/h"),
-      value: formatNumber(metrics?.xpPerHour),
+      key: 'xpPerHour',
+      label: t('common:vue.queue.xpPerHour', 'XP/h'),
+      value: formatCompactCurrency(metrics?.xpPerHour),
     },
     {
-      key: "killsPerHour",
-      label: t("common:simulationResults.killPerHour", "Kills/h"),
+      key: 'killsPerHour',
+      label: t('common:simulationResults.killPerHour', 'Kills/h'),
       value: formatNumber(metrics?.killsPerHour),
     },
   ];
 });
-const queueChangeInlineSeparator = computed(() => (language.value === "zh" ? "、" : ", "));
+const queueChangeInlineSeparator = computed(() => (language.value === 'zh' ? '、' : ', '));
+// 导出 priceMethod 列的本地化分隔符：中文用全角标点，英文用半角标点。
+const priceMethodColon = computed(() => (language.value === 'zh' ? '：' : ':'));
+const priceMethodJoinSeparator = computed(() => (language.value === 'zh' ? '；' : '; '));
 
 const abilityBookInfoByAbilityHrid = (() => {
   const result = {};
@@ -426,7 +926,7 @@ const abilityBookInfoByAbilityHrid = (() => {
     if (item?.categoryHrid !== ABILITY_BOOK_CATEGORY_HRID) {
       continue;
     }
-    const abilityHrid = String(item?.abilityBookDetail?.abilityHrid || "");
+    const abilityHrid = String(item?.abilityBookDetail?.abilityHrid || '');
     if (!abilityHrid) {
       continue;
     }
@@ -436,7 +936,7 @@ const abilityBookInfoByAbilityHrid = (() => {
     }
     if (!result[abilityHrid] || xpPerBook > Number(result[abilityHrid]?.xpPerBook || 0)) {
       result[abilityHrid] = {
-        itemHrid: String(item?.hrid || ""),
+        itemHrid: String(item?.hrid || ''),
         xpPerBook,
       };
     }
@@ -447,7 +947,7 @@ const abilityBookInfoByAbilityHrid = (() => {
 const lastRunText = computed(() => {
   const timestamp = Number(queueState.value?.lastRunAt || 0);
   if (!timestamp) {
-    return t("common:vue.queue.never", "Never");
+    return t('common:vue.queue.never', 'Never');
   }
   return new Date(timestamp).toLocaleString();
 });
@@ -458,7 +958,7 @@ function formatNumber(value) {
 
 function formatCurrency(value) {
   if (value == null || !Number.isFinite(Number(value))) {
-    return "-";
+    return '-';
   }
   return Number(value || 0).toLocaleString(undefined, {
     maximumFractionDigits: 0,
@@ -467,7 +967,7 @@ function formatCurrency(value) {
 
 function formatCompactCurrency(value, digits = 1) {
   if (value == null || !Number.isFinite(Number(value))) {
-    return "-";
+    return '-';
   }
   const numeric = Number(value || 0);
   const abs = Math.abs(numeric);
@@ -486,24 +986,125 @@ function formatCompactCurrency(value, digits = 1) {
 
 function formatCostPerPoint01Pct(value) {
   if (value == null || !Number.isFinite(Number(value))) {
-    return "N/A";
+    return 'N/A';
   }
   return formatCompactCurrency(value);
 }
 
+// 根据价格方式 slot 数据，构建买入价旁的标记列表。
+// 每种方式（left1/right1/manual/mirror）各显示一个 badge，便于用户一眼区分价格来源。
+function getBuyPriceBadges(row) {
+  const slots = Array.isArray(row?.costInsights?.priceMethodSlots) ? row.costInsights.priceMethodSlots : [];
+  if (slots.length === 0) {
+    return [];
+  }
+  // 预聚合 manual 插槽的 count 和 total，用于 manual badge tooltip。
+  const manualSlots = slots.filter((slot) => String(slot?.method || '') === 'manual');
+  const manualCount = manualSlots.length;
+  const manualTotal = manualSlots.reduce((sum, slot) => sum + Math.max(0, Number(slot?.price || 0)), 0);
+  // 预聚合每种 method 下所有 slot 的"装备名 +等级"列表，用于 mirror/left1/right1 badge tooltip。
+  // badge 按 method 去重只显示一个，但 tooltip 应反映该方式下所有受影响的装备，而非仅第一件。
+  const slotNamesByMethod = {};
+  for (const slot of slots) {
+    const method = String(slot?.method || '');
+    if (!method) {
+      continue;
+    }
+    const name = getItemName(slot?.itemHrid);
+    const level = Number(slot?.enhancementLevel || 0);
+    const entry = `${name} +${level}`;
+    if (!Array.isArray(slotNamesByMethod[method])) {
+      slotNamesByMethod[method] = [];
+    }
+    slotNamesByMethod[method].push(entry);
+  }
+  // 按 method 去重，同一种方式只显示一个 badge。
+  const seen = new Set();
+  const badges = [];
+  for (const slot of slots) {
+    const method = String(slot?.method || '');
+    if (!method || seen.has(method)) {
+      continue;
+    }
+    seen.add(method);
+    const names = (slotNamesByMethod[method] || []).join(', ');
+    let label;
+    let badgeClass;
+    let tooltip;
+    if (method === 'manual') {
+      label = t('common:multiRound.manualPriceBadge', 'Manual');
+      badgeClass = 'border-warning/40 bg-warning/10 text-warning';
+      tooltip = t(
+        'common:multiRound.manualPriceTooltip',
+        '{{count}} equipment price(s) ({{total}}) were entered manually by the user and were not verified against market data.',
+        { count: manualCount, total: formatCompactCurrency(manualTotal) },
+      );
+    } else if (method === 'mirror') {
+      label = t('common:queue.priceMethodMirror', 'Mirror');
+      badgeClass = 'border-primary/40 bg-primary/10 text-primary';
+      tooltip = t('common:multiRound.mirrorPriceTooltip', '{{names}}: mirror plan total cost (incl. baseline piece)', {
+        names,
+      });
+    } else if (method === 'right1') {
+      label = t('common:queue.priceMethodRight1', 'Right 1');
+      badgeClass = 'border-blue-500/40 bg-blue-500/10 text-blue-500';
+      tooltip = t('common:multiRound.right1PriceTooltip', '{{names}}: right 1 (bid price)', {
+        names,
+      });
+    } else if (method === 'left1') {
+      label = t('common:queue.priceMethodLeft1', 'Left 1');
+      badgeClass = 'border-emerald-500/40 bg-emerald-500/10 text-emerald-500';
+      tooltip = t('common:multiRound.left1PriceTooltip', '{{names}}: left 1 (reference ask price)', {
+        names,
+      });
+    } else {
+      // ask / official_hourly_average / market_history 等市场价来源不显示额外标记，
+      // 因为左一价已覆盖这些场景；跳过非用户选定的来源。
+      continue;
+    }
+    badges.push({ key: method, label, class: badgeClass, tooltip });
+  }
+  return badges;
+}
+
+function formatEquipmentBuyPriceForExport(row) {
+  const formatted = formatCompactCurrency(row?.costInsights?.equipmentBuyPrice);
+  if (formatted === '-') {
+    return formatted;
+  }
+  const badges = getBuyPriceBadges(row);
+  if (badges.length === 0) {
+    return formatted;
+  }
+  const tags = badges.map((badge) => badge.label).join(', ');
+  return `${formatted} [${tags}]`;
+}
+
 function formatSignedPercent(value) {
   if (value == null || !Number.isFinite(Number(value))) {
-    return "-";
+    return '-';
   }
   const numeric = Number(value || 0);
-  const prefix = numeric > 0 ? "+" : "";
+  const prefix = numeric > 0 ? '+' : '';
   return `${prefix}${numeric.toFixed(2)}%`;
+}
+
+function formatSignedNumber(value) {
+  if (value == null || !Number.isFinite(Number(value))) {
+    return '-';
+  }
+  const numeric = Number(value || 0);
+  // -0.04 四舍五入到 -0.0 时显示成 0.0，避免出现 “(-0.0)” 这种别扭的样式。
+  const rounded = Math.round(numeric * 10) / 10;
+  const normalized = rounded === 0 ? 0 : rounded;
+  const prefix = normalized > 0 ? '+' : '';
+  return `${prefix}${normalized.toFixed(1)}`;
 }
 
 function formatPurchaseDuration(daysValue) {
   const numeric = Number(daysValue);
   if (!Number.isFinite(numeric) || numeric <= 0) {
-    return "-";
+    return '-';
   }
   if (numeric < 1) {
     return `${(numeric * 24).toFixed(1)}h`;
@@ -511,26 +1112,26 @@ function formatPurchaseDuration(daysValue) {
   return `${numeric.toFixed(1)}d`;
 }
 
-function formatActionName(actionHrid, fallbackName = "-") {
-  const hrid = String(actionHrid || "");
+function formatActionName(actionHrid, fallbackName = '-') {
+  const hrid = String(actionHrid || '');
   if (!hrid) {
-    return fallbackName || "-";
+    return fallbackName || '-';
   }
 
   return getActionName(hrid, fallbackName || hrid);
 }
 
 function resolveBaselineZoneName(baseline) {
-  const configuredHrid = String(baseline?.settings?.zoneHrid || "");
+  const configuredHrid = String(baseline?.settings?.zoneHrid || '');
   if (configuredHrid) {
     return formatActionName(configuredHrid, actionNameFallbackMap.value?.[configuredHrid] || configuredHrid);
   }
 
-  const resultZone = String(baseline?.simResult?.zoneHrid || baseline?.simResult?.zoneName || "");
+  const resultZone = String(baseline?.simResult?.zoneHrid || baseline?.simResult?.zoneName || '');
   if (!resultZone) {
-    return "-";
+    return '-';
   }
-  if (resultZone.startsWith("/actions/")) {
+  if (resultZone.startsWith('/actions/')) {
     return formatActionName(resultZone, actionNameFallbackMap.value?.[resultZone] || resultZone);
   }
   return resultZone;
@@ -546,7 +1147,7 @@ function resolveBaselineDifficultyText(baseline) {
   if (Number.isFinite(resultTier)) {
     return `T${Math.max(0, Math.floor(resultTier))}`;
   }
-  return "-";
+  return '-';
 }
 
 function resolveBaselineDurationText(baseline) {
@@ -562,18 +1163,18 @@ function resolveBaselineDurationText(baseline) {
     return `${rounded}h`;
   }
 
-  return "-";
+  return '-';
 }
 
 function resolveBaselineConfiguredRoundsText(baseline) {
-  const configuredRounds = Number(baseline?.settings?.baselineRounds);
+  const configuredRounds = Number(baseline?.settings?.rounds);
   if (Number.isFinite(configuredRounds) && configuredRounds > 0) {
     return `${Math.max(1, Math.floor(configuredRounds))}`;
   }
   if (baseline?.simResult) {
-    return "1";
+    return '1';
   }
-  return "-";
+  return '-';
 }
 
 function resolveBaselineCompletedRoundsText(baseline) {
@@ -582,31 +1183,31 @@ function resolveBaselineCompletedRoundsText(baseline) {
     return `${Math.max(0, Math.floor(completedRounds))}`;
   }
   if (baseline?.simResult) {
-    return "1";
+    return '1';
   }
-  return "-";
+  return '-';
 }
 
 function resolveItemName(itemHrid) {
-  const hrid = String(itemHrid || "");
+  const hrid = String(itemHrid || '');
   if (!hrid) {
-    return "";
+    return '';
   }
   return getItemName(hrid, itemDetailMap?.[hrid]?.name || hrid);
 }
 
 function resolveAbilityName(abilityHrid) {
-  const hrid = String(abilityHrid || "");
+  const hrid = String(abilityHrid || '');
   if (!hrid) {
-    return "";
+    return '';
   }
   return getAbilityName(hrid, hrid);
 }
 
 function resolveTriggerTargetName(targetHrid) {
-  const hrid = String(targetHrid || "");
+  const hrid = String(targetHrid || '');
   if (!hrid) {
-    return "";
+    return '';
   }
   if (Object.prototype.hasOwnProperty.call(itemDetailMap || {}, hrid)) {
     return resolveItemName(hrid);
@@ -618,15 +1219,15 @@ function resolveTriggerTargetName(targetHrid) {
 }
 
 function formatSkillName(skillKey) {
-  const raw = String(skillKey || "").trim();
+  const raw = String(skillKey || '').trim();
   if (!raw) {
-    return "";
+    return '';
   }
   return getSkillName(raw, raw);
 }
 
 function localizeEquipmentSlotLabel(slotKey) {
-  return getEquipmentSlotName(String(slotKey || ""));
+  return getEquipmentSlotName(String(slotKey || ''));
 }
 
 function getAbilityXpForLevel(level) {
@@ -643,7 +1244,7 @@ function getAbilityXpForLevel(level) {
 }
 
 function getSpellBookXpForAbility(abilityHrid) {
-  const normalizedHrid = String(abilityHrid || "");
+  const normalizedHrid = String(abilityHrid || '');
   if (!normalizedHrid) {
     return 0;
   }
@@ -653,13 +1254,13 @@ function getSpellBookXpForAbility(abilityHrid) {
     return directBookInfo.xpPerBook;
   }
 
-  const abilityName = String(abilityDetailMap?.[normalizedHrid]?.name || "");
+  const abilityName = String(abilityDetailMap?.[normalizedHrid]?.name || '');
   if (!abilityName) {
     return 0;
   }
 
   const spellBookXpMap = window?.jigsSpellBookXpByName;
-  if (!spellBookXpMap || typeof spellBookXpMap !== "object") {
+  if (!spellBookXpMap || typeof spellBookXpMap !== 'object') {
     return 0;
   }
 
@@ -669,7 +1270,7 @@ function getSpellBookXpForAbility(abilityHrid) {
 }
 
 function computeAbilityBooksNeededForRange(abilityHrid, fromLevel, toLevel) {
-  const safeHrid = String(abilityHrid || "");
+  const safeHrid = String(abilityHrid || '');
   const safeFrom = Number(fromLevel);
   const safeTo = Number(toLevel);
   if (!safeHrid || !Number.isFinite(safeFrom) || !Number.isFinite(safeTo) || safeTo <= safeFrom) {
@@ -697,32 +1298,38 @@ function computeAbilityBooksNeededForRange(abilityHrid, fromLevel, toLevel) {
 }
 
 function formatQueueChangeDetailLine(change) {
-  const kind = String(change?.kind || "");
+  const kind = String(change?.kind || '');
 
-  if (kind === "trigger") {
+  if (kind === 'trigger') {
     return formatQueueTriggerDetailLine(change, {
       t,
       resolveTargetName: resolveTriggerTargetName,
     });
   }
 
-  if (kind === "ability") {
-    const beforeHrid = String(change?.beforeAbilityHrid || "");
-    const afterHrid = String(change?.afterAbilityHrid || "");
+  if (kind === 'ability') {
+    const beforeHrid = String(change?.beforeAbilityHrid || '');
+    const afterHrid = String(change?.afterAbilityHrid || '');
     const beforeLevel = Number(change?.beforeLevel || 1);
     const afterLevel = Number(change?.afterLevel || 1);
-    if (beforeHrid && afterHrid && beforeHrid === afterHrid && Number.isFinite(beforeLevel) && Number.isFinite(afterLevel)) {
+    if (
+      beforeHrid &&
+      afterHrid &&
+      beforeHrid === afterHrid &&
+      Number.isFinite(beforeLevel) &&
+      Number.isFinite(afterLevel)
+    ) {
       const abilityName = resolveAbilityName(afterHrid);
       const books = computeAbilityBooksNeededForRange(afterHrid, beforeLevel, afterLevel);
       if (books != null) {
-        return t("common:queue.skillLevelChangeWithBooks", "{{name}}: Level {{from}} -> {{to}} ({{books}} books)", {
+        return t('common:queue.skillLevelChangeWithBooks', '{{name}}: Level {{from}} -> {{to}} ({{books}} books)', {
           name: abilityName,
           from: beforeLevel,
           to: afterLevel,
           books,
         });
       }
-      return t("common:queue.skillLevelChange", "{{name}}: Level {{from}} -> {{to}}", {
+      return t('common:queue.skillLevelChange', '{{name}}: Level {{from}} -> {{to}}', {
         name: abilityName,
         from: beforeLevel,
         to: afterLevel,
@@ -730,14 +1337,14 @@ function formatQueueChangeDetailLine(change) {
     }
   }
 
-  if (kind === "equipment") {
-    const beforeItemHrid = String(change?.beforeItemHrid || "");
-    const afterItemHrid = String(change?.afterItemHrid || "");
+  if (kind === 'equipment') {
+    const beforeItemHrid = String(change?.beforeItemHrid || '');
+    const afterItemHrid = String(change?.afterItemHrid || '');
     const beforeLevel = Math.max(0, Math.floor(Number(change?.beforeEnhancementLevel || 0)));
     const afterLevel = Math.max(0, Math.floor(Number(change?.afterEnhancementLevel || 0)));
 
     if (beforeItemHrid && afterItemHrid && beforeItemHrid === afterItemHrid) {
-      return t("common:queue.itemEnhancementChange", "{{name}}: Enhance {{from}} -> {{to}}", {
+      return t('common:queue.itemEnhancementChange', '{{name}}: Enhance {{from}} -> {{to}}', {
         name: resolveItemName(beforeItemHrid),
         from: beforeLevel,
         to: afterLevel,
@@ -745,65 +1352,72 @@ function formatQueueChangeDetailLine(change) {
     }
   }
 
-  if (kind === "level") {
+  if (kind === 'level') {
     const before = Number(change?.beforeLevel);
     const after = Number(change?.afterLevel);
-    return t("common:queue.skillLevelChange", "{{name}}: Level {{from}} -> {{to}}", {
+    return t('common:queue.skillLevelChange', '{{name}}: Level {{from}} -> {{to}}', {
       name: formatSkillName(change?.key),
       from: Number.isFinite(before) ? before : 1,
       to: Number.isFinite(after) ? after : 1,
     });
   }
 
-  if (kind === "house_room") {
+  if (kind === 'house_room') {
     const before = Math.max(0, Math.floor(Number(change?.beforeLevel || 0)));
     const after = Math.max(0, Math.floor(Number(change?.afterLevel || 0)));
-    const roomHrid = String(change?.roomHrid || "");
-    return t("common:queue.houseRoomLevelChange", "{{name}}: Level {{from}} -> {{to}}", {
-      name: getHouseRoomName(roomHrid, houseRoomDetailMap?.[roomHrid]?.name || roomHrid || "House Room"),
+    const roomHrid = String(change?.roomHrid || '');
+    return t('common:queue.houseRoomLevelChange', '{{name}}: Level {{from}} -> {{to}}', {
+      name: getHouseRoomName(roomHrid, houseRoomDetailMap?.[roomHrid]?.name || roomHrid || 'House Room'),
       from: before,
       to: after,
     });
   }
 
-  if (kind === "food" || kind === "drink") {
+  if (kind === 'food' || kind === 'drink') {
     const slotIndex = Number(change?.index) + 1;
-    const slotLabel = kind === "food"
-      ? t("common:queue.foodSlot", "Food Slot {{index}}", { index: Number.isFinite(slotIndex) ? slotIndex : 1 })
-      : t("common:queue.drinkSlot", "Drink Slot {{index}}", { index: Number.isFinite(slotIndex) ? slotIndex : 1 });
-    const beforeText = resolveItemName(change?.beforeItemHrid) || "-";
-    const afterText = resolveItemName(change?.afterItemHrid) || "-";
+    const slotLabel =
+      kind === 'food'
+        ? t('common:queue.foodSlot', 'Food Slot {{index}}', { index: Number.isFinite(slotIndex) ? slotIndex : 1 })
+        : t('common:queue.drinkSlot', 'Drink Slot {{index}}', { index: Number.isFinite(slotIndex) ? slotIndex : 1 });
+    const beforeText = resolveItemName(change?.beforeItemHrid) || '-';
+    const afterText = resolveItemName(change?.afterItemHrid) || '-';
     return `${slotLabel}: ${beforeText} -> ${afterText}`;
   }
 
-  if (kind === "equipment") {
+  if (kind === 'equipment') {
     const slotLabel = localizeEquipmentSlotLabel(change?.slot);
     const beforeText = change?.beforeItemHrid
       ? `${resolveItemName(change.beforeItemHrid)}(+${Math.max(0, Math.floor(Number(change?.beforeEnhancementLevel || 0)))})`
-      : "-";
+      : '-';
     const afterText = change?.afterItemHrid
       ? `${resolveItemName(change.afterItemHrid)}(+${Math.max(0, Math.floor(Number(change?.afterEnhancementLevel || 0)))})`
-      : "-";
+      : '-';
     return slotLabel ? `${slotLabel}: ${beforeText} -> ${afterText}` : `${beforeText} -> ${afterText}`;
   }
 
-  if (kind === "ability") {
+  if (kind === 'ability') {
     const slotIndex = Number(change?.index) + 1;
-    const slotLabel = t("common:queue.abilitySlot", "Ability Slot {{index}}", { index: Number.isFinite(slotIndex) ? slotIndex : 1 });
+    const slotLabel = t('common:queue.abilitySlot', 'Ability Slot {{index}}', {
+      index: Number.isFinite(slotIndex) ? slotIndex : 1,
+    });
     const beforeLevel = Math.max(1, Math.floor(Number(change?.beforeLevel || 1)));
     const afterLevel = Math.max(1, Math.floor(Number(change?.afterLevel || 1)));
-    const beforeText = change?.beforeAbilityHrid ? `${resolveAbilityName(change.beforeAbilityHrid)}(Lv.${beforeLevel})` : "-";
-    const afterText = change?.afterAbilityHrid ? `${resolveAbilityName(change.afterAbilityHrid)}(Lv.${afterLevel})` : "-";
+    const beforeText = change?.beforeAbilityHrid
+      ? `${resolveAbilityName(change.beforeAbilityHrid)}(Lv.${beforeLevel})`
+      : '-';
+    const afterText = change?.afterAbilityHrid
+      ? `${resolveAbilityName(change.afterAbilityHrid)}(Lv.${afterLevel})`
+      : '-';
     return `${slotLabel}: ${beforeText} -> ${afterText}`;
   }
 
-  return "";
+  return '';
 }
 
 function humanizeLegacyChangeLine(rawLine) {
-  let line = String(rawLine || "").trim();
+  let line = String(rawLine || '').trim();
   if (!line) {
-    return "";
+    return '';
   }
   line = line.replace(/\/items\/[a-z0-9_]+/gi, (hrid) => resolveItemName(hrid));
   line = line.replace(/\/abilities\/[a-z0-9_]+/gi, (hrid) => resolveAbilityName(hrid));
@@ -813,20 +1427,16 @@ function humanizeLegacyChangeLine(rawLine) {
 function collectQueueChangeLines(row) {
   const changeDetails = Array.isArray(row?.changeDetails) ? row.changeDetails : [];
   if (changeDetails.length > 0) {
-    return changeDetails
-      .map((change) => formatQueueChangeDetailLine(change))
-      .filter(Boolean);
+    return changeDetails.map((change) => formatQueueChangeDetailLine(change)).filter(Boolean);
   }
-  return (Array.isArray(row?.changes) ? row.changes : [])
-    .map((line) => humanizeLegacyChangeLine(line))
-    .filter(Boolean);
+  return (Array.isArray(row?.changes) ? row.changes : []).map((line) => humanizeLegacyChangeLine(line)).filter(Boolean);
 }
 
 function formatQueueItemSummary(row, limit = 2) {
   const lines = collectQueueChangeLines(row);
   const safeLimit = Math.max(0, Math.floor(Number(limit || 0)));
   if (lines.length === 0) {
-    return String(row?.label || "-");
+    return String(row?.label || '-');
   }
   return lines.slice(0, safeLimit).join(queueChangeInlineSeparator.value);
 }
@@ -840,7 +1450,7 @@ function getHiddenChangeCount(row, limit = 2) {
 function formatQueueItemSummaryForExport(row) {
   const lines = collectQueueChangeLines(row);
   if (lines.length === 0) {
-    return String(row?.label || "-");
+    return String(row?.label || '-');
   }
   return lines.join(queueChangeInlineSeparator.value);
 }
@@ -853,41 +1463,60 @@ function formatRowSimCount(row) {
 function getRankRowClass(row) {
   const rank = Math.max(0, Math.floor(Number(row?.rank || 0)));
   if (rank === 1) {
-    return "bg-amber-300/10";
+    return 'bg-primary/10';
   }
   if (rank === 2) {
-    return "bg-slate-200/10";
+    return 'bg-muted/50';
   }
   if (rank === 3) {
-    return "bg-orange-400/10";
+    return 'bg-warning/10';
   }
   if (rank === 4) {
-    return "bg-emerald-400/10";
+    return 'bg-success/10';
   }
   if (rank === 5) {
-    return "bg-sky-400/10";
+    return 'bg-info/10';
   }
-  return "";
+  return '';
+}
+
+// sticky 单元格必须不透明才能遮盖横向滚动内容。行高亮类（bg-primary/10 等）是半透明的，
+// 直接复用会透出滚动的数字，因此这里用 color-mix 把高亮色混入卡片底色，得到不透明等效色，
+// 视觉上与整行高亮一致。
+const RANK_ROW_HIGHLIGHT_MIX = {
+  1: 'color-mix(in oklab, var(--primary) 10%, var(--card))',
+  2: 'color-mix(in oklab, var(--muted) 50%, var(--card))',
+  3: 'color-mix(in oklab, var(--warning) 10%, var(--card))',
+  4: 'color-mix(in oklab, var(--success) 10%, var(--card))',
+  5: 'color-mix(in oklab, var(--info) 10%, var(--card))',
+};
+
+function getRankStickyCellStyle(row) {
+  const rank = Math.max(0, Math.floor(Number(row?.rank || 0)));
+  const highlight = RANK_ROW_HIGHLIGHT_MIX[rank];
+  return {
+    backgroundColor: highlight || 'var(--card)',
+  };
 }
 
 function getRankBadgeClass(rankValue) {
   const rank = Math.max(0, Math.floor(Number(rankValue || 0)));
   if (rank === 1) {
-    return "border-amber-300/80 bg-amber-300/20 text-amber-100";
+    return 'border-primary/40 bg-primary/10 text-primary';
   }
   if (rank === 2) {
-    return "border-slate-200/70 bg-slate-200/15 text-slate-100";
+    return 'border-border bg-muted/50 text-foreground';
   }
   if (rank === 3) {
-    return "border-orange-300/70 bg-orange-300/15 text-orange-100";
+    return 'border-warning/40 bg-warning/10 text-warning';
   }
   if (rank === 4) {
-    return "border-emerald-300/70 bg-emerald-300/15 text-emerald-100";
+    return 'border-success/40 bg-success/10 text-success';
   }
   if (rank === 5) {
-    return "border-sky-300/70 bg-sky-300/15 text-sky-100";
+    return 'border-info/40 bg-info/10 text-info';
   }
-  return "border-white/15 bg-white/5 text-slate-200";
+  return 'border-border bg-muted/40 text-foreground';
 }
 
 function toFiniteForExport(value, digits = null) {
@@ -906,92 +1535,150 @@ function getDeltaFontColor(value) {
   if (!Number.isFinite(numeric) || numeric === 0) {
     return null;
   }
-  return numeric > 0 ? "FF10B981" : "FFF43F5E";
+  return numeric > 0 ? 'FF10B981' : 'FFF43F5E';
 }
 
 async function exportRankingRowsExcel() {
   if (isExportingRankingExcel.value) {
     return;
   }
-  const rows = (queueState.value?.ranking || []).slice();
-  if (rows.length === 0) {
-    return;
-  }
-
   isExportingRankingExcel.value = true;
   try {
-    const { Workbook } = await import("exceljs");
+    const { Workbook } = await import('exceljs');
     const workbook = new Workbook();
-    workbook.creator = "MWI Combat Simulator";
+    workbook.creator = 'MWI Combat Simulator';
     workbook.created = new Date();
 
-    const worksheet = workbook.addWorksheet("Ranking", {
-      views: [{ state: "frozen", ySplit: 1 }],
+    // 导出跟随屏幕上的当前排序（含截断），保证所见即所得。
+    const rows = rankingRowsForDisplay.value.slice();
+    if (rows.length === 0) {
+      return;
+    }
+
+    const worksheet = workbook.addWorksheet('Ranking', {
+      views: [{ state: 'frozen', ySplit: 1 }],
     });
     worksheet.columns = [
-      { header: t("common:multiRound.rank", "Rank"), key: "rank", width: 8 },
-      { header: t("common:vue.queue.variant", "Variant"), key: "variant", width: 56 },
-      { header: t("common:multiRound.simCount", "Sim Count"), key: "simCount", width: 12 },
-      { header: t("common:multiRound.finalScore", "Final Score"), key: "finalScore", width: 12 },
-      { header: t("common:multiRound.performanceScore", "Performance Score"), key: "performanceScore", width: 16 },
-      { header: t("common:multiRound.stabilityScore", "Stability Score"), key: "stabilityScore", width: 14 },
-      { header: costScoreColumnHeader.value, key: "costScore", width: 18 },
-      { header: t("common:vue.queue.meanProfitPerHour", "Mean Profit/h"), key: "meanProfitPerHour", width: 14 },
-      { header: t("common:vue.queue.deltaProfitPerHour", "Delta Profit/h"), key: "deltaProfitPerHour", width: 14 },
-      { header: t("common:multiRound.deltaProfitPct", "Profit Delta%"), key: "deltaProfitPct", width: 12 },
-      { header: t("common:multiRound.deltaDpsPct", "DPS Delta%"), key: "deltaDpsPct", width: 10 },
-      { header: t("common:multiRound.deltaXpPct", "XP Delta%"), key: "deltaXpPct", width: 10 },
-      { header: t("common:multiRound.deltaKillsPct", "Kills Delta%"), key: "deltaKillsPct", width: 12 },
-      { header: t("common:equipment.upgradeCost", "Upgrade Cost"), key: "upgradeCost", width: 14 },
-      { header: t("common:queue.purchaseTime", "Purchase Time"), key: "purchaseTime", width: 14 },
-      { header: t("common:multiRound.avgCostPerPoint01Pct", "Gold per 0.01% (all four > 0)"), key: "goldPerPoint01PctAvg", width: 26 },
-      { header: t("common:multiRound.compositeCostPerPoint01Pct", "Gold per 0.01% (composite)"), key: "compositeGoldPerPoint01Pct", width: 24 },
+      { header: t('common:multiRound.rank', 'Rank'), key: 'rank', width: 8 },
+      { header: t('common:vue.queue.variant', 'Variant'), key: 'variant', width: 56 },
+      { header: t('common:multiRound.simCount', 'Sim Count'), key: 'simCount', width: 12 },
+      { header: t('common:multiRound.finalScore', 'Final Score'), key: 'finalScore', width: 12 },
+      { header: t('common:multiRound.performanceScore', 'Performance Score'), key: 'performanceScore', width: 16 },
+      { header: t('common:multiRound.stabilityScore', 'Stability Score'), key: 'stabilityScore', width: 14 },
+      { header: costScoreColumnHeader.value, key: 'costScore', width: 18 },
+      { header: t('common:queue.dailyNoRngProfit', 'Daily No RNG Profit'), key: 'dailyNoRngProfitPerDay', width: 18 },
+      { header: t('common:multiRound.upgradedEph', 'EPH (Upgraded)'), key: 'killsPerHour', width: 14 },
+      { header: t('common:vue.queue.deltaProfitPerHour', 'Delta Profit/h'), key: 'deltaProfitPerHour', width: 14 },
+      { header: t('common:multiRound.deltaProfitPct', 'Profit Delta%'), key: 'deltaProfitPct', width: 12 },
+      { header: t('common:multiRound.deltaDpsPct', 'DPS Delta%'), key: 'deltaDpsPct', width: 10 },
+      { header: t('common:multiRound.deltaXpPct', 'XP Delta%'), key: 'deltaXpPct', width: 10 },
+      { header: t('common:multiRound.deltaKillsPct', 'Kills Delta%'), key: 'deltaKillsPct', width: 12 },
+      {
+        header: t('common:vue.queue.equipmentSaleValue', 'Replaced Equipment Sale Value'),
+        key: 'equipmentSaleValue',
+        width: 18,
+      },
+      {
+        header: t('common:vue.queue.equipmentBuyPrice', 'Target Equipment Buy Price'),
+        key: 'equipmentBuyPrice',
+        width: 16,
+      },
+      { header: t('common:vue.queue.equipmentNetCost', 'Equipment Net Cost'), key: 'equipmentNetCost', width: 14 },
+      { header: t('common:equipment.upgradeCost', 'Upgrade Cost'), key: 'upgradeCost', width: 14 },
+      { header: t('common:queue.purchaseTime', 'Purchase Time'), key: 'purchaseTime', width: 14 },
+      {
+        header: t('common:multiRound.avgCostPerPoint01Pct', 'Gold per 0.01% (all four > 0)'),
+        key: 'goldPerPoint01PctAvg',
+        width: 26,
+      },
+      {
+        header: t('common:multiRound.compositeCostPerPoint01Pct', 'Gold per 0.01% (composite)'),
+        key: 'compositeGoldPerPoint01Pct',
+        width: 24,
+      },
+      { header: t('common:queue.priceMethodColumn', 'Price Method'), key: 'priceMethod', width: 20 },
     ];
 
-    const bodyRows = rows.map((row) => ({
-      rank: toFiniteForExport(row?.rank, 0),
-      variant: formatQueueItemSummaryForExport(row),
-      simCount: `${Math.max(0, Math.floor(Number(row?.rounds || 0)))}/${queueRoundCount.value}`,
-      finalScore: toFiniteForExport(row?.finalScore, 2),
-      performanceScore: toFiniteForExport(row?.performanceScore, 2),
-      stabilityScore: toFiniteForExport(row?.stabilityScore, 2),
-      costScore: toFiniteForExport(row?.costScore, 2),
-      meanProfitPerHour: formatCompactCurrency(row?.meanProfitPerHour),
-      deltaProfitPerHour: formatCompactCurrency(row?.deltaProfitPerHour),
-      deltaProfitPct: toFiniteForExport(row?.deltaProfitPct, 2),
-      deltaDpsPct: toFiniteForExport(row?.deltaDpsPct, 2),
-      deltaXpPct: toFiniteForExport(row?.deltaXpPct, 2),
-      deltaKillsPct: toFiniteForExport(row?.deltaKillsPct, 2),
-      upgradeCost: formatCompactCurrency(row?.costInsights?.totalUpgradeCost),
-      purchaseTime: formatPurchaseDuration(row?.costInsights?.purchaseDays),
-      goldPerPoint01PctAvg: formatCostPerPoint01Pct(row?.costInsights?.goldPerPoint01PctAvg),
-      compositeGoldPerPoint01Pct: formatCostPerPoint01Pct(row?.costInsights?.compositeGoldPerPoint01Pct),
-    }));
+    const baselineSnapshot = queueState.value?.baseline?.snapshot ?? null;
+    const bodyRows = rows.map((row) => {
+      const queueItem = (Array.isArray(queueState.value?.items) ? queueState.value.items : []).find(
+        (item) => String(item?.id || '') === String(row?.id || ''),
+      );
+      const allPriceSelections = Array.isArray(queueItem?.priceSelections) ? queueItem.priceSelections : [];
+      // 按 variant 过滤 priceSelections：只保留该 variant 实际变更的装备，
+      // 与 QueuePage 的 buildPriceSelectionLines 保持一致，避免多 variant 队列
+      // 导出时列出不属于本变体的装备价格方式。
+      const changedKeys = buildChangedEquipmentKeys(queueItem, baselineSnapshot);
+      const priceSelections =
+        changedKeys.size > 0
+          ? allPriceSelections.filter((selection) =>
+              changedKeys.has(buildSelectionKey(selection.itemHrid, selection.enhancementLevel)),
+            )
+          : allPriceSelections;
+      const priceMethodText = priceSelections
+        .map((selection) => {
+          const method = String(selection.method || 'left1');
+          const label =
+            method === 'manual'
+              ? t('common:queue.priceMethodManual', 'Manual')
+              : method === 'mirror'
+                ? t('common:queue.priceMethodMirror', 'Mirror')
+                : method === 'right1'
+                  ? t('common:queue.priceMethodRight1', 'Right 1')
+                  : t('common:queue.priceMethodLeft1', 'Left 1');
+          return `${resolveItemName(selection.itemHrid)}+${Number(selection.enhancementLevel || 0)}${priceMethodColon.value}${label}`;
+        })
+        .join(priceMethodJoinSeparator.value);
+      return {
+        rank: toFiniteForExport(row?.rank, 0),
+        variant: formatQueueItemSummaryForExport(row),
+        simCount: `${Math.max(0, Math.floor(Number(row?.rounds || 0)))}/${queueRoundCount.value}`,
+        finalScore: toFiniteForExport(row?.finalScore, 2),
+        performanceScore: toFiniteForExport(row?.performanceScore, 2),
+        stabilityScore: toFiniteForExport(row?.stabilityScore, 2),
+        costScore: toFiniteForExport(row?.costScore, 2),
+        dailyNoRngProfitPerDay: formatCompactCurrency(row?.dailyNoRngProfitPerDay),
+        killsPerHour: `${toFiniteForExport(row?.killsPerHour, 2) ?? '-'} (${formatSignedNumber(row?.deltaKillsPerHour)})`,
+        deltaProfitPerHour: formatCompactCurrency(row?.deltaProfitPerHour),
+        deltaProfitPct: toFiniteForExport(row?.deltaProfitPct, 2),
+        deltaDpsPct: toFiniteForExport(row?.deltaDpsPct, 2),
+        deltaXpPct: toFiniteForExport(row?.deltaXpPct, 2),
+        deltaKillsPct: toFiniteForExport(row?.deltaKillsPct, 2),
+        equipmentSaleValue: formatCompactCurrency(row?.costInsights?.equipmentSaleValue),
+        equipmentBuyPrice: formatEquipmentBuyPriceForExport(row),
+        equipmentNetCost: formatCompactCurrency(row?.costInsights?.equipmentNetCost),
+        upgradeCost: formatCompactCurrency(row?.costInsights?.totalUpgradeCost),
+        purchaseTime: formatPurchaseDuration(row?.costInsights?.purchaseDays),
+        goldPerPoint01PctAvg: formatCostPerPoint01Pct(row?.costInsights?.goldPerPoint01PctAvg),
+        compositeGoldPerPoint01Pct: formatCostPerPoint01Pct(row?.costInsights?.compositeGoldPerPoint01Pct),
+        priceMethod: priceMethodText,
+      };
+    });
     worksheet.addRows(bodyRows);
 
     const headerRow = worksheet.getRow(1);
     headerRow.height = 24;
     headerRow.font = {
       bold: true,
-      color: { argb: "FFFFFFFF" },
+      color: { argb: 'FFFFFFFF' },
       size: 11,
     };
     headerRow.alignment = {
-      horizontal: "center",
-      vertical: "middle",
+      horizontal: 'center',
+      vertical: 'middle',
       wrapText: true,
     };
     headerRow.fill = {
-      type: "pattern",
-      pattern: "solid",
-      fgColor: { argb: "FF334155" },
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF334155' },
     };
 
     const thinBorder = {
-      top: { style: "thin", color: { argb: "FF334155" } },
-      left: { style: "thin", color: { argb: "FF334155" } },
-      bottom: { style: "thin", color: { argb: "FF334155" } },
-      right: { style: "thin", color: { argb: "FF334155" } },
+      top: { style: 'thin', color: { argb: 'FF334155' } },
+      left: { style: 'thin', color: { argb: 'FF334155' } },
+      bottom: { style: 'thin', color: { argb: 'FF334155' } },
+      right: { style: 'thin', color: { argb: 'FF334155' } },
     };
     worksheet.eachRow({ includeEmpty: false }, (excelRow, rowNumber) => {
       excelRow.eachCell({ includeEmpty: true }, (cell) => {
@@ -1000,46 +1687,50 @@ async function exportRankingRowsExcel() {
       if (rowNumber > 1 && rowNumber % 2 === 0) {
         excelRow.eachCell({ includeEmpty: true }, (cell) => {
           cell.fill = {
-            type: "pattern",
-            pattern: "solid",
-            fgColor: { argb: "FFF8FAFC" },
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFF8FAFC' },
           };
         });
       }
     });
 
-    const centerKeys = ["rank", "simCount", "purchaseTime"];
+    const centerKeys = ['rank', 'simCount', 'purchaseTime'];
     const rightKeys = [
-      "finalScore",
-      "performanceScore",
-      "stabilityScore",
-      "costScore",
-      "meanProfitPerHour",
-      "deltaProfitPerHour",
-      "deltaProfitPct",
-      "deltaDpsPct",
-      "deltaXpPct",
-      "deltaKillsPct",
-      "upgradeCost",
-      "goldPerPoint01PctAvg",
-      "compositeGoldPerPoint01Pct",
+      'finalScore',
+      'performanceScore',
+      'stabilityScore',
+      'costScore',
+      'dailyNoRngProfitPerDay',
+      'killsPerHour',
+      'deltaProfitPerHour',
+      'deltaProfitPct',
+      'deltaDpsPct',
+      'deltaXpPct',
+      'deltaKillsPct',
+      'equipmentSaleValue',
+      'equipmentBuyPrice',
+      'equipmentNetCost',
+      'upgradeCost',
+      'goldPerPoint01PctAvg',
+      'compositeGoldPerPoint01Pct',
     ];
     for (const key of centerKeys) {
-      worksheet.getColumn(key).alignment = { horizontal: "center", vertical: "middle" };
+      worksheet.getColumn(key).alignment = { horizontal: 'center', vertical: 'middle' };
     }
-    worksheet.getColumn("variant").alignment = { horizontal: "left", vertical: "middle", wrapText: true };
+    worksheet.getColumn('variant').alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
     for (const key of rightKeys) {
-      worksheet.getColumn(key).alignment = { horizontal: "right", vertical: "middle" };
+      worksheet.getColumn(key).alignment = { horizontal: 'right', vertical: 'middle' };
     }
 
-    const percentKeys = ["deltaProfitPct", "deltaDpsPct", "deltaXpPct", "deltaKillsPct"];
+    const percentKeys = ['deltaProfitPct', 'deltaDpsPct', 'deltaXpPct', 'deltaKillsPct'];
     for (let rowIndex = 2; rowIndex <= worksheet.rowCount; rowIndex += 1) {
       const sourceRow = rows[rowIndex - 2] || {};
       const excelRow = worksheet.getRow(rowIndex);
       for (const key of percentKeys) {
         const cell = excelRow.getCell(key);
         if (Number.isFinite(Number(cell.value))) {
-          cell.numFmt = "0.00\"%\"";
+          cell.numFmt = '0.00"%"';
         }
       }
 
@@ -1063,12 +1754,9 @@ async function exportRankingRowsExcel() {
     }
 
     const buffer = await workbook.xlsx.writeBuffer();
-    const blob = new Blob(
-      [buffer],
-      { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }
-    );
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
+    const link = document.createElement('a');
     link.href = url;
     link.download = `mwi-multi-ranking-${Date.now()}.xlsx`;
     document.body.appendChild(link);
@@ -1076,7 +1764,7 @@ async function exportRankingRowsExcel() {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   } catch (error) {
-    console.error("Failed to export multi-round ranking to Excel:", error);
+    console.error('Failed to export multi-round ranking to Excel:', error);
   } finally {
     isExportingRankingExcel.value = false;
   }
@@ -1085,11 +1773,11 @@ async function exportRankingRowsExcel() {
 function profitDeltaClass(value) {
   const numeric = Number(value || 0);
   if (numeric > 0) {
-    return "text-emerald-300";
+    return 'text-success';
   }
   if (numeric < 0) {
-    return "text-rose-300";
+    return 'text-destructive';
   }
-  return "text-slate-200";
+  return 'text-foreground';
 }
 </script>

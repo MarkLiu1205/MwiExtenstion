@@ -14,9 +14,10 @@ MWICombatSimulator 用于在本地运行战斗模拟与收益评估，帮助你�
 - **Queue**：基于“基线 + 多个变体”的多轮评分与排名，对比收益增量与波动
 - **Advisor**：刷图推荐器，批量扫描 Solo/Group Zones 与 Labyrinth，输出目标排行
 - **Enhancement**：比较不同保护阈值的期望成本，评估贤者之镜、分解价值、成本分位与预算成功率
+- **Dungeon Calculator**：按期望值核算四个地下城与各难度档的奖励宝箱收益，含税费、门票/宝箱钥匙成本（市场/自制）、宝箱钥匙 2% 回收与社区掉落加成，支持手动改价；「地牢总览」融合表可编辑每轮分钟（按「地牢 × 档位」独立设置），右侧成本列按「购买 / 制作」双口径分列、格内上行每日成本、下行每日收益（工具箱 574037 式排版），末尾给出利润差价（制作 − 购买），可排序、点击行切换当前组合，并支持用导入队伍一键模拟全部 12 个组合（默认 3 轮 × 24 小时，按组合平均每轮分别写回）
 - **Skilling**：结合当前角色经验、背包/穿戴装备、Buff 与市场价格，按最低净成本/经验、均衡（可配置成本容忍度，以有限增加净成本换取更短耗时）或速度优先模式规划采摘、酿造、奶酪锻造、烹饪、制作和裁缝的逐级路线
 - **Multi Results**：汇总多轮结果并支持导出 Excel
-- **Import/Export**：支持导入导出；可配合 Tampermonkey 脚本从主站一键导入战斗、强化或生活技能所需的当前角色数据，支持 `milkywayidle.com` 与 `milkywayidlecn.com`；强化与生活技能导入的当前角色数据仅保留在当前页面会话，刷新后需重新导入
+- **Import/Export**：支持导入导出；可配合 Tampermonkey 脚本从主站一键导入战斗、强化或生活技能所需的当前角色数据，支持 `milkywayidle.com` 与 `milkywayidlecn.com`；强化与生活技能导入的当前角色数据仅保留在当前页面会话，刷新后需重新导入；导入载荷附带官方估算市场价值快照（主站 WS 全量快照与 localStorage 官方估算优先、`marketplace.json` 合成中价兜底），驱动全局顶栏（Home/Queue/Advisor 等页面均可见）的资产分（Gear Score）徽章展示，Home 页角色与导入目标下拉另附分数后缀；载荷来源为合成中价时，资产分 tooltip / 明细与导入反馈均如实标注「合成中价」（与脚本状态栏一致），详见 [`scripts/mwi-main-site-import.README.md`](scripts/mwi-main-site-import.README.md)
 - **官方中英游戏词条 + Web Workers**：发布前同步官网词条快照，运行时离线加载；worker 并行计算提升批量模拟速度
 - **Parallel Worker Limit**：Settings 中保存的并行 worker 上限也会应用到 Home 页的批量 Zone / Labyrinth 模拟
 
@@ -47,6 +48,13 @@ npm run dev
 npm run build
 ```
 
+> `npm run dev` / `npm run build` / `npm start` 会先执行 `node scripts/sync-userscript-to-public.mjs`，
+> 把 `scripts/mwi-main-site-import.user.js` 同步到 `public/userscript/`（站点分发副本 + 版本与校验值元数据），
+> 因此改完主站导入脚本后重新构建/启动即可，无需手动拷贝；站点侧副本的内容、校验值与信任边界见
+> [`scripts/mwi-main-site-import.README.md`](scripts/mwi-main-site-import.README.md)。
+
+主站导入脚本链接可通过构建变量 `VITE_MAIN_SITE_IMPORT_SCRIPT_URL` 覆盖；未定义时优先使用站点自身托管的副本（国内可直接访问），GreasyFork 作为海外备用来源。侧栏检测到「导入脚本待更新 / 可更新」时会先弹出渠道选择，由用户决定从站点还是 GreasyFork 更新。设置为空字符串会禁用安装按钮并显示待配置提示；无效或非 HTTP(S) 地址（例如 `false`）同样按禁用处理。
+
 本地预览构建产物：
 
 ```bash
@@ -59,9 +67,18 @@ npm run preview
 npm test
 ```
 
+## 提交流程
+
+为保持可读的提交历史，请遵循以下规范：
+
+1. **格式化与逻辑分开提交**：先执行 `npm run format:fix`（或 `npx prettier --write .`）确认格式化基线一致，再添加逻辑改动。`npm run format:check` 可在提交前检查未格式化的文件。
+2. **小步提交**：每个提交围绕一个功能/修复点，避免将不相关改动打包在同一提交中。
+3. **提交信息**：使用 `feat:` / `fix:` / `refactor:` / `chore:` 前缀（如 `feat: 添加战斗卷轴续费逻辑`）。
+
 ## 常用文档
 
 - [`docs/game-data.md`](docs/game-data.md)：游戏数据与官方中英文词条来源、同步/发布流程、使用免责声明，以及刷新当前维护数据的方法
+- [`docs/user-guide.md`](docs/user-guide.md) / [`docs/user-guide.en.md`](docs/user-guide.en.md)：中英文图文使用教程，涵盖数据导入、战斗模拟、队列比较和专项工具
 - [`docs/init-client-data-key-reference.md`](docs/init-client-data-key-reference.md)：`initClientData` 当前 48 个顶层 key 的作用、接入状态和导出情况对照表
 - [`scripts/mwi-main-site-import.README.md`](scripts/mwi-main-site-import.README.md)：Tampermonkey「主站一键导入」脚本说明
 

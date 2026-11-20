@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generatedAt": "2026-11-20T02:35:13.129Z",
+    "generatedAt": "2026-09-14T06:40:54.365Z",
     "levelKeys": [
       "stamina",
       "intelligence",
@@ -36822,512 +36822,614 @@
       {
         "hrid": "/items/trainee_alchemy_charm",
         "name": "Trainee Alchemy Charm",
-        "itemLevel": 1
+        "itemLevel": 1,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/trainee_attack_charm",
         "name": "Trainee Attack Charm",
-        "itemLevel": 1
+        "itemLevel": 1,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/trainee_brewing_charm",
         "name": "Trainee Brewing Charm",
-        "itemLevel": 1
+        "itemLevel": 1,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/trainee_cheesesmithing_charm",
         "name": "Trainee Cheesesmithing Charm",
-        "itemLevel": 1
+        "itemLevel": 1,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/trainee_cooking_charm",
         "name": "Trainee Cooking Charm",
-        "itemLevel": 1
+        "itemLevel": 1,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/trainee_crafting_charm",
         "name": "Trainee Crafting Charm",
-        "itemLevel": 1
+        "itemLevel": 1,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/trainee_defense_charm",
         "name": "Trainee Defense Charm",
-        "itemLevel": 1
+        "itemLevel": 1,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/trainee_enhancing_charm",
         "name": "Trainee Enhancing Charm",
-        "itemLevel": 1
+        "itemLevel": 1,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/trainee_foraging_charm",
         "name": "Trainee Foraging Charm",
-        "itemLevel": 1
+        "itemLevel": 1,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/trainee_intelligence_charm",
         "name": "Trainee Intelligence Charm",
-        "itemLevel": 1
+        "itemLevel": 1,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/trainee_magic_charm",
         "name": "Trainee Magic Charm",
-        "itemLevel": 1
+        "itemLevel": 1,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/trainee_melee_charm",
         "name": "Trainee Melee Charm",
-        "itemLevel": 1
+        "itemLevel": 1,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/trainee_milking_charm",
         "name": "Trainee Milking Charm",
-        "itemLevel": 1
+        "itemLevel": 1,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/trainee_ranged_charm",
         "name": "Trainee Ranged Charm",
-        "itemLevel": 1
+        "itemLevel": 1,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/trainee_stamina_charm",
         "name": "Trainee Stamina Charm",
-        "itemLevel": 1
+        "itemLevel": 1,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/trainee_tailoring_charm",
         "name": "Trainee Tailoring Charm",
-        "itemLevel": 1
+        "itemLevel": 1,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/trainee_woodcutting_charm",
         "name": "Trainee Woodcutting Charm",
-        "itemLevel": 1
+        "itemLevel": 1,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/basic_alchemy_charm",
         "name": "Basic Alchemy Charm",
-        "itemLevel": 20
+        "itemLevel": 20,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/basic_attack_charm",
         "name": "Basic Attack Charm",
-        "itemLevel": 20
+        "itemLevel": 20,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/basic_brewing_charm",
         "name": "Basic Brewing Charm",
-        "itemLevel": 20
+        "itemLevel": 20,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/basic_cheesesmithing_charm",
         "name": "Basic Cheesesmithing Charm",
-        "itemLevel": 20
+        "itemLevel": 20,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/basic_cooking_charm",
         "name": "Basic Cooking Charm",
-        "itemLevel": 20
+        "itemLevel": 20,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/basic_crafting_charm",
         "name": "Basic Crafting Charm",
-        "itemLevel": 20
+        "itemLevel": 20,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/basic_defense_charm",
         "name": "Basic Defense Charm",
-        "itemLevel": 20
+        "itemLevel": 20,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/basic_enhancing_charm",
         "name": "Basic Enhancing Charm",
-        "itemLevel": 20
+        "itemLevel": 20,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/basic_foraging_charm",
         "name": "Basic Foraging Charm",
-        "itemLevel": 20
+        "itemLevel": 20,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/basic_intelligence_charm",
         "name": "Basic Intelligence Charm",
-        "itemLevel": 20
+        "itemLevel": 20,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/basic_magic_charm",
         "name": "Basic Magic Charm",
-        "itemLevel": 20
+        "itemLevel": 20,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/basic_melee_charm",
         "name": "Basic Melee Charm",
-        "itemLevel": 20
+        "itemLevel": 20,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/basic_milking_charm",
         "name": "Basic Milking Charm",
-        "itemLevel": 20
+        "itemLevel": 20,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/basic_ranged_charm",
         "name": "Basic Ranged Charm",
-        "itemLevel": 20
+        "itemLevel": 20,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/basic_stamina_charm",
         "name": "Basic Stamina Charm",
-        "itemLevel": 20
+        "itemLevel": 20,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/basic_tailoring_charm",
         "name": "Basic Tailoring Charm",
-        "itemLevel": 20
+        "itemLevel": 20,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/basic_woodcutting_charm",
         "name": "Basic Woodcutting Charm",
-        "itemLevel": 20
+        "itemLevel": 20,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/advanced_alchemy_charm",
         "name": "Advanced Alchemy Charm",
-        "itemLevel": 40
+        "itemLevel": 40,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/advanced_attack_charm",
         "name": "Advanced Attack Charm",
-        "itemLevel": 40
+        "itemLevel": 40,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/advanced_brewing_charm",
         "name": "Advanced Brewing Charm",
-        "itemLevel": 40
+        "itemLevel": 40,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/advanced_cheesesmithing_charm",
         "name": "Advanced Cheesesmithing Charm",
-        "itemLevel": 40
+        "itemLevel": 40,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/advanced_cooking_charm",
         "name": "Advanced Cooking Charm",
-        "itemLevel": 40
+        "itemLevel": 40,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/advanced_crafting_charm",
         "name": "Advanced Crafting Charm",
-        "itemLevel": 40
+        "itemLevel": 40,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/advanced_defense_charm",
         "name": "Advanced Defense Charm",
-        "itemLevel": 40
+        "itemLevel": 40,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/advanced_enhancing_charm",
         "name": "Advanced Enhancing Charm",
-        "itemLevel": 40
+        "itemLevel": 40,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/advanced_foraging_charm",
         "name": "Advanced Foraging Charm",
-        "itemLevel": 40
+        "itemLevel": 40,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/advanced_intelligence_charm",
         "name": "Advanced Intelligence Charm",
-        "itemLevel": 40
+        "itemLevel": 40,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/advanced_magic_charm",
         "name": "Advanced Magic Charm",
-        "itemLevel": 40
+        "itemLevel": 40,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/advanced_melee_charm",
         "name": "Advanced Melee Charm",
-        "itemLevel": 40
+        "itemLevel": 40,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/advanced_milking_charm",
         "name": "Advanced Milking Charm",
-        "itemLevel": 40
+        "itemLevel": 40,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/advanced_ranged_charm",
         "name": "Advanced Ranged Charm",
-        "itemLevel": 40
+        "itemLevel": 40,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/advanced_stamina_charm",
         "name": "Advanced Stamina Charm",
-        "itemLevel": 40
+        "itemLevel": 40,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/advanced_tailoring_charm",
         "name": "Advanced Tailoring Charm",
-        "itemLevel": 40
+        "itemLevel": 40,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/advanced_woodcutting_charm",
         "name": "Advanced Woodcutting Charm",
-        "itemLevel": 40
+        "itemLevel": 40,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/expert_alchemy_charm",
         "name": "Expert Alchemy Charm",
-        "itemLevel": 60
+        "itemLevel": 60,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/expert_attack_charm",
         "name": "Expert Attack Charm",
-        "itemLevel": 60
+        "itemLevel": 60,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/expert_brewing_charm",
         "name": "Expert Brewing Charm",
-        "itemLevel": 60
+        "itemLevel": 60,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/expert_cheesesmithing_charm",
         "name": "Expert Cheesesmithing Charm",
-        "itemLevel": 60
+        "itemLevel": 60,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/expert_cooking_charm",
         "name": "Expert Cooking Charm",
-        "itemLevel": 60
+        "itemLevel": 60,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/expert_crafting_charm",
         "name": "Expert Crafting Charm",
-        "itemLevel": 60
+        "itemLevel": 60,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/expert_defense_charm",
         "name": "Expert Defense Charm",
-        "itemLevel": 60
+        "itemLevel": 60,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/expert_enhancing_charm",
         "name": "Expert Enhancing Charm",
-        "itemLevel": 60
+        "itemLevel": 60,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/expert_foraging_charm",
         "name": "Expert Foraging Charm",
-        "itemLevel": 60
+        "itemLevel": 60,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/expert_intelligence_charm",
         "name": "Expert Intelligence Charm",
-        "itemLevel": 60
+        "itemLevel": 60,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/expert_magic_charm",
         "name": "Expert Magic Charm",
-        "itemLevel": 60
+        "itemLevel": 60,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/expert_melee_charm",
         "name": "Expert Melee Charm",
-        "itemLevel": 60
+        "itemLevel": 60,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/expert_milking_charm",
         "name": "Expert Milking Charm",
-        "itemLevel": 60
+        "itemLevel": 60,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/expert_ranged_charm",
         "name": "Expert Ranged Charm",
-        "itemLevel": 60
+        "itemLevel": 60,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/expert_stamina_charm",
         "name": "Expert Stamina Charm",
-        "itemLevel": 60
+        "itemLevel": 60,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/expert_tailoring_charm",
         "name": "Expert Tailoring Charm",
-        "itemLevel": 60
+        "itemLevel": 60,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/expert_woodcutting_charm",
         "name": "Expert Woodcutting Charm",
-        "itemLevel": 60
+        "itemLevel": 60,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/master_alchemy_charm",
         "name": "Master Alchemy Charm",
-        "itemLevel": 80
+        "itemLevel": 80,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/master_attack_charm",
         "name": "Master Attack Charm",
-        "itemLevel": 80
+        "itemLevel": 80,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/master_brewing_charm",
         "name": "Master Brewing Charm",
-        "itemLevel": 80
+        "itemLevel": 80,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/master_cheesesmithing_charm",
         "name": "Master Cheesesmithing Charm",
-        "itemLevel": 80
+        "itemLevel": 80,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/master_cooking_charm",
         "name": "Master Cooking Charm",
-        "itemLevel": 80
+        "itemLevel": 80,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/master_crafting_charm",
         "name": "Master Crafting Charm",
-        "itemLevel": 80
+        "itemLevel": 80,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/master_defense_charm",
         "name": "Master Defense Charm",
-        "itemLevel": 80
+        "itemLevel": 80,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/master_enhancing_charm",
         "name": "Master Enhancing Charm",
-        "itemLevel": 80
+        "itemLevel": 80,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/master_foraging_charm",
         "name": "Master Foraging Charm",
-        "itemLevel": 80
+        "itemLevel": 80,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/master_intelligence_charm",
         "name": "Master Intelligence Charm",
-        "itemLevel": 80
+        "itemLevel": 80,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/master_magic_charm",
         "name": "Master Magic Charm",
-        "itemLevel": 80
+        "itemLevel": 80,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/master_melee_charm",
         "name": "Master Melee Charm",
-        "itemLevel": 80
+        "itemLevel": 80,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/master_milking_charm",
         "name": "Master Milking Charm",
-        "itemLevel": 80
+        "itemLevel": 80,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/master_ranged_charm",
         "name": "Master Ranged Charm",
-        "itemLevel": 80
+        "itemLevel": 80,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/master_stamina_charm",
         "name": "Master Stamina Charm",
-        "itemLevel": 80
+        "itemLevel": 80,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/master_tailoring_charm",
         "name": "Master Tailoring Charm",
-        "itemLevel": 80
+        "itemLevel": 80,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/master_woodcutting_charm",
         "name": "Master Woodcutting Charm",
-        "itemLevel": 80
+        "itemLevel": 80,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/grandmaster_alchemy_charm",
         "name": "Grandmaster Alchemy Charm",
-        "itemLevel": 100
+        "itemLevel": 100,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/grandmaster_attack_charm",
         "name": "Grandmaster Attack Charm",
-        "itemLevel": 100
+        "itemLevel": 100,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/grandmaster_brewing_charm",
         "name": "Grandmaster Brewing Charm",
-        "itemLevel": 100
+        "itemLevel": 100,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/grandmaster_cheesesmithing_charm",
         "name": "Grandmaster Cheesesmithing Charm",
-        "itemLevel": 100
+        "itemLevel": 100,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/grandmaster_cooking_charm",
         "name": "Grandmaster Cooking Charm",
-        "itemLevel": 100
+        "itemLevel": 100,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/grandmaster_crafting_charm",
         "name": "Grandmaster Crafting Charm",
-        "itemLevel": 100
+        "itemLevel": 100,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/grandmaster_defense_charm",
         "name": "Grandmaster Defense Charm",
-        "itemLevel": 100
+        "itemLevel": 100,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/grandmaster_enhancing_charm",
         "name": "Grandmaster Enhancing Charm",
-        "itemLevel": 100
+        "itemLevel": 100,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/grandmaster_foraging_charm",
         "name": "Grandmaster Foraging Charm",
-        "itemLevel": 100
+        "itemLevel": 100,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/grandmaster_intelligence_charm",
         "name": "Grandmaster Intelligence Charm",
-        "itemLevel": 100
+        "itemLevel": 100,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/grandmaster_magic_charm",
         "name": "Grandmaster Magic Charm",
-        "itemLevel": 100
+        "itemLevel": 100,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/grandmaster_melee_charm",
         "name": "Grandmaster Melee Charm",
-        "itemLevel": 100
+        "itemLevel": 100,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/grandmaster_milking_charm",
         "name": "Grandmaster Milking Charm",
-        "itemLevel": 100
+        "itemLevel": 100,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/grandmaster_ranged_charm",
         "name": "Grandmaster Ranged Charm",
-        "itemLevel": 100
+        "itemLevel": 100,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/grandmaster_stamina_charm",
         "name": "Grandmaster Stamina Charm",
-        "itemLevel": 100
+        "itemLevel": 100,
+        "isCombatInert": false
       },
       {
         "hrid": "/items/grandmaster_tailoring_charm",
         "name": "Grandmaster Tailoring Charm",
-        "itemLevel": 100
+        "itemLevel": 100,
+        "isCombatInert": true
       },
       {
         "hrid": "/items/grandmaster_woodcutting_charm",
         "name": "Grandmaster Woodcutting Charm",
-        "itemLevel": 100
+        "itemLevel": 100,
+        "isCombatInert": true
       }
     ]
   },
@@ -37477,322 +37579,386 @@
     {
       "hrid": "/items/foraging_tea",
       "name": "Foraging Tea",
-      "itemLevel": 1
+      "itemLevel": 1,
+      "combatUsable": false
     },
     {
       "hrid": "/items/intelligence_coffee",
       "name": "Intelligence Coffee",
-      "itemLevel": 1
+      "itemLevel": 1,
+      "combatUsable": true
     },
     {
       "hrid": "/items/milking_tea",
       "name": "Milking Tea",
-      "itemLevel": 1
+      "itemLevel": 1,
+      "combatUsable": false
     },
     {
       "hrid": "/items/stamina_coffee",
       "name": "Stamina Coffee",
-      "itemLevel": 1
+      "itemLevel": 1,
+      "combatUsable": true
     },
     {
       "hrid": "/items/woodcutting_tea",
       "name": "Woodcutting Tea",
-      "itemLevel": 1
+      "itemLevel": 1,
+      "combatUsable": false
     },
     {
       "hrid": "/items/alchemy_tea",
       "name": "Alchemy Tea",
-      "itemLevel": 10
+      "itemLevel": 10,
+      "combatUsable": false
     },
     {
       "hrid": "/items/attack_coffee",
       "name": "Attack Coffee",
-      "itemLevel": 10
+      "itemLevel": 10,
+      "combatUsable": true
     },
     {
       "hrid": "/items/brewing_tea",
       "name": "Brewing Tea",
-      "itemLevel": 10
+      "itemLevel": 10,
+      "combatUsable": false
     },
     {
       "hrid": "/items/cooking_tea",
       "name": "Cooking Tea",
-      "itemLevel": 10
+      "itemLevel": 10,
+      "combatUsable": false
     },
     {
       "hrid": "/items/defense_coffee",
       "name": "Defense Coffee",
-      "itemLevel": 10
+      "itemLevel": 10,
+      "combatUsable": true
     },
     {
       "hrid": "/items/enhancing_tea",
       "name": "Enhancing Tea",
-      "itemLevel": 10
+      "itemLevel": 10,
+      "combatUsable": false
     },
     {
       "hrid": "/items/gathering_tea",
       "name": "Gathering Tea",
-      "itemLevel": 10
+      "itemLevel": 10,
+      "combatUsable": false
     },
     {
       "hrid": "/items/cheesesmithing_tea",
       "name": "Cheesesmithing Tea",
-      "itemLevel": 20
+      "itemLevel": 20,
+      "combatUsable": false
     },
     {
       "hrid": "/items/crafting_tea",
       "name": "Crafting Tea",
-      "itemLevel": 20
+      "itemLevel": 20,
+      "combatUsable": false
     },
     {
       "hrid": "/items/gourmet_tea",
       "name": "Gourmet Tea",
-      "itemLevel": 20
+      "itemLevel": 20,
+      "combatUsable": false
     },
     {
       "hrid": "/items/magic_coffee",
       "name": "Magic Coffee",
-      "itemLevel": 20
+      "itemLevel": 20,
+      "combatUsable": true
     },
     {
       "hrid": "/items/melee_coffee",
       "name": "Melee Coffee",
-      "itemLevel": 20
+      "itemLevel": 20,
+      "combatUsable": true
     },
     {
       "hrid": "/items/ranged_coffee",
       "name": "Ranged Coffee",
-      "itemLevel": 20
+      "itemLevel": 20,
+      "combatUsable": true
     },
     {
       "hrid": "/items/tailoring_tea",
       "name": "Tailoring Tea",
-      "itemLevel": 20
+      "itemLevel": 20,
+      "combatUsable": false
     },
     {
       "hrid": "/items/wisdom_coffee",
       "name": "Wisdom Coffee",
-      "itemLevel": 30
+      "itemLevel": 30,
+      "combatUsable": true
     },
     {
       "hrid": "/items/wisdom_tea",
       "name": "Wisdom Tea",
-      "itemLevel": 30
+      "itemLevel": 30,
+      "combatUsable": false
     },
     {
       "hrid": "/items/super_foraging_tea",
       "name": "Super Foraging Tea",
-      "itemLevel": 35
+      "itemLevel": 35,
+      "combatUsable": false
     },
     {
       "hrid": "/items/super_intelligence_coffee",
       "name": "Super Intelligence Coffee",
-      "itemLevel": 35
+      "itemLevel": 35,
+      "combatUsable": true
     },
     {
       "hrid": "/items/super_milking_tea",
       "name": "Super Milking Tea",
-      "itemLevel": 35
+      "itemLevel": 35,
+      "combatUsable": false
     },
     {
       "hrid": "/items/super_stamina_coffee",
       "name": "Super Stamina Coffee",
-      "itemLevel": 35
+      "itemLevel": 35,
+      "combatUsable": true
     },
     {
       "hrid": "/items/super_woodcutting_tea",
       "name": "Super Woodcutting Tea",
-      "itemLevel": 35
+      "itemLevel": 35,
+      "combatUsable": false
     },
     {
       "hrid": "/items/lucky_coffee",
       "name": "Lucky Coffee",
-      "itemLevel": 45
+      "itemLevel": 45,
+      "combatUsable": true
     },
     {
       "hrid": "/items/processing_tea",
       "name": "Processing Tea",
-      "itemLevel": 45
+      "itemLevel": 45,
+      "combatUsable": false
     },
     {
       "hrid": "/items/super_alchemy_tea",
       "name": "Super Alchemy Tea",
-      "itemLevel": 50
+      "itemLevel": 50,
+      "combatUsable": false
     },
     {
       "hrid": "/items/super_attack_coffee",
       "name": "Super Attack Coffee",
-      "itemLevel": 50
+      "itemLevel": 50,
+      "combatUsable": true
     },
     {
       "hrid": "/items/super_brewing_tea",
       "name": "Super Brewing Tea",
-      "itemLevel": 50
+      "itemLevel": 50,
+      "combatUsable": false
     },
     {
       "hrid": "/items/super_cooking_tea",
       "name": "Super Cooking Tea",
-      "itemLevel": 50
+      "itemLevel": 50,
+      "combatUsable": false
     },
     {
       "hrid": "/items/super_defense_coffee",
       "name": "Super Defense Coffee",
-      "itemLevel": 50
+      "itemLevel": 50,
+      "combatUsable": true
     },
     {
       "hrid": "/items/super_enhancing_tea",
       "name": "Super Enhancing Tea",
-      "itemLevel": 50
+      "itemLevel": 50,
+      "combatUsable": false
     },
     {
       "hrid": "/items/ultra_foraging_tea",
       "name": "Ultra Foraging Tea",
-      "itemLevel": 55
+      "itemLevel": 55,
+      "combatUsable": false
     },
     {
       "hrid": "/items/ultra_intelligence_coffee",
       "name": "Ultra Intelligence Coffee",
-      "itemLevel": 55
+      "itemLevel": 55,
+      "combatUsable": true
     },
     {
       "hrid": "/items/ultra_milking_tea",
       "name": "Ultra Milking Tea",
-      "itemLevel": 55
+      "itemLevel": 55,
+      "combatUsable": false
     },
     {
       "hrid": "/items/ultra_stamina_coffee",
       "name": "Ultra Stamina Coffee",
-      "itemLevel": 55
+      "itemLevel": 55,
+      "combatUsable": true
     },
     {
       "hrid": "/items/ultra_woodcutting_tea",
       "name": "Ultra Woodcutting Tea",
-      "itemLevel": 55
+      "itemLevel": 55,
+      "combatUsable": false
     },
     {
       "hrid": "/items/channeling_coffee",
       "name": "Channeling Coffee",
-      "itemLevel": 60
+      "itemLevel": 60,
+      "combatUsable": true
     },
     {
       "hrid": "/items/efficiency_tea",
       "name": "Efficiency Tea",
-      "itemLevel": 60
+      "itemLevel": 60,
+      "combatUsable": false
     },
     {
       "hrid": "/items/swiftness_coffee",
       "name": "Swiftness Coffee",
-      "itemLevel": 60
+      "itemLevel": 60,
+      "combatUsable": true
     },
     {
       "hrid": "/items/super_cheesesmithing_tea",
       "name": "Super Cheesesmithing Tea",
-      "itemLevel": 65
+      "itemLevel": 65,
+      "combatUsable": false
     },
     {
       "hrid": "/items/super_crafting_tea",
       "name": "Super Crafting Tea",
-      "itemLevel": 65
+      "itemLevel": 65,
+      "combatUsable": false
     },
     {
       "hrid": "/items/super_magic_coffee",
       "name": "Super Magic Coffee",
-      "itemLevel": 65
+      "itemLevel": 65,
+      "combatUsable": true
     },
     {
       "hrid": "/items/super_melee_coffee",
       "name": "Super Melee Coffee",
-      "itemLevel": 65
+      "itemLevel": 65,
+      "combatUsable": true
     },
     {
       "hrid": "/items/super_ranged_coffee",
       "name": "Super Ranged Coffee",
-      "itemLevel": 65
+      "itemLevel": 65,
+      "combatUsable": true
     },
     {
       "hrid": "/items/super_tailoring_tea",
       "name": "Super Tailoring Tea",
-      "itemLevel": 65
+      "itemLevel": 65,
+      "combatUsable": false
     },
     {
       "hrid": "/items/ultra_alchemy_tea",
       "name": "Ultra Alchemy Tea",
-      "itemLevel": 70
+      "itemLevel": 70,
+      "combatUsable": false
     },
     {
       "hrid": "/items/ultra_attack_coffee",
       "name": "Ultra Attack Coffee",
-      "itemLevel": 70
+      "itemLevel": 70,
+      "combatUsable": true
     },
     {
       "hrid": "/items/ultra_brewing_tea",
       "name": "Ultra Brewing Tea",
-      "itemLevel": 70
+      "itemLevel": 70,
+      "combatUsable": false
     },
     {
       "hrid": "/items/ultra_cooking_tea",
       "name": "Ultra Cooking Tea",
-      "itemLevel": 70
+      "itemLevel": 70,
+      "combatUsable": false
     },
     {
       "hrid": "/items/ultra_defense_coffee",
       "name": "Ultra Defense Coffee",
-      "itemLevel": 70
+      "itemLevel": 70,
+      "combatUsable": true
     },
     {
       "hrid": "/items/ultra_enhancing_tea",
       "name": "Ultra Enhancing Tea",
-      "itemLevel": 70
+      "itemLevel": 70,
+      "combatUsable": false
     },
     {
       "hrid": "/items/artisan_tea",
       "name": "Artisan Tea",
-      "itemLevel": 75
+      "itemLevel": 75,
+      "combatUsable": false
     },
     {
       "hrid": "/items/blessed_tea",
       "name": "Blessed Tea",
-      "itemLevel": 75
+      "itemLevel": 75,
+      "combatUsable": false
     },
     {
       "hrid": "/items/catalytic_tea",
       "name": "Catalytic Tea",
-      "itemLevel": 75
+      "itemLevel": 75,
+      "combatUsable": false
     },
     {
       "hrid": "/items/critical_coffee",
       "name": "Critical Coffee",
-      "itemLevel": 75
+      "itemLevel": 75,
+      "combatUsable": true
     },
     {
       "hrid": "/items/ultra_cheesesmithing_tea",
       "name": "Ultra Cheesesmithing Tea",
-      "itemLevel": 85
+      "itemLevel": 85,
+      "combatUsable": false
     },
     {
       "hrid": "/items/ultra_crafting_tea",
       "name": "Ultra Crafting Tea",
-      "itemLevel": 85
+      "itemLevel": 85,
+      "combatUsable": false
     },
     {
       "hrid": "/items/ultra_magic_coffee",
       "name": "Ultra Magic Coffee",
-      "itemLevel": 85
+      "itemLevel": 85,
+      "combatUsable": true
     },
     {
       "hrid": "/items/ultra_melee_coffee",
       "name": "Ultra Melee Coffee",
-      "itemLevel": 85
+      "itemLevel": 85,
+      "combatUsable": true
     },
     {
       "hrid": "/items/ultra_ranged_coffee",
       "name": "Ultra Ranged Coffee",
-      "itemLevel": 85
+      "itemLevel": 85,
+      "combatUsable": true
     },
     {
       "hrid": "/items/ultra_tailoring_tea",
       "name": "Ultra Tailoring Tea",
-      "itemLevel": 85
+      "itemLevel": 85,
+      "combatUsable": false
     }
   ],
   "labyrinthCrates": {
@@ -37838,6 +38004,388 @@
         "name": "Expert Tea Crate"
       }
     ]
+  },
+  "combatScrollItemDetailIndex": {
+    "/items/seal_of_action_speed": {
+      "hrid": "/items/seal_of_action_speed",
+      "name": "Scroll Of Action Speed",
+      "description": "Received from the Labyrinth. Grants 30 minutes of buff when opened. (Only effective outside of Labyrinth and Guild Trials)",
+      "categoryHrid": "/item_categories/scroll",
+      "sortIndex": 44,
+      "scrollDetail": {
+        "personalBuffTypeHrid": "/personal_buff_types/action_speed"
+      }
+    },
+    "/items/seal_of_attack_speed": {
+      "hrid": "/items/seal_of_attack_speed",
+      "name": "Scroll Of Attack Speed",
+      "description": "Received from the Labyrinth. Grants 30 minutes of buff when opened. (Only effective outside of Labyrinth and Guild Trials)",
+      "categoryHrid": "/item_categories/scroll",
+      "sortIndex": 46,
+      "scrollDetail": {
+        "personalBuffTypeHrid": "/personal_buff_types/attack_speed"
+      }
+    },
+    "/items/seal_of_cast_speed": {
+      "hrid": "/items/seal_of_cast_speed",
+      "name": "Scroll Of Cast Speed",
+      "description": "Received from the Labyrinth. Grants 30 minutes of buff when opened. (Only effective outside of Labyrinth and Guild Trials)",
+      "categoryHrid": "/item_categories/scroll",
+      "sortIndex": 47,
+      "scrollDetail": {
+        "personalBuffTypeHrid": "/personal_buff_types/cast_speed"
+      }
+    },
+    "/items/seal_of_combat_drop": {
+      "hrid": "/items/seal_of_combat_drop",
+      "name": "Scroll Of Combat Drop",
+      "description": "Received from the Labyrinth. Grants 30 minutes of buff when opened. (Only effective outside of Labyrinth and Guild Trials)",
+      "categoryHrid": "/item_categories/scroll",
+      "sortIndex": 45,
+      "scrollDetail": {
+        "personalBuffTypeHrid": "/personal_buff_types/combat_drop"
+      }
+    },
+    "/items/seal_of_critical_rate": {
+      "hrid": "/items/seal_of_critical_rate",
+      "name": "Scroll Of Critical Rate",
+      "description": "Received from the Labyrinth. Grants 30 minutes of buff when opened. (Only effective outside of Labyrinth and Guild Trials)",
+      "categoryHrid": "/item_categories/scroll",
+      "sortIndex": 49,
+      "scrollDetail": {
+        "personalBuffTypeHrid": "/personal_buff_types/critical_rate"
+      }
+    },
+    "/items/seal_of_damage": {
+      "hrid": "/items/seal_of_damage",
+      "name": "Scroll Of Damage",
+      "description": "Received from the Labyrinth. Grants 30 minutes of buff when opened. (Only effective outside of Labyrinth and Guild Trials)",
+      "categoryHrid": "/item_categories/scroll",
+      "sortIndex": 48,
+      "scrollDetail": {
+        "personalBuffTypeHrid": "/personal_buff_types/damage"
+      }
+    },
+    "/items/seal_of_efficiency": {
+      "hrid": "/items/seal_of_efficiency",
+      "name": "Scroll Of Efficiency",
+      "description": "Received from the Labyrinth. Grants 30 minutes of buff when opened. (Only effective outside of Labyrinth and Guild Trials)",
+      "categoryHrid": "/item_categories/scroll",
+      "sortIndex": 43,
+      "scrollDetail": {
+        "personalBuffTypeHrid": "/personal_buff_types/efficiency"
+      }
+    },
+    "/items/seal_of_gathering": {
+      "hrid": "/items/seal_of_gathering",
+      "name": "Scroll Of Gathering",
+      "description": "Received from the Labyrinth. Grants 30 minutes of buff when opened. (Only effective outside of Labyrinth and Guild Trials)",
+      "categoryHrid": "/item_categories/scroll",
+      "sortIndex": 40,
+      "scrollDetail": {
+        "personalBuffTypeHrid": "/personal_buff_types/gathering"
+      }
+    },
+    "/items/seal_of_gourmet": {
+      "hrid": "/items/seal_of_gourmet",
+      "name": "Scroll Of Gourmet",
+      "description": "Received from the Labyrinth. Grants 30 minutes of buff when opened. (Only effective outside of Labyrinth and Guild Trials)",
+      "categoryHrid": "/item_categories/scroll",
+      "sortIndex": 41,
+      "scrollDetail": {
+        "personalBuffTypeHrid": "/personal_buff_types/gourmet"
+      }
+    },
+    "/items/seal_of_processing": {
+      "hrid": "/items/seal_of_processing",
+      "name": "Scroll Of Processing",
+      "description": "Received from the Labyrinth. Grants 30 minutes of buff when opened. (Only effective outside of Labyrinth and Guild Trials)",
+      "categoryHrid": "/item_categories/scroll",
+      "sortIndex": 42,
+      "scrollDetail": {
+        "personalBuffTypeHrid": "/personal_buff_types/processing"
+      }
+    },
+    "/items/seal_of_rare_find": {
+      "hrid": "/items/seal_of_rare_find",
+      "name": "Scroll Of Rare Find",
+      "description": "Received from the Labyrinth. Grants 30 minutes of buff when opened. (Only effective outside of Labyrinth and Guild Trials)",
+      "categoryHrid": "/item_categories/scroll",
+      "sortIndex": 51,
+      "scrollDetail": {
+        "personalBuffTypeHrid": "/personal_buff_types/rare_find"
+      }
+    },
+    "/items/seal_of_wisdom": {
+      "hrid": "/items/seal_of_wisdom",
+      "name": "Scroll Of Wisdom",
+      "description": "Received from the Labyrinth. Grants 30 minutes of buff when opened. (Only effective outside of Labyrinth and Guild Trials)",
+      "categoryHrid": "/item_categories/scroll",
+      "sortIndex": 50,
+      "scrollDetail": {
+        "personalBuffTypeHrid": "/personal_buff_types/wisdom"
+      }
+    }
+  },
+  "personalBuffTypeDetailIndex": {
+    "/personal_buff_types/action_speed": {
+      "hrid": "/personal_buff_types/action_speed",
+      "name": "Action Speed",
+      "usableInActionTypeMap": {
+        "/action_types/alchemy": true,
+        "/action_types/brewing": true,
+        "/action_types/cheesesmithing": true,
+        "/action_types/cooking": true,
+        "/action_types/crafting": true,
+        "/action_types/enhancing": true,
+        "/action_types/foraging": true,
+        "/action_types/milking": true,
+        "/action_types/tailoring": true,
+        "/action_types/woodcutting": true
+      },
+      "buff": {
+        "uniqueHrid": "/buff_uniques/personal_action_speed",
+        "typeHrid": "/buff_types/action_speed",
+        "ratioBoost": 0,
+        "ratioBoostLevelBonus": 0,
+        "flatBoost": 0.15,
+        "flatBoostLevelBonus": 0,
+        "startTime": "0001-01-01T00:00:00Z",
+        "duration": 1800000000000
+      },
+      "sortIndex": 5
+    },
+    "/personal_buff_types/attack_speed": {
+      "hrid": "/personal_buff_types/attack_speed",
+      "name": "Attack Speed",
+      "usableInActionTypeMap": {
+        "/action_types/combat": true
+      },
+      "buff": {
+        "uniqueHrid": "/buff_uniques/personal_attack_speed",
+        "typeHrid": "/buff_types/attack_speed",
+        "ratioBoost": 0.15,
+        "ratioBoostLevelBonus": 0,
+        "flatBoost": 0,
+        "flatBoostLevelBonus": 0,
+        "startTime": "0001-01-01T00:00:00Z",
+        "duration": 1800000000000
+      },
+      "sortIndex": 7
+    },
+    "/personal_buff_types/cast_speed": {
+      "hrid": "/personal_buff_types/cast_speed",
+      "name": "Cast Speed",
+      "usableInActionTypeMap": {
+        "/action_types/combat": true
+      },
+      "buff": {
+        "uniqueHrid": "/buff_uniques/personal_cast_speed",
+        "typeHrid": "/buff_types/cast_speed",
+        "ratioBoost": 0,
+        "ratioBoostLevelBonus": 0,
+        "flatBoost": 0.15,
+        "flatBoostLevelBonus": 0,
+        "startTime": "0001-01-01T00:00:00Z",
+        "duration": 1800000000000
+      },
+      "sortIndex": 8
+    },
+    "/personal_buff_types/combat_drop": {
+      "hrid": "/personal_buff_types/combat_drop",
+      "name": "Combat Drop",
+      "usableInActionTypeMap": {
+        "/action_types/combat": true
+      },
+      "buff": {
+        "uniqueHrid": "/buff_uniques/personal_combat_drop",
+        "typeHrid": "/buff_types/combat_drop_quantity",
+        "ratioBoost": 0,
+        "ratioBoostLevelBonus": 0,
+        "flatBoost": 0.15,
+        "flatBoostLevelBonus": 0,
+        "startTime": "0001-01-01T00:00:00Z",
+        "duration": 1800000000000
+      },
+      "sortIndex": 6
+    },
+    "/personal_buff_types/critical_rate": {
+      "hrid": "/personal_buff_types/critical_rate",
+      "name": "Critical Rate",
+      "usableInActionTypeMap": {
+        "/action_types/combat": true
+      },
+      "buff": {
+        "uniqueHrid": "/buff_uniques/personal_critical_rate",
+        "typeHrid": "/buff_types/critical_rate",
+        "ratioBoost": 0,
+        "ratioBoostLevelBonus": 0,
+        "flatBoost": 0.1,
+        "flatBoostLevelBonus": 0,
+        "startTime": "0001-01-01T00:00:00Z",
+        "duration": 1800000000000
+      },
+      "sortIndex": 10
+    },
+    "/personal_buff_types/damage": {
+      "hrid": "/personal_buff_types/damage",
+      "name": "Damage",
+      "usableInActionTypeMap": {
+        "/action_types/combat": true
+      },
+      "buff": {
+        "uniqueHrid": "/buff_uniques/personal_damage",
+        "typeHrid": "/buff_types/damage",
+        "ratioBoost": 0.08,
+        "ratioBoostLevelBonus": 0,
+        "flatBoost": 0,
+        "flatBoostLevelBonus": 0,
+        "startTime": "0001-01-01T00:00:00Z",
+        "duration": 1800000000000
+      },
+      "sortIndex": 9
+    },
+    "/personal_buff_types/efficiency": {
+      "hrid": "/personal_buff_types/efficiency",
+      "name": "Efficiency",
+      "usableInActionTypeMap": {
+        "/action_types/alchemy": true,
+        "/action_types/brewing": true,
+        "/action_types/cheesesmithing": true,
+        "/action_types/cooking": true,
+        "/action_types/crafting": true,
+        "/action_types/foraging": true,
+        "/action_types/milking": true,
+        "/action_types/tailoring": true,
+        "/action_types/woodcutting": true
+      },
+      "buff": {
+        "uniqueHrid": "/buff_uniques/personal_efficiency",
+        "typeHrid": "/buff_types/efficiency",
+        "ratioBoost": 0,
+        "ratioBoostLevelBonus": 0,
+        "flatBoost": 0.14,
+        "flatBoostLevelBonus": 0,
+        "startTime": "0001-01-01T00:00:00Z",
+        "duration": 1800000000000
+      },
+      "sortIndex": 4
+    },
+    "/personal_buff_types/gathering": {
+      "hrid": "/personal_buff_types/gathering",
+      "name": "Gathering",
+      "usableInActionTypeMap": {
+        "/action_types/foraging": true,
+        "/action_types/milking": true,
+        "/action_types/woodcutting": true
+      },
+      "buff": {
+        "uniqueHrid": "/buff_uniques/personal_gathering",
+        "typeHrid": "/buff_types/gathering",
+        "ratioBoost": 0,
+        "ratioBoostLevelBonus": 0,
+        "flatBoost": 0.18,
+        "flatBoostLevelBonus": 0,
+        "startTime": "0001-01-01T00:00:00Z",
+        "duration": 1800000000000
+      },
+      "sortIndex": 1
+    },
+    "/personal_buff_types/gourmet": {
+      "hrid": "/personal_buff_types/gourmet",
+      "name": "Gourmet",
+      "usableInActionTypeMap": {
+        "/action_types/brewing": true,
+        "/action_types/cooking": true
+      },
+      "buff": {
+        "uniqueHrid": "/buff_uniques/personal_gourmet",
+        "typeHrid": "/buff_types/gourmet",
+        "ratioBoost": 0,
+        "ratioBoostLevelBonus": 0,
+        "flatBoost": 0.1,
+        "flatBoostLevelBonus": 0,
+        "startTime": "0001-01-01T00:00:00Z",
+        "duration": 1800000000000
+      },
+      "sortIndex": 2
+    },
+    "/personal_buff_types/processing": {
+      "hrid": "/personal_buff_types/processing",
+      "name": "Processing",
+      "usableInActionTypeMap": {
+        "/action_types/foraging": true,
+        "/action_types/milking": true,
+        "/action_types/woodcutting": true
+      },
+      "buff": {
+        "uniqueHrid": "/buff_uniques/personal_processing",
+        "typeHrid": "/buff_types/processing",
+        "ratioBoost": 0,
+        "ratioBoostLevelBonus": 0,
+        "flatBoost": 0.2,
+        "flatBoostLevelBonus": 0,
+        "startTime": "0001-01-01T00:00:00Z",
+        "duration": 1800000000000
+      },
+      "sortIndex": 3
+    },
+    "/personal_buff_types/rare_find": {
+      "hrid": "/personal_buff_types/rare_find",
+      "name": "Rare Find",
+      "usableInActionTypeMap": {
+        "/action_types/alchemy": true,
+        "/action_types/brewing": true,
+        "/action_types/cheesesmithing": true,
+        "/action_types/combat": true,
+        "/action_types/cooking": true,
+        "/action_types/crafting": true,
+        "/action_types/enhancing": true,
+        "/action_types/foraging": true,
+        "/action_types/milking": true,
+        "/action_types/tailoring": true,
+        "/action_types/woodcutting": true
+      },
+      "buff": {
+        "uniqueHrid": "/buff_uniques/personal_rare_find",
+        "typeHrid": "/buff_types/rare_find",
+        "ratioBoost": 0,
+        "ratioBoostLevelBonus": 0,
+        "flatBoost": 0.6,
+        "flatBoostLevelBonus": 0,
+        "startTime": "0001-01-01T00:00:00Z",
+        "duration": 1800000000000
+      },
+      "sortIndex": 12
+    },
+    "/personal_buff_types/wisdom": {
+      "hrid": "/personal_buff_types/wisdom",
+      "name": "Wisdom",
+      "usableInActionTypeMap": {
+        "/action_types/alchemy": true,
+        "/action_types/brewing": true,
+        "/action_types/cheesesmithing": true,
+        "/action_types/combat": true,
+        "/action_types/cooking": true,
+        "/action_types/crafting": true,
+        "/action_types/enhancing": true,
+        "/action_types/foraging": true,
+        "/action_types/milking": true,
+        "/action_types/tailoring": true,
+        "/action_types/woodcutting": true
+      },
+      "buff": {
+        "uniqueHrid": "/buff_uniques/personal_wisdom",
+        "typeHrid": "/buff_types/wisdom",
+        "ratioBoost": 0,
+        "ratioBoostLevelBonus": 0,
+        "flatBoost": 0.2,
+        "flatBoostLevelBonus": 0,
+        "startTime": "0001-01-01T00:00:00Z",
+        "duration": 1800000000000
+      },
+      "sortIndex": 11
+    }
   },
   "abilityDetailIndex": {
     "/abilities/aqua_arrow": {
@@ -53944,6 +54492,510 @@
     "/actions/combat/werewolf",
     "/actions/combat/zombie"
   ],
+  "zoneMonsterSpawnIndex": {
+    "/actions/combat/abyssal_imp": [
+      {
+        "monsterHrid": "/monsters/abyssal_imp",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/alligator": [
+      {
+        "monsterHrid": "/monsters/alligator",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/aqua_planet": [
+      {
+        "monsterHrid": "/monsters/sea_snail",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/crab",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/aquahorse",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/nom_nom",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/turtle",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/marine_huntress",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/aquahorse": [
+      {
+        "monsterHrid": "/monsters/aquahorse",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/bear_with_it": [
+      {
+        "monsterHrid": "/monsters/gummy_bear",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/panda",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/black_bear",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/grizzly_bear",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/polar_bear",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/red_panda",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/black_bear": [
+      {
+        "monsterHrid": "/monsters/black_bear",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/centaur_archer": [
+      {
+        "monsterHrid": "/monsters/centaur_archer",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/crab": [
+      {
+        "monsterHrid": "/monsters/crab",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/elementalist": [
+      {
+        "monsterHrid": "/monsters/elementalist",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/eye": [
+      {
+        "monsterHrid": "/monsters/eye",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/eyes": [
+      {
+        "monsterHrid": "/monsters/eyes",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/flame_sorcerer": [
+      {
+        "monsterHrid": "/monsters/flame_sorcerer",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/fly": [
+      {
+        "monsterHrid": "/monsters/fly",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/frog": [
+      {
+        "monsterHrid": "/monsters/frog",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/gobo_boomy": [
+      {
+        "monsterHrid": "/monsters/gobo_boomy",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/gobo_planet": [
+      {
+        "monsterHrid": "/monsters/gobo_stabby",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/gobo_slashy",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/gobo_smashy",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/gobo_shooty",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/gobo_boomy",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/gobo_chieftain",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/gobo_shooty": [
+      {
+        "monsterHrid": "/monsters/gobo_shooty",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/gobo_slashy": [
+      {
+        "monsterHrid": "/monsters/gobo_slashy",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/gobo_smashy": [
+      {
+        "monsterHrid": "/monsters/gobo_smashy",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/gobo_stabby": [
+      {
+        "monsterHrid": "/monsters/gobo_stabby",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/golem_cave": [
+      {
+        "monsterHrid": "/monsters/magnetic_golem",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/stalactite_golem",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/granite_golem",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/crystal_colossus",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/granite_golem": [
+      {
+        "monsterHrid": "/monsters/granite_golem",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/grizzly_bear": [
+      {
+        "monsterHrid": "/monsters/grizzly_bear",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/gummy_bear": [
+      {
+        "monsterHrid": "/monsters/gummy_bear",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/ice_sorcerer": [
+      {
+        "monsterHrid": "/monsters/ice_sorcerer",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/infernal_abyss": [
+      {
+        "monsterHrid": "/monsters/abyssal_imp",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/soul_hunter",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/infernal_warlock",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/demonic_overlord",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/infernal_warlock": [
+      {
+        "monsterHrid": "/monsters/infernal_warlock",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/jungle_planet": [
+      {
+        "monsterHrid": "/monsters/jungle_sprite",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/myconid",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/treant",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/centaur_archer",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/luna_empress",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/jungle_sprite": [
+      {
+        "monsterHrid": "/monsters/jungle_sprite",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/magnetic_golem": [
+      {
+        "monsterHrid": "/monsters/magnetic_golem",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/myconid": [
+      {
+        "monsterHrid": "/monsters/myconid",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/nom_nom": [
+      {
+        "monsterHrid": "/monsters/nom_nom",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/novice_sorcerer": [
+      {
+        "monsterHrid": "/monsters/novice_sorcerer",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/panda": [
+      {
+        "monsterHrid": "/monsters/panda",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/planet_of_the_eyes": [
+      {
+        "monsterHrid": "/monsters/eye",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/eyes",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/veyes",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/the_watcher",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/polar_bear": [
+      {
+        "monsterHrid": "/monsters/polar_bear",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/porcupine": [
+      {
+        "monsterHrid": "/monsters/porcupine",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/rat": [
+      {
+        "monsterHrid": "/monsters/rat",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/sea_snail": [
+      {
+        "monsterHrid": "/monsters/sea_snail",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/skunk": [
+      {
+        "monsterHrid": "/monsters/skunk",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/slimy": [
+      {
+        "monsterHrid": "/monsters/slimy",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/smelly_planet": [
+      {
+        "monsterHrid": "/monsters/fly",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/rat",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/skunk",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/porcupine",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/slimy",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/snake": [
+      {
+        "monsterHrid": "/monsters/snake",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/sorcerers_tower": [
+      {
+        "monsterHrid": "/monsters/novice_sorcerer",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/ice_sorcerer",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/flame_sorcerer",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/elementalist",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/chronofrost_sorcerer",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/soul_hunter": [
+      {
+        "monsterHrid": "/monsters/soul_hunter",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/stalactite_golem": [
+      {
+        "monsterHrid": "/monsters/stalactite_golem",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/swamp_planet": [
+      {
+        "monsterHrid": "/monsters/frog",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/snake",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/swampy",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/alligator",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/giant_shoebill",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/swampy": [
+      {
+        "monsterHrid": "/monsters/swampy",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/treant": [
+      {
+        "monsterHrid": "/monsters/treant",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/turtle": [
+      {
+        "monsterHrid": "/monsters/turtle",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/twilight_zone": [
+      {
+        "monsterHrid": "/monsters/zombie",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/vampire",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/werewolf",
+        "difficultyTier": 0
+      },
+      {
+        "monsterHrid": "/monsters/dusk_revenant",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/vampire": [
+      {
+        "monsterHrid": "/monsters/vampire",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/veyes": [
+      {
+        "monsterHrid": "/monsters/veyes",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/werewolf": [
+      {
+        "monsterHrid": "/monsters/werewolf",
+        "difficultyTier": 0
+      }
+    ],
+    "/actions/combat/zombie": [
+      {
+        "monsterHrid": "/monsters/zombie",
+        "difficultyTier": 0
+      }
+    ]
+  },
   "monsterDetailIndex": {
     "/monsters/abyssal_imp": {
       "hrid": "/monsters/abyssal_imp",
@@ -63930,99 +64982,6 @@
     84860719814,
     92125192822,
     100000000000
-  ],
-  "combatScrollOptions": [
-    {
-      "itemHrid": "/items/seal_of_combat_drop",
-      "personalBuffTypeHrid": "/personal_buff_types/combat_drop",
-      "sortIndex": 6,
-      "buff": {
-        "uniqueHrid": "/buff_uniques/personal_combat_drop",
-        "typeHrid": "/buff_types/combat_drop_quantity",
-        "ratioBoost": 0,
-        "ratioBoostLevelBonus": 0,
-        "flatBoost": 0.15,
-        "flatBoostLevelBonus": 0
-      }
-    },
-    {
-      "itemHrid": "/items/seal_of_attack_speed",
-      "personalBuffTypeHrid": "/personal_buff_types/attack_speed",
-      "sortIndex": 7,
-      "buff": {
-        "uniqueHrid": "/buff_uniques/personal_attack_speed",
-        "typeHrid": "/buff_types/attack_speed",
-        "ratioBoost": 0.15,
-        "ratioBoostLevelBonus": 0,
-        "flatBoost": 0,
-        "flatBoostLevelBonus": 0
-      }
-    },
-    {
-      "itemHrid": "/items/seal_of_cast_speed",
-      "personalBuffTypeHrid": "/personal_buff_types/cast_speed",
-      "sortIndex": 8,
-      "buff": {
-        "uniqueHrid": "/buff_uniques/personal_cast_speed",
-        "typeHrid": "/buff_types/cast_speed",
-        "ratioBoost": 0,
-        "ratioBoostLevelBonus": 0,
-        "flatBoost": 0.15,
-        "flatBoostLevelBonus": 0
-      }
-    },
-    {
-      "itemHrid": "/items/seal_of_damage",
-      "personalBuffTypeHrid": "/personal_buff_types/damage",
-      "sortIndex": 9,
-      "buff": {
-        "uniqueHrid": "/buff_uniques/personal_damage",
-        "typeHrid": "/buff_types/damage",
-        "ratioBoost": 0.08,
-        "ratioBoostLevelBonus": 0,
-        "flatBoost": 0,
-        "flatBoostLevelBonus": 0
-      }
-    },
-    {
-      "itemHrid": "/items/seal_of_critical_rate",
-      "personalBuffTypeHrid": "/personal_buff_types/critical_rate",
-      "sortIndex": 10,
-      "buff": {
-        "uniqueHrid": "/buff_uniques/personal_critical_rate",
-        "typeHrid": "/buff_types/critical_rate",
-        "ratioBoost": 0,
-        "ratioBoostLevelBonus": 0,
-        "flatBoost": 0.1,
-        "flatBoostLevelBonus": 0
-      }
-    },
-    {
-      "itemHrid": "/items/seal_of_wisdom",
-      "personalBuffTypeHrid": "/personal_buff_types/wisdom",
-      "sortIndex": 11,
-      "buff": {
-        "uniqueHrid": "/buff_uniques/personal_wisdom",
-        "typeHrid": "/buff_types/wisdom",
-        "ratioBoost": 0,
-        "ratioBoostLevelBonus": 0,
-        "flatBoost": 0.2,
-        "flatBoostLevelBonus": 0
-      }
-    },
-    {
-      "itemHrid": "/items/seal_of_rare_find",
-      "personalBuffTypeHrid": "/personal_buff_types/rare_find",
-      "sortIndex": 12,
-      "buff": {
-        "uniqueHrid": "/buff_uniques/personal_rare_find",
-        "typeHrid": "/buff_types/rare_find",
-        "ratioBoost": 0,
-        "ratioBoostLevelBonus": 0,
-        "flatBoost": 0.6,
-        "flatBoostLevelBonus": 0
-      }
-    }
   ],
   "enhancementData": {
     "successRates": [

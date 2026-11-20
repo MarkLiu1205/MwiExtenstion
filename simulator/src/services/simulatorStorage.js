@@ -1,0 +1,1409 @@
+import {
+  actionDetailIndex,
+  getActionName as getIndexedActionName,
+  getMonsterName as getIndexedMonsterName,
+  monsterDetailIndex,
+} from '../shared/gameDataIndex.js';
+import { EQUIPMENT_SLOT_KEYS, LEVEL_KEYS } from '../shared/playerConfig.js';
+import { normalizeCombatScrolls } from '../shared/combatScrolls.js';
+import { normalizeLabyrinthShopUpgrades } from '../shared/labyrinthShopUpgrades.js';
+import {
+  BAG_OF_10_COWBELLS_HRID,
+  createDefaultPriceTable,
+  NON_TRADABLE_CAPE_HRIDS,
+  normalizePriceMode,
+  normalizeTaxMode,
+  PRICE_MODE_ASK,
+  PRICE_MODE_BID,
+  rebuildSyntheticEntriesInTable,
+  TAX_MODE_MARKET,
+} from './marketPriceService.js';
+import {
+  ADVISOR_GOAL_PRESET_BALANCED,
+  normalizeAdvisorGoalPreset,
+  normalizeAdvisorWeights,
+  normalizeIroncowWeights,
+} from './advisorScoring.js';
+import { normalizeAdvisorFilters } from './advisorDomain.js';
+import { normalizeGameMode } from './gameMode.js';
+import {
+  getDefaultQueueRuntimeSettings,
+  normalizeQueueRuntimeSettings,
+  normalizeQueueSettings,
+} from './queueScoring.js';
+import { normalizeEquipmentSetQueueChanges } from './queueVariants.js';
+import { getVendorPriceByItemHrid } from './queueUpgradeCost.js';
+import { clamp, clampPositiveInteger, deepClone, isPlainObject, toFiniteNumber } from './utils.js';
+import {
+  normalizeFoodOptimizerStep,
+  normalizeFoodOptimizerRounds,
+  normalizeFoodOptimizerSearchMode,
+  normalizeFoodOptimizerFoodHrids,
+  normalizeFoodOptimizerZeroDeaths,
+} from './foodOptimizerDomain.js';
+import { normalizeTriggerOptimizerSettings } from './triggerOptimizerDomain.js';
+import { normalizeBudgetOptimizerSettings } from './budgetOptimizerDomain.js';
+import { clampSimulationRounds, HOME_MULTI_ROUND_DEFAULT_ROUNDS } from './homeMultiRoundSimulation.js';
+
+const EQUIPMENT_SET_STORAGE_KEY = 'mwi.equipmentSets.v2';
+const PRICE_SETTINGS_STORAGE_KEY = 'mwi.price.settings.v1';
+const PRICE_MARKET_CACHE_STORAGE_KEY = 'mwi.price.marketCache.v1';
+const SIMULATION_UI_STORAGE_KEY = 'mwi.simulation.ui.v1';
+const GAME_MODE_STORAGE_KEY = 'mwi.gameMode.v1';
+const QUEUE_SETTINGS_STORAGE_KEY = 'mwi.queue.settings.v1';
+const QUEUE_SETTINGS_STORAGE_VERSION = 1;
+const QUEUE_RUN_SETTINGS_STORAGE_KEY = 'mwi.queue.runSettings.v1';
+const QUEUE_RUN_SETTINGS_STORAGE_VERSION = 1;
+const ADVISOR_SETTINGS_STORAGE_KEY = 'mwi.advisor.settings.v1';
+const ADVISOR_SETTINGS_STORAGE_VERSION = 1;
+const FOOD_OPTIMIZER_SETTINGS_STORAGE_KEY = 'mwi.foodOptimizer.settings.v1';
+const FOOD_OPTIMIZER_SETTINGS_STORAGE_VERSION = 1;
+const TRIGGER_OPTIMIZER_SETTINGS_STORAGE_KEY = 'mwi.triggerOptimizer.settings.v1';
+const TRIGGER_OPTIMIZER_SETTINGS_STORAGE_VERSION = 1;
+const PLAYER_DATA_SNAPSHOT_STORAGE_KEY = 'mwi.player.data.snapshot.v1';
+const PLAYER_DATA_SNAPSHOT_STORAGE_VERSION = 1;
+const PLAYER_ACHIEVEMENTS_STORAGE_KEY = 'mwi.player.achievements.v1';
+const PLAYER_ACHIEVEMENTS_STORAGE_VERSION = 1;
+const TRIGGER_OPTIMIZER_REPORT_STORAGE_KEY = 'mwi.triggerOptimizer.report.v1';
+const TRIGGER_OPTIMIZER_REPORT_STORAGE_VERSION = 1;
+const BUDGET_OPTIMIZER_SETTINGS_STORAGE_KEY = 'mwi.budgetOptimizer.settings.v1';
+const BUDGET_OPTIMIZER_SETTINGS_STORAGE_VERSION = 1;
+const BUDGET_OPTIMIZER_REPORT_STORAGE_KEY = 'mwi.budgetOptimizer.report.v1';
+const BUDGET_OPTIMIZER_REPORT_STORAGE_VERSION = 1;
+const QUEUE_PLAYER_IDS = ['1', '2', '3', '4', '5'];
+
+function hasJsonStorageChanged(before, after) {
+  return JSON.stringify(before) !== JSON.stringify(after);
+}
+
+export function getLocalStorage(storage) {
+  if (storage !== undefined) {
+    return storage || null;
+  }
+  try {
+    return globalThis?.localStorage || null;
+  } catch (error) {
+    return null;
+  }
+}
+
+export function isLocalStorageAvailable(storage) {
+  return Boolean(getLocalStorage(storage));
+}
+
+export function createLocalStorageUnavailableError() {
+  return new Error('localStorage unavailable');
+}
+
+export function readJsonStorage(storageKey, options = {}) {
+  const storage = getLocalStorage(options.storage);
+  const fallback = options.fallback ?? {};
+  const requirePlainObject = options.requirePlainObject !== false;
+  if (!storage) {
+    return fallback;
+  }
+
+  try {
+    const raw = storage.getItem(storageKey);
+    if (!raw) {
+      return fallback;
+    }
+    const parsed = JSON.parse(raw);
+    if (requirePlainObject && !isPlainObject(parsed)) {
+      return fallback;
+    }
+    return parsed;
+  } catch (error) {
+    return fallback;
+  }
+}
+
+export function getStorageItem(storageKey, options = {}) {
+  const storage = getLocalStorage(options.storage);
+  const fallback = options.fallback ?? null;
+  if (!storage) {
+    if (options.throwIfUnavailable === true) {
+      throw createLocalStorageUnavailableError();
+    }
+    return fallback;
+  }
+  try {
+    const rawValue = storage.getItem(storageKey);
+    if (rawValue == null || rawValue === '') {
+      return fallback;
+    }
+    return rawValue;
+  } catch (error) {
+    if (options.throwIfUnavailable === true) {
+      throw error;
+    }
+    return fallback;
+  }
+}
+
+export function setJsonStorage(storageKey, value, options = {}) {
+  const storage = getLocalStorage(options.storage);
+  if (!storage) {
+    if (options.throwIfUnavailable === true) {
+      throw createLocalStorageUnavailableError();
+    }
+    return false;
+  }
+  const serializedValue = JSON.stringify(value);
+  try {
+    storage.setItem(storageKey, serializedValue);
+    return true;
+  } catch (error) {
+    if (options.throwIfUnavailable === true) {
+      throw error;
+    }
+    return false;
+  }
+}
+
+export function removeStorageItem(storageKey, options = {}) {
+  const storage = getLocalStorage(options.storage);
+  if (!storage) {
+    if (options.throwIfUnavailable === true) {
+      throw createLocalStorageUnavailableError();
+    }
+    return false;
+  }
+  try {
+    storage.removeItem(storageKey);
+    return true;
+  } catch (error) {
+    if (options.throwIfUnavailable === true) {
+      throw error;
+    }
+    return false;
+  }
+}
+
+export function normalizeSimulationUiSettings(rawSettings) {
+  const source = isPlainObject(rawSettings) ? rawSettings : {};
+  return {
+    mooPass: Boolean(source.mooPass),
+    comExpEnabled: Boolean(source.comExpEnabled),
+    comExp: clamp(Math.floor(toFiniteNumber(source.comExp, 20)), 1, 99),
+    comDropEnabled: Boolean(source.comDropEnabled),
+    comDrop: clamp(Math.floor(toFiniteNumber(source.comDrop, 20)), 1, 99),
+    combatScrollsEnabled: Boolean(source.combatScrollsEnabled),
+    enableHpMpVisualization: Boolean(source.enableHpMpVisualization),
+    // 迷宫商店升级 buff 等级（仅迷宫内生效；combatRelevant 5 项，0..12），随 UI 设置持久化；
+    // 落盘触发点在 store 层（setLabyrinthUpgrade 与导入合并点），此处只定义归一化形状。
+    // labyrinthCrates 有意不持久化：与 mode/zoneHrid/difficultyTier 等同为会话级运行输入。
+    labyrinthUpgrades: normalizeLabyrinthShopUpgrades(source.labyrinthUpgrades),
+    // 首页多轮模拟的重复次数：随 UI 设置持久化（刷新后保留上次选择，2026-10-01 从
+    // 「会话级运行输入」转入白名单）。归一化复用 homeMultiRoundSimulation.clampSimulationRounds
+    // 的 [1,100]/默认 1 口径（存储层与读取端共用同一入口，勿在此另写常量）。
+    simulationRounds: clampSimulationRounds(source.simulationRounds),
+  };
+}
+
+export function loadSimulationUiSettingsFromStorage() {
+  const stored = readJsonStorage(SIMULATION_UI_STORAGE_KEY);
+  return normalizeSimulationUiSettings({
+    mooPass: true,
+    comExpEnabled: true,
+    comDropEnabled: true,
+    combatScrollsEnabled: false,
+    enableHpMpVisualization: true,
+    simulationRounds: HOME_MULTI_ROUND_DEFAULT_ROUNDS,
+    ...stored,
+  });
+}
+
+export function persistSimulationUiSettingsToStorage(settings) {
+  const normalized = normalizeSimulationUiSettings(settings);
+  setJsonStorage(SIMULATION_UI_STORAGE_KEY, normalized);
+}
+
+// —— 全局游戏模式（标准 / 铁牛）——
+// 独立存储键承载账号级模式状态：不随 simulationSettings（本次模拟的运行输入）
+// 或导入导出载荷流转；切换即落盘，刷新后保留。形状 { mode: 'standard'|'ironcow' }。
+export function loadGameModeFromStorage() {
+  const payload = readJsonStorage(GAME_MODE_STORAGE_KEY);
+  return normalizeGameMode(payload?.mode);
+}
+
+export function persistGameModeToStorage(mode) {
+  const normalized = normalizeGameMode(mode);
+  setJsonStorage(GAME_MODE_STORAGE_KEY, { mode: normalized });
+  return normalized;
+}
+
+export function normalizeAchievementFlags(rawAchievements) {
+  const source = isPlainObject(rawAchievements) ? rawAchievements : {};
+  const normalized = {};
+
+  for (const [achievementHrid, unlocked] of Object.entries(source)) {
+    const normalizedHrid = String(achievementHrid || '').trim();
+    if (!normalizedHrid || !Boolean(unlocked)) {
+      continue;
+    }
+    normalized[normalizedHrid] = true;
+  }
+
+  return normalized;
+}
+
+export function normalizeStoredPlayerAchievementsMap(rawPlayerAchievements) {
+  const source = isPlainObject(rawPlayerAchievements) ? rawPlayerAchievements : {};
+  const normalized = {};
+
+  for (const playerId of QUEUE_PLAYER_IDS) {
+    const normalizedAchievements = normalizeAchievementFlags(source[playerId]);
+    if (Object.keys(normalizedAchievements).length > 0) {
+      normalized[playerId] = normalizedAchievements;
+    }
+  }
+
+  return normalized;
+}
+
+export function collectPlayerAchievementsById(players) {
+  const normalized = {};
+
+  for (const player of players || []) {
+    const playerId = String(player?.id || '').trim();
+    if (!QUEUE_PLAYER_IDS.includes(playerId)) {
+      continue;
+    }
+
+    const achievements = normalizeAchievementFlags(player?.achievements);
+    if (Object.keys(achievements).length > 0) {
+      normalized[playerId] = achievements;
+    }
+  }
+
+  return normalized;
+}
+
+export function loadPlayerAchievementsFromStorage() {
+  const payload = readJsonStorage(PLAYER_ACHIEVEMENTS_STORAGE_KEY);
+  if (payload.version != null && Number(payload.version) !== PLAYER_ACHIEVEMENTS_STORAGE_VERSION) {
+    return {};
+  }
+
+  const sourceMap = isPlainObject(payload.achievementsByPlayer) ? payload.achievementsByPlayer : payload;
+
+  return normalizeStoredPlayerAchievementsMap(sourceMap);
+}
+
+export function persistPlayerAchievementsToStorage(players) {
+  const achievementsByPlayer = collectPlayerAchievementsById(players);
+  if (Object.keys(achievementsByPlayer).length <= 0) {
+    removeStorageItem(PLAYER_ACHIEVEMENTS_STORAGE_KEY);
+    return;
+  }
+
+  setJsonStorage(PLAYER_ACHIEVEMENTS_STORAGE_KEY, {
+    version: PLAYER_ACHIEVEMENTS_STORAGE_VERSION,
+    achievementsByPlayer,
+  });
+}
+
+export function clearPlayerAchievementsFromStorage() {
+  removeStorageItem(PLAYER_ACHIEVEMENTS_STORAGE_KEY);
+}
+
+export function applyPersistedAchievementsToPlayers(players, achievementsByPlayer) {
+  const normalizedAchievementsByPlayer = normalizeStoredPlayerAchievementsMap(achievementsByPlayer);
+  return (players || []).map((player) => {
+    const playerId = String(player?.id || '').trim();
+    return {
+      ...player,
+      achievements: deepClone(normalizedAchievementsByPlayer[playerId] ?? {}),
+    };
+  });
+}
+
+export function normalizePriceOverrideValue(value) {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return null;
+  }
+  return parsed;
+}
+
+// 动态键赋值校验：仅接受形如 '/items/...' 的合法物品 hrid，并显式阻断
+// '__proto__' / 'constructor' / 'prototype' 等内建危险键，防止经
+// applyPriceOverridesToTable 等路径触碰全局内建对象（原型污染加固）。
+function isSafeItemHridKey(rawKey) {
+  const hrid = String(rawKey || '');
+  if (!hrid.startsWith('/items/')) {
+    return false;
+  }
+  return hrid !== '__proto__' && hrid !== 'constructor' && hrid !== 'prototype';
+}
+
+export function normalizePriceOverrideMap(rawOverrides) {
+  const source = isPlainObject(rawOverrides) ? rawOverrides : {};
+  const normalized = {};
+
+  for (const [rawHrid, rawEntry] of Object.entries(source)) {
+    const hrid = String(rawHrid || '');
+    if (!hrid || !isSafeItemHridKey(hrid) || !isPlainObject(rawEntry)) {
+      continue;
+    }
+
+    const entry = {};
+    const ask = normalizePriceOverrideValue(rawEntry.ask);
+    const bid = normalizePriceOverrideValue(rawEntry.bid);
+
+    if (ask !== null) {
+      entry.ask = ask;
+    }
+    if (bid !== null) {
+      entry.bid = bid;
+    }
+
+    if (Object.keys(entry).length > 0) {
+      normalized[hrid] = entry;
+    }
+  }
+
+  return normalized;
+}
+
+export function normalizeEnhancementQuotesByItem(rawQuotes) {
+  const source = isPlainObject(rawQuotes) ? rawQuotes : {};
+  const normalized = {};
+
+  for (const [rawHrid, rawLevelMap] of Object.entries(source)) {
+    const hrid = String(rawHrid || '');
+    if (!hrid || !isSafeItemHridKey(hrid) || !isPlainObject(rawLevelMap)) {
+      continue;
+    }
+
+    const quoteMap = {};
+    for (const [rawLevel, rawQuote] of Object.entries(rawLevelMap)) {
+      const level = Math.floor(toFiniteNumber(rawLevel, -1));
+      // 强化等级游戏上限 20（倍率表 21 元素 0-20 级）：超限键（手注行情 JSON）
+      // 无任何合法消费点（资产分 lookup 已钳 20），只会让 +999 市场按钮出现并
+      // 把超限等级写进玩家配置，此处直接丢弃。
+      if (!Number.isFinite(level) || level < 0 || level > 20 || !isPlainObject(rawQuote)) {
+        continue;
+      }
+
+      const ask = toFiniteNumber(rawQuote?.ask, -1);
+      const bid = toFiniteNumber(rawQuote?.bid, -1);
+      const averagePrice = toFiniteNumber(rawQuote?.averagePrice, -1);
+      const volume = toFiniteNumber(rawQuote?.volume, 0);
+      if (ask < 0 && bid < 0 && !(averagePrice > 0 && volume > 0)) {
+        continue;
+      }
+
+      quoteMap[String(level)] = {
+        ask,
+        bid,
+        averagePrice,
+        volume,
+      };
+    }
+
+    if (Object.keys(quoteMap).length > 0) {
+      normalized[hrid] = quoteMap;
+    }
+  }
+
+  return normalized;
+}
+
+export function normalizeEnhancementLevelsByItem(rawLevels) {
+  const source = isPlainObject(rawLevels) ? rawLevels : {};
+  const normalized = {};
+
+  for (const [rawHrid, rawLevelList] of Object.entries(source)) {
+    const hrid = String(rawHrid || '');
+    if (!hrid || !isSafeItemHridKey(hrid) || !Array.isArray(rawLevelList)) {
+      continue;
+    }
+
+    const levels = Array.from(
+      new Set(
+        rawLevelList
+          .map((value) => Math.floor(toFiniteNumber(value, -1)))
+          // 强化等级游戏上限 20（与 normalizeEnhancementQuotesByItem 同口径）：
+          // 超限值会让「市场强化」按钮出现 +N 并把超限等级写入玩家配置。
+          .filter((value) => Number.isFinite(value) && value > 0 && value <= 20),
+      ),
+    ).sort((a, b) => a - b);
+
+    if (levels.length > 0) {
+      normalized[hrid] = levels;
+    }
+  }
+
+  return normalized;
+}
+
+export function cloneBasePriceTable(basePriceTable) {
+  const source = isPlainObject(basePriceTable) ? basePriceTable : {};
+  const clone = {};
+
+  for (const [rawHrid, rawEntry] of Object.entries(source)) {
+    const hrid = String(rawHrid || '');
+    if (!isSafeItemHridKey(hrid)) {
+      continue;
+    }
+
+    clone[hrid] = {
+      ask: toFiniteNumber(rawEntry?.ask, -1),
+      bid: toFiniteNumber(rawEntry?.bid, -1),
+      vendor: Math.max(0, toFiniteNumber(rawEntry?.vendor, getVendorPriceByItemHrid(hrid))),
+    };
+  }
+
+  return clone;
+}
+
+// 手动改价的产品语义（语义 A，2026-09-04 定案）：改价 = 「纠正行情价」——
+// override 直接烘焙进 ask/bid 字段后即成为市场价，利润链按市场销售口径
+// 对其收 5% 税（resolveMarketSalePrice）是正确行为而非 bug。另两条链
+// 口径不同且同为既定设计：资产链不读 override（assetScoreService 双拦截）、
+// 强化成本链按面值免税（enhancementSimulator 的独立 override 通道）。
+export function applyPriceOverridesToTable(basePriceTable, overrides) {
+  const table = cloneBasePriceTable(basePriceTable);
+  const normalizedOverrides = normalizePriceOverrideMap(overrides);
+
+  for (const [hrid, overrideEntry] of Object.entries(normalizedOverrides)) {
+    if (!isSafeItemHridKey(hrid)) {
+      continue;
+    }
+    const targetEntry = Object.prototype.hasOwnProperty.call(table, hrid)
+      ? table[hrid]
+      : {
+          ask: -1,
+          bid: -1,
+          vendor: getVendorPriceByItemHrid(hrid),
+        };
+
+    if (Object.prototype.hasOwnProperty.call(overrideEntry, 'ask')) {
+      targetEntry.ask = overrideEntry.ask;
+    }
+    if (Object.prototype.hasOwnProperty.call(overrideEntry, 'bid')) {
+      targetEntry.bid = overrideEntry.bid;
+    }
+
+    table[hrid] = targetEntry;
+  }
+
+  return table;
+}
+
+export function rehydratePricingTable(pricingState) {
+  const source = pricingState && typeof pricingState === 'object' ? pricingState : {};
+  source.priceTable = applyPriceOverridesToTable(source.basePriceTable, source.overrides);
+}
+
+// 地牢收益建表：在克隆表上叠加两项可选口径（默认关 = 现状口径，零行为变化）：
+// - excludeCowbellValue === true：牛铃不计算收益（对齐工具箱 574037 同名选项）——
+//   走 rebuild 的合成层分支：牛铃三列清零，且因清零位于宝箱合成之前，大宝箱合成价中
+//   的牛铃部分一并归零；另把牛铃袋条目按 0 写入（脚本 isCowbellItem 语义：袋与牛铃
+//   同属牛铃收益，一并排除，避免口径分裂）；
+// - excludeCapeValue === true：7 件披风按 0 估值（对齐工具箱 574037「披风不计算收益」）——
+//   ask/bid/vendor 三列全部写 0，使任何取价模式都得到 0 价（对齐脚本「单价直接按 0 计，
+//   也不记为缺价」语义；代币估值链本就排除披风，不受影响）。
+// 顺序陷阱：披风清零必须在 rebuild 之后——rebuildSyntheticEntriesInTable 会先复位
+// 全部合成键（含 7 件披风，见 marketPriceService SYNTHETIC_ENTRY_HRIDS），反序清零的
+// 三列会被清回基础形态（实测反序披风退回 {ask:-1,bid:-1,vendor:静态收购价}）。
+// 牛铃清零走 rebuild 内部（无此陷阱），且必须在宝箱合成之前——故由 rebuild 承担。
+// 已知边界（2026-10-16 记录；行为由 simulatorStorage.test.js 锚定，彻底修复需产品裁决暂缓）：
+// excludeCowbellValue === true 的 rebuild 会复位全部合成键（coin/3 宝箱/牛铃/7 披风），
+// 因此入参表上这些键的「已烘焙全局改价」——simulator.pricing.priceTable 由
+// applyPriceOverridesToTable 把全局 override 烘焙进 ask/bid（rehydratePricingTable /
+// createPricingState 两处路径，本文件同函数）——
+// 会被无差别重算覆盖：用户在全局定价页对大宝箱 / coin 等合成条目的改价，在本页开启
+// 「牛铃不计算收益」后丢失。excludeCapeValue 单独开不触发 rebuild，合成键既有值（含全局
+// 改价）保留，仅 7 件披风被按键清零。调用方若需保留全局改价，应在建表产物上再次叠加
+// overrides（applyPriceOverridesToTable 为纯克隆，可安全复用）。
+// 克隆语义：不修改入参 basePriceTable；无口径选项时零开销直通（返回原引用）。
+// options：{ excludeCowbellValue?: boolean, excludeCapeValue?: boolean,
+//   nonTradableValuation?: boolean, taxMode?: string }——后两项线程化给 rebuild
+//（nonTradableValuation 只影响披风/牛铃保守注入，与两个清零选项互斥）。
+export function buildDungeonAlignedPriceTable(basePriceTable, options = {}) {
+  const excludeCowbellValue = options.excludeCowbellValue === true;
+  const excludeCapeValue = options.excludeCapeValue === true;
+
+  if (excludeCowbellValue !== true && excludeCapeValue !== true) {
+    // 无口径选项：零开销直通（返回原引用，调用方按现状语义使用）。
+    return basePriceTable;
+  }
+
+  const table = cloneBasePriceTable(basePriceTable);
+
+  if (excludeCowbellValue === true) {
+    rebuildSyntheticEntriesInTable(table, {
+      nonTradableValuation: options.nonTradableValuation === true,
+      taxMode: options.taxMode,
+      excludeCowbellValue: true,
+    });
+    // 铃袋按 0（脚本口径：袋与牛铃同属牛铃收益）；rebuild 刻意不改写袋（防污染不变量），
+    // 故清零在本层补写——袋不参与大宝箱合成，仅影响其自身条目的取价。
+    table[BAG_OF_10_COWBELLS_HRID] = { ask: 0, bid: 0, vendor: 0 };
+  }
+
+  if (excludeCapeValue === true) {
+    // 必须位于 rebuild 之后（顺序陷阱）：rebuild 会复位全部合成键（含 7 件披风），
+    // 反序清零的三列会被清回基础形态。
+    for (const capeHrid of NON_TRADABLE_CAPE_HRIDS) {
+      table[capeHrid] = { ask: 0, bid: 0, vendor: 0 };
+    }
+  }
+
+  return table;
+}
+
+export function normalizePricingSettings(raw) {
+  const source = isPlainObject(raw) ? raw : {};
+  return {
+    consumableMode: normalizePriceMode(source.consumableMode, PRICE_MODE_ASK),
+    dropMode: normalizePriceMode(source.dropMode, PRICE_MODE_BID),
+    // 不可交易物估值开关（设计 §4.1）：旧设置无键 → 默认 true（漏算定性为 bug 修复，
+    // 报告 §5.1/§6-5；掉落期望收入场景与康康脚本先例一致）。显式 false 才关闭。
+    nonTradableValuation: source.nonTradableValuation !== false,
+    // 计税模式（两档，2026-09-04 用户决策移除 'all'）：旧设置无键 / 非法值 /
+    // 存量 'all' → 'market'（现状零行为变化锚点）。
+    taxMode: normalizeTaxMode(source.taxMode, TAX_MODE_MARKET),
+    overrides: normalizePriceOverrideMap(source.overrides),
+  };
+}
+
+// 官方估算市场价值透传载荷：{ [itemHrid]: { [强化等级字符串]: 正数价值 } }。
+// 数据来自主站 WS market_item_values_updated 消息（油猴脚本透传），
+// 仅保留键可解析为非负整数、值为正数的条目。
+export function normalizeMarketItemValues(raw) {
+  const source = isPlainObject(raw) ? raw : {};
+  const normalized = {};
+  for (const [rawHrid, rawByLevel] of Object.entries(source)) {
+    const itemHrid = String(rawHrid || '');
+    if (!itemHrid || !isSafeItemHridKey(itemHrid) || !isPlainObject(rawByLevel)) {
+      continue;
+    }
+    const levelMap = {};
+    for (const [rawLevel, rawValue] of Object.entries(rawByLevel)) {
+      const levelNumber = Number(rawLevel);
+      if (!Number.isFinite(levelNumber) || levelNumber < 0) {
+        continue;
+      }
+      const value = Math.max(0, toFiniteNumber(rawValue, 0));
+      if (value <= 0) {
+        continue;
+      }
+      levelMap[String(Math.floor(levelNumber))] = value;
+    }
+    if (Object.keys(levelMap).length > 0) {
+      normalized[itemHrid] = levelMap;
+    }
+  }
+  return normalized;
+}
+
+// 来源标注：{ [itemHrid]: 'official' | 'synthetic' }。与数值
+// marketItemValues 同生命周期随市场缓存持久化——重启后来源真值不丢，修复 A3
+// 「重启后合成中价被改标官方估算」的跨会话标签失真。白名单外条目（非法 hrid /
+// 非 official|synthetic 值）丢弃；
+// 旧缓存无该键时归一为 {}（向后兼容，行为与修复前一致）。
+export function normalizeMarketItemValueSources(raw) {
+  const source = isPlainObject(raw) ? raw : {};
+  const normalized = {};
+  for (const [rawHrid, rawSource] of Object.entries(source)) {
+    const itemHrid = String(rawHrid || '');
+    const value = String(rawSource || '');
+    if (!itemHrid || !isSafeItemHridKey(itemHrid) || (value !== 'official' && value !== 'synthetic')) {
+      continue;
+    }
+    normalized[itemHrid] = value;
+  }
+  return normalized;
+}
+
+// 等级级来源覆盖（【一般-5】，2026-09-02）：{ [itemHrid]: { [levelKey]: 'official' | 'synthetic' } }
+// 稀疏覆盖——仅混合物品（官方估算仅覆盖部分等级）的合成补齐等级入表（当前上游只产出
+// 'synthetic'，值域白名单保持与物品级一致以便未来扩展）。等级键与 normalizeMarketItemValues
+// 同语义归一化（可解析为非负整数的下取整字符串，非法键丢弃）。与 marketItemValueSources 同
+// 生命周期随市场缓存持久化/恢复/双清（A3 语义延伸到等级级）；白名单外条目（非法 hrid /
+// 非对象等级表 / 非法等级键 / 非法来源值 / 空等级表）丢弃，旧缓存无该键归一为 {}（向后兼容）。
+export function normalizeMarketItemValueSourcesByLevel(raw) {
+  const source = isPlainObject(raw) ? raw : {};
+  const normalized = {};
+  for (const [rawHrid, rawByLevel] of Object.entries(source)) {
+    const itemHrid = String(rawHrid || '');
+    if (!itemHrid || !isSafeItemHridKey(itemHrid) || !isPlainObject(rawByLevel)) {
+      continue;
+    }
+    const byLevel = {};
+    for (const [rawLevel, rawSource] of Object.entries(rawByLevel)) {
+      // 等级键与 normalizeMarketItemValues 同语义归一化（非负整数下取整字符串、
+      // 非法丢弃）：与 resolveOfficialEstimateSource 的 String(clampEnhancementLevel)
+      // 规范查询键对齐，非规范键（'1.0'/' 1 '）不得原样入库。
+      const levelNumber = Number(rawLevel);
+      if (!Number.isFinite(levelNumber) || levelNumber < 0) {
+        continue;
+      }
+      const value = String(rawSource || '');
+      if (value !== 'official' && value !== 'synthetic') {
+        continue;
+      }
+      byLevel[String(Math.floor(levelNumber))] = value;
+    }
+    if (Object.keys(byLevel).length > 0) {
+      normalized[itemHrid] = byLevel;
+    }
+  }
+  return normalized;
+}
+
+export function normalizeMarketCachePayload(raw) {
+  const source = isPlainObject(raw) ? raw : {};
+  return {
+    basePriceTable: cloneBasePriceTable(source.basePriceTable),
+    enhancementQuotesByItem: normalizeEnhancementQuotesByItem(source.enhancementQuotesByItem),
+    enhancementLevelsByItem: normalizeEnhancementLevelsByItem(source.enhancementLevelsByItem),
+    marketItemValues: normalizeMarketItemValues(source.marketItemValues),
+    marketItemValueSources: normalizeMarketItemValueSources(source.marketItemValueSources),
+    marketItemValueSourcesByLevel: normalizeMarketItemValueSourcesByLevel(source.marketItemValueSourcesByLevel),
+    marketTimestamp: Math.max(0, toFiniteNumber(source.marketTimestamp, 0)),
+    lastFetchedAt: Math.max(0, toFiniteNumber(source.lastFetchedAt, 0)),
+    sourceUrl: String(source.sourceUrl || ''),
+  };
+}
+
+export function loadMarketCacheFromStorage() {
+  const payload = normalizeMarketCachePayload(readJsonStorage(PRICE_MARKET_CACHE_STORAGE_KEY));
+  if (Object.keys(payload.basePriceTable).length === 0 || payload.lastFetchedAt <= 0) {
+    return null;
+  }
+  return payload;
+}
+
+export function persistMarketCacheToStorage(cachePayload) {
+  const normalized = normalizeMarketCachePayload(cachePayload);
+  setJsonStorage(PRICE_MARKET_CACHE_STORAGE_KEY, normalized);
+}
+
+export function clearMarketCacheFromStorage() {
+  removeStorageItem(PRICE_MARKET_CACHE_STORAGE_KEY);
+}
+
+export function loadPricingSettingsFromStorage() {
+  const parsed = readJsonStorage(PRICE_SETTINGS_STORAGE_KEY);
+  return normalizePricingSettings(parsed);
+}
+
+export function persistPricingSettingsToStorage(settings) {
+  const normalized = normalizePricingSettings(settings);
+  setJsonStorage(PRICE_SETTINGS_STORAGE_KEY, normalized);
+}
+
+export function createPricingState() {
+  const settings = loadPricingSettingsFromStorage();
+  const cachedMarket = loadMarketCacheFromStorage();
+  const basePriceTable = cachedMarket?.basePriceTable || createDefaultPriceTable();
+  // 旧缓存合成键剥离 + 按当前开关/税档重导出（设计 §1.3/§4.4 + 牛铃 18% 修订
+  // §3.5-7）：旧缓存烘焙的宝箱合成值是「不含牛铃」或「旧口径」的旧值，统一重置
+  // 基础形态后按当前表内行情重算——对默认表路径幂等、对缓存路径必要（宝箱按
+  // 开关/税档吃到牛铃，无需重新拉取行情，袋/镜 bid 已在缓存表中）。缓存本身
+  // 不回写：行情快照保留原貌，重导出恒在内存侧幂等执行。
+  rebuildSyntheticEntriesInTable(basePriceTable, {
+    nonTradableValuation: settings.nonTradableValuation,
+    taxMode: settings.taxMode,
+  });
+  return {
+    consumableMode: settings.consumableMode,
+    dropMode: settings.dropMode,
+    nonTradableValuation: settings.nonTradableValuation,
+    taxMode: settings.taxMode,
+    overrides: settings.overrides,
+    basePriceTable,
+    priceTable: applyPriceOverridesToTable(basePriceTable, settings.overrides),
+    enhancementQuotesByItem: normalizeEnhancementQuotesByItem(cachedMarket?.enhancementQuotesByItem),
+    enhancementLevelsByItem: normalizeEnhancementLevelsByItem(cachedMarket?.enhancementLevelsByItem),
+    marketItemValues: normalizeMarketItemValues(cachedMarket?.marketItemValues),
+    // 来源标注：与数值同生命周期随市场缓存恢复——重启后合成中价
+    // 标签不失真（A3 修复）。行情重置（resetPricesToVendorDefaultsForStore）双清
+    // 内存与缓存，不会复活旧标注；旧缓存无该键归一为 {}（历史行为，向后兼容）。
+    marketItemValueSources: normalizeMarketItemValueSources(cachedMarket?.marketItemValueSources),
+    // 等级级来源覆盖（【一般-5】）：与物品级标注同生命周期随市场缓存恢复——
+    // 重启后混合物品的合成补齐等级标签不失真；旧缓存无该键归一为 {}（向后兼容）。
+    marketItemValueSourcesByLevel: normalizeMarketItemValueSourcesByLevel(cachedMarket?.marketItemValueSourcesByLevel),
+    marketTimestamp: Number(cachedMarket?.marketTimestamp || 0),
+    lastFetchedAt: Number(cachedMarket?.lastFetchedAt || 0),
+    sourceUrl: String(cachedMarket?.sourceUrl || ''),
+    isLoading: false,
+    error: '',
+  };
+}
+
+export function createProfitPricingOptions(pricingState) {
+  return {
+    consumableMode: normalizePriceMode(pricingState?.consumableMode, PRICE_MODE_ASK),
+    dropMode: normalizePriceMode(pricingState?.dropMode, PRICE_MODE_BID),
+    // 计税模式（设计 §4.2）：随运行开始快照线程化到利润链收入侧
+    //（buildNoRng/RandomProfitBreakdown → resolveMarketSalePrice）；缺键 → 'market'。
+    // priceTable 已含合成注入（nonTradableValuation 在建表期生效，不经此函数）。
+    taxMode: normalizeTaxMode(pricingState?.taxMode, TAX_MODE_MARKET),
+    priceTable: pricingState?.priceTable ?? null,
+  };
+}
+
+// options.parallelWorkerLimit：无存储值 / 存储值缺失时的默认（store 注入本机自适应推荐；
+// 省略 ⇒ 历史回退 4，服务级 / 测试路径行为不变）。
+export function loadQueueRuntimeSettingsFromStorage(options = {}) {
+  const defaults = getDefaultQueueRuntimeSettings(options);
+  if (!isLocalStorageAvailable()) {
+    return defaults;
+  }
+
+  try {
+    const rawValue = getStorageItem(QUEUE_SETTINGS_STORAGE_KEY);
+    if (!rawValue) {
+      return defaults;
+    }
+
+    const parsed = JSON.parse(rawValue);
+    if (!isPlainObject(parsed) || parsed.version !== QUEUE_SETTINGS_STORAGE_VERSION) {
+      return defaults;
+    }
+
+    return normalizeQueueRuntimeSettings(
+      {
+        finalWeights: parsed.finalWeights,
+        costScoreGoldPerPointMode: parsed.costScoreGoldPerPointMode,
+        parallelWorkerLimit: parsed.parallelWorkerLimit,
+      },
+      options,
+    );
+  } catch (error) {
+    return defaults;
+  }
+}
+
+export function persistQueueRuntimeSettingsToStorage(settings) {
+  const normalized = normalizeQueueRuntimeSettings(settings);
+  const payload = {
+    version: QUEUE_SETTINGS_STORAGE_VERSION,
+    savedAt: Date.now(),
+    finalWeights: {
+      ...normalized.finalWeights,
+    },
+    costScoreGoldPerPointMode: normalized.costScoreGoldPerPointMode,
+    parallelWorkerLimit: normalized.parallelWorkerLimit,
+  };
+  setJsonStorage(QUEUE_SETTINGS_STORAGE_KEY, payload, { throwIfUnavailable: true });
+  return normalized;
+}
+
+export function normalizeFoodOptimizerSettings(raw = {}) {
+  const source = isPlainObject(raw) ? raw : {};
+  return {
+    thresholdStepPercent: normalizeFoodOptimizerStep(source.thresholdStepPercent),
+    rounds: normalizeFoodOptimizerRounds(source.rounds),
+    // 设置层缺省是 normalizeFoodOptimizerSearchMode 的默认参数，不再在这里重复字面值。
+    searchMode: normalizeFoodOptimizerSearchMode(source.searchMode),
+    // 旧数据没有该字段：false 即“不排除有死亡的方案”，与首次使用一致（脏值回落到同一个默认）。
+    requireZeroDeaths: normalizeFoodOptimizerZeroDeaths(source.requireZeroDeaths),
+    // 旧数据没有该字段：null 即“未保存范围”，快照层会解析为当前佩戴食物的默认范围。
+    foodHrids: normalizeFoodOptimizerFoodHrids(source.foodHrids),
+  };
+}
+
+export function loadFoodOptimizerSettingsFromStorage() {
+  const parsed = readJsonStorage(FOOD_OPTIMIZER_SETTINGS_STORAGE_KEY);
+  if (!isPlainObject(parsed) || parsed.version !== FOOD_OPTIMIZER_SETTINGS_STORAGE_VERSION) {
+    return normalizeFoodOptimizerSettings({});
+  }
+  // 旧数据没有 searchMode 字段时与首次使用一致，默认精确前十。
+  return normalizeFoodOptimizerSettings(parsed);
+}
+
+export function persistFoodOptimizerSettingsToStorage(settings) {
+  const normalized = normalizeFoodOptimizerSettings(settings);
+  setJsonStorage(FOOD_OPTIMIZER_SETTINGS_STORAGE_KEY, {
+    version: FOOD_OPTIMIZER_SETTINGS_STORAGE_VERSION,
+    savedAt: Date.now(),
+    ...normalized,
+  });
+  return normalized;
+}
+
+// 触发器优化器设置（键名带版本，脏数据回落到产品默认）。
+// 归一化口径由 triggerOptimizerDomain 独占，本层只负责版本闸门与序列化。
+// partyPlayerIds（队友勾选）不持久化（2026-10-04）：队友配置数据本身是会话级的
+// （导入数据刷新即丢），勾选状态若持久化会出现「刷新后勾选还在、队友槽位已空」的
+// 幽灵队友 —— 整队模拟会把空配置玩家塞进载荷。两侧生命周期必须一致：勾选只在当前
+// 会话内有效，persist 落盘空、load 强制清空（旧存档里已有勾选也一并丢弃）。
+export function loadTriggerOptimizerSettingsFromStorage() {
+  const parsed = readJsonStorage(TRIGGER_OPTIMIZER_SETTINGS_STORAGE_KEY);
+  if (!isPlainObject(parsed) || parsed.version !== TRIGGER_OPTIMIZER_SETTINGS_STORAGE_VERSION) {
+    return normalizeTriggerOptimizerSettings({});
+  }
+  return normalizeTriggerOptimizerSettings({ ...parsed, partyPlayerIds: [] });
+}
+
+export function persistTriggerOptimizerSettingsToStorage(settings) {
+  const normalized = normalizeTriggerOptimizerSettings(settings);
+  setJsonStorage(TRIGGER_OPTIMIZER_SETTINGS_STORAGE_KEY, {
+    version: TRIGGER_OPTIMIZER_SETTINGS_STORAGE_VERSION,
+    savedAt: Date.now(),
+    ...normalized,
+    partyPlayerIds: [],
+  });
+  return normalized;
+}
+
+// 触发器优化报告落盘（2026-09-24）：最近一份报告自动持久化，刷新/崩溃/重进后
+// 由 store 的 state 工厂 hydrate 回来。版本闸门同 settings.v1 —— 脏数据/版本不符一律静默
+// 回落 null（当作没有存档），不抛错也不半恢复。
+export function loadTriggerOptimizerReportFromStorage() {
+  const parsed = readJsonStorage(TRIGGER_OPTIMIZER_REPORT_STORAGE_KEY);
+  if (!isPlainObject(parsed) || parsed.version !== TRIGGER_OPTIMIZER_REPORT_STORAGE_VERSION) {
+    return null;
+  }
+  const report = parsed.report;
+  const createdAt = isPlainObject(report) ? Number(report.createdAt) : NaN;
+  // 形状闸门：createdAt 必须是正时间戳 —— 空结果（createEmptyResult）自带 createdAt: 0，
+  // 不能被当成一份报告存/取（否则开跑清空会把上一份好报告覆盖成空壳）。
+  if (!Number.isFinite(createdAt) || createdAt <= 0) {
+    return null;
+  }
+  // 深拷贝解耦：store 会往 results 上原地写 stale / appliedInputSignature 等字段，
+  // 不能让内存报告与存储共享引用（否则每次原地写都间接改到存档对象）。
+  return JSON.parse(JSON.stringify(report));
+}
+
+export function persistTriggerOptimizerReportToStorage(report) {
+  const createdAt = isPlainObject(report) ? Number(report.createdAt) : NaN;
+  // 与 load 同一口径：只有「真报告」（createdAt 正时间戳）才落盘；空结果不写不删。
+  if (!Number.isFinite(createdAt) || createdAt <= 0) {
+    return false;
+  }
+  return setJsonStorage(TRIGGER_OPTIMIZER_REPORT_STORAGE_KEY, {
+    version: TRIGGER_OPTIMIZER_REPORT_STORAGE_VERSION,
+    savedAt: Date.now(),
+    report,
+  });
+}
+
+export function clearTriggerOptimizerReportFromStorage() {
+  return removeStorageItem(TRIGGER_OPTIMIZER_REPORT_STORAGE_KEY);
+}
+
+// 预算优化器设置（键名带版本，脏数据回落到产品默认）。
+// 归一化口径由 budgetOptimizerDomain 独占，本层只负责版本闸门与序列化。
+// partyPlayerIds（队友勾选）不持久化（2026-10-04，与触发器优化器同款）：队友配置数据
+// 是会话级的（导入数据刷新即丢），勾选状态若持久化会出现「刷新后勾选还在、队友槽位
+// 已空」的幽灵队友 —— 整队模拟会把空配置玩家塞进载荷。勾选只在当前会话内有效：
+// persist 落盘空、load 强制清空（旧存档里已有勾选也一并丢弃）。
+export function loadBudgetOptimizerSettingsFromStorage() {
+  const parsed = readJsonStorage(BUDGET_OPTIMIZER_SETTINGS_STORAGE_KEY);
+  if (!isPlainObject(parsed) || parsed.version !== BUDGET_OPTIMIZER_SETTINGS_STORAGE_VERSION) {
+    return normalizeBudgetOptimizerSettings({});
+  }
+  return normalizeBudgetOptimizerSettings({ ...parsed, partyPlayerIds: [] });
+}
+
+export function persistBudgetOptimizerSettingsToStorage(settings) {
+  const normalized = normalizeBudgetOptimizerSettings(settings);
+  setJsonStorage(BUDGET_OPTIMIZER_SETTINGS_STORAGE_KEY, {
+    version: BUDGET_OPTIMIZER_SETTINGS_STORAGE_VERSION,
+    savedAt: Date.now(),
+    ...normalized,
+    partyPlayerIds: [],
+  });
+  return normalized;
+}
+
+// 预算优化报告落盘：最近一份报告自动持久化，刷新/崩溃/重进后由 store 的 state 工厂
+// hydrate 回来。版本闸门同 settings.v1 —— 脏数据/版本不符一律静默回落 null。
+// 形状闸门（createdAt 必须是正时间戳）：空结果（createdAt: 0）不能被当成一份报告存/取。
+export function loadBudgetOptimizerReportFromStorage() {
+  const parsed = readJsonStorage(BUDGET_OPTIMIZER_REPORT_STORAGE_KEY);
+  if (!isPlainObject(parsed) || parsed.version !== BUDGET_OPTIMIZER_REPORT_STORAGE_VERSION) {
+    return null;
+  }
+  const report = parsed.report;
+  const createdAt = isPlainObject(report) ? Number(report.createdAt) : NaN;
+  if (!Number.isFinite(createdAt) || createdAt <= 0) {
+    return null;
+  }
+  // 深拷贝解耦：store 会往 results 上原地写 stale / appliedInputSignature 等字段，
+  // 不能让内存报告与存储共享引用（否则每次原地写都间接改到存档对象）。
+  return JSON.parse(JSON.stringify(report));
+}
+
+export function persistBudgetOptimizerReportToStorage(report) {
+  const createdAt = isPlainObject(report) ? Number(report.createdAt) : NaN;
+  // 与 load 同一口径：只有「真报告」（createdAt 正时间戳）才落盘；空结果不写不删。
+  if (!Number.isFinite(createdAt) || createdAt <= 0) {
+    return false;
+  }
+  return setJsonStorage(BUDGET_OPTIMIZER_REPORT_STORAGE_KEY, {
+    version: BUDGET_OPTIMIZER_REPORT_STORAGE_VERSION,
+    savedAt: Date.now(),
+    report,
+  });
+}
+
+export function clearBudgetOptimizerReportFromStorage() {
+  return removeStorageItem(BUDGET_OPTIMIZER_REPORT_STORAGE_KEY);
+}
+
+export function loadQueueRunSettingsByPlayerFromStorage() {
+  if (!isLocalStorageAvailable()) {
+    return {};
+  }
+
+  try {
+    const rawValue = getStorageItem(QUEUE_RUN_SETTINGS_STORAGE_KEY);
+    if (!rawValue) {
+      return {};
+    }
+
+    const parsed = JSON.parse(rawValue);
+    if (!isPlainObject(parsed) || parsed.version !== QUEUE_RUN_SETTINGS_STORAGE_VERSION) {
+      return {};
+    }
+
+    const normalized = {};
+    for (const playerId of QUEUE_PLAYER_IDS) {
+      if (!isPlainObject(parsed.byPlayer?.[playerId])) {
+        continue;
+      }
+      normalized[playerId] = normalizeQueueSettings(parsed.byPlayer[playerId]);
+    }
+    return normalized;
+  } catch (error) {
+    return {};
+  }
+}
+
+export function persistQueueRunSettingsByPlayerToStorage(queueStateByPlayer = {}) {
+  const byPlayer = {};
+  for (const playerId of QUEUE_PLAYER_IDS) {
+    byPlayer[playerId] = normalizeQueueSettings(queueStateByPlayer?.[playerId]?.settings);
+  }
+
+  const payload = {
+    version: QUEUE_RUN_SETTINGS_STORAGE_VERSION,
+    savedAt: Date.now(),
+    byPlayer,
+  };
+  setJsonStorage(QUEUE_RUN_SETTINGS_STORAGE_KEY, payload, { throwIfUnavailable: true });
+  return byPlayer;
+}
+
+// Advisor 配置持久化：仅配置字段（goalPreset 含 ironcow / customWeights /
+// customWeightInputs 原始输入 / ironcowWeights / filters 含 dropItemHrids），
+// 不恢复结果行与扫描运行时状态（scanned* / dropDataStale / quickRows 等均属
+// 会话内状态，不落盘）。规范化直接复用 advisorScoring / advisorDomain 的清洗
+// 函数，脏数据静默回退默认。
+// 自定义权重原始输入（用户口径草稿源，G3 2026-09-05）：与归一化 customWeights
+// 并存——前者是用户键入值（刷新后输入框回显源），后者是引擎归一化值（排名
+// 消费）。两字段均有限才保留（符号不设限，与页面草稿域一致，负值在应用时由
+// normalizeAdvisorWeights 钳制）；任一非法或载荷缺失（旧版本）整体置 null，
+// 页面回退「由归一化 customWeights 回显」的旧行为，向后兼容。
+function normalizeAdvisorCustomWeightInputs(rawInputs) {
+  if (!isPlainObject(rawInputs)) {
+    return null;
+  }
+  const profitPerHour = Number(rawInputs.profitPerHour);
+  const xpPerHour = Number(rawInputs.xpPerHour);
+  if (!Number.isFinite(profitPerHour) || !Number.isFinite(xpPerHour)) {
+    return null;
+  }
+  return { profitPerHour, xpPerHour };
+}
+
+export function normalizeAdvisorSettings(rawSettings) {
+  const source = isPlainObject(rawSettings) ? rawSettings : {};
+  return {
+    goalPreset: normalizeAdvisorGoalPreset(source.goalPreset),
+    customWeights: normalizeAdvisorWeights(source.customWeights, ADVISOR_GOAL_PRESET_BALANCED),
+    customWeightInputs: normalizeAdvisorCustomWeightInputs(source.customWeightInputs),
+    ironcowWeights: normalizeIroncowWeights(source.ironcowWeights),
+    filters: normalizeAdvisorFilters(source.filters),
+  };
+}
+
+export function loadAdvisorSettingsFromStorage() {
+  const parsed = readJsonStorage(ADVISOR_SETTINGS_STORAGE_KEY);
+  if (!isPlainObject(parsed) || parsed.version !== ADVISOR_SETTINGS_STORAGE_VERSION) {
+    return normalizeAdvisorSettings();
+  }
+  return normalizeAdvisorSettings(parsed);
+}
+
+export function persistAdvisorSettingsToStorage(settings) {
+  const normalized = normalizeAdvisorSettings(settings);
+  const payload = {
+    version: ADVISOR_SETTINGS_STORAGE_VERSION,
+    savedAt: Date.now(),
+    ...normalized,
+  };
+  setJsonStorage(ADVISOR_SETTINGS_STORAGE_KEY, payload);
+  return normalized;
+}
+
+export function snapshotPlayerDataMap(rawPlayerDataMap) {
+  const result = {};
+  for (const playerId of QUEUE_PLAYER_IDS) {
+    const sourceValue = rawPlayerDataMap?.[playerId];
+    result[playerId] = typeof sourceValue === 'string' ? sourceValue : '';
+  }
+  return result;
+}
+
+function hasAnyTruthyValue(source) {
+  if (!isPlainObject(source)) {
+    return false;
+  }
+  return Object.values(source).some((value) => Boolean(value));
+}
+
+function hasMeaningfulModernPlayerData(player) {
+  if (!isPlainObject(player)) {
+    return false;
+  }
+
+  for (const key of LEVEL_KEYS) {
+    if (toFiniteNumber(player?.levels?.[key], 1) > 1) {
+      return true;
+    }
+  }
+
+  for (const slot of EQUIPMENT_SLOT_KEYS) {
+    const itemHrid = String(player?.equipment?.[slot]?.itemHrid || '');
+    const enhancementLevel = toFiniteNumber(player?.equipment?.[slot]?.enhancementLevel, 0);
+    if (itemHrid || enhancementLevel > 0) {
+      return true;
+    }
+  }
+
+  if ((player.food || []).some((itemHrid) => String(itemHrid || '').trim().length > 0)) {
+    return true;
+  }
+  if ((player.drinks || []).some((itemHrid) => String(itemHrid || '').trim().length > 0)) {
+    return true;
+  }
+  if (
+    (player.abilities || []).some(
+      (entry) => String(entry?.abilityHrid || '').trim().length > 0 || toFiniteNumber(entry?.level, 1) > 1,
+    )
+  ) {
+    return true;
+  }
+  if (
+    isPlainObject(player.abilityLevels) &&
+    Object.values(player.abilityLevels).some((level) => toFiniteNumber(level, 1) > 1)
+  ) {
+    return true;
+  }
+
+  if (isPlainObject(player.triggerMap) && Object.keys(player.triggerMap).length > 0) {
+    return true;
+  }
+  if (
+    isPlainObject(player.houseRooms) &&
+    Object.values(player.houseRooms).some((value) => toFiniteNumber(value, 0) > 0)
+  ) {
+    return true;
+  }
+  if (
+    isPlainObject(player.guildBuffs) &&
+    Object.values(player.guildBuffs).some((value) => toFiniteNumber(value, 0) > 0)
+  ) {
+    return true;
+  }
+  if (hasAnyTruthyValue(player.achievements)) {
+    return true;
+  }
+  if (Object.keys(normalizeCombatScrolls(player.combatScrolls)).length > 0) {
+    return true;
+  }
+
+  return false;
+}
+
+export function hasMeaningfulPlayerSnapshotData(parsedSnapshot) {
+  if (!isPlainObject(parsedSnapshot)) {
+    return false;
+  }
+
+  // 仅含现代玩家的载荷
+  if (isPlainObject(parsedSnapshot.levels) || isPlainObject(parsedSnapshot.equipment)) {
+    return hasMeaningfulModernPlayerData(parsedSnapshot);
+  }
+
+  if (isPlainObject(parsedSnapshot.player)) {
+    if (isPlainObject(parsedSnapshot.player.levels) || isPlainObject(parsedSnapshot.player.equipment)) {
+      return hasMeaningfulModernPlayerData(parsedSnapshot.player);
+    }
+  }
+
+  return false;
+}
+
+export function normalizeStoredPlayerDataMap(rawPlayerDataMap, allowPartial = true) {
+  if (!isPlainObject(rawPlayerDataMap)) {
+    return null;
+  }
+
+  const result = {};
+  let savedCount = 0;
+  for (const playerId of QUEUE_PLAYER_IDS) {
+    const playerDataValue = rawPlayerDataMap[playerId];
+    if (playerDataValue == null || playerDataValue === '') {
+      if (allowPartial) {
+        continue;
+      }
+      return null;
+    }
+
+    if (typeof playerDataValue !== 'string' || playerDataValue.trim().length === 0) {
+      if (allowPartial) {
+        continue;
+      }
+      return null;
+    }
+
+    try {
+      const parsedSnapshot = JSON.parse(playerDataValue);
+      if (!hasMeaningfulPlayerSnapshotData(parsedSnapshot)) {
+        if (allowPartial) {
+          continue;
+        }
+        return null;
+      }
+    } catch (error) {
+      if (allowPartial) {
+        continue;
+      }
+      return null;
+    }
+
+    result[playerId] = playerDataValue;
+    savedCount += 1;
+  }
+
+  if (!allowPartial && savedCount !== QUEUE_PLAYER_IDS.length) {
+    return null;
+  }
+  if (savedCount === 0) {
+    return null;
+  }
+  return result;
+}
+
+export function upsertPlayerDataSnapshotToStorage(normalizedPlayerDataMap) {
+  const normalized = normalizeStoredPlayerDataMap(normalizedPlayerDataMap, true);
+  if (!normalized) {
+    removeStorageItem(PLAYER_DATA_SNAPSHOT_STORAGE_KEY, { throwIfUnavailable: true });
+    return 0;
+  }
+
+  const payload = {
+    version: PLAYER_DATA_SNAPSHOT_STORAGE_VERSION,
+    savedAt: Date.now(),
+    playerDataMap: normalized,
+  };
+  setJsonStorage(PLAYER_DATA_SNAPSHOT_STORAGE_KEY, payload, { throwIfUnavailable: true });
+  return payload.savedAt;
+}
+
+export function clearPlayerDataSnapshotFromStorage() {
+  removeStorageItem(PLAYER_DATA_SNAPSHOT_STORAGE_KEY, { throwIfUnavailable: true });
+}
+
+export function loadPlayerDataSnapshotFromStorage() {
+  if (!isLocalStorageAvailable()) {
+    return { status: 'error', savedAt: 0, playerDataMap: {} };
+  }
+
+  const rawValue = getStorageItem(PLAYER_DATA_SNAPSHOT_STORAGE_KEY);
+  if (!rawValue) {
+    return { status: 'not_found', savedAt: 0, playerDataMap: {} };
+  }
+
+  try {
+    const parsed = JSON.parse(rawValue);
+    if (!isPlainObject(parsed) || parsed.version !== PLAYER_DATA_SNAPSHOT_STORAGE_VERSION) {
+      return { status: 'invalid', savedAt: 0, playerDataMap: {} };
+    }
+
+    const normalizedPlayerDataMap = normalizeStoredPlayerDataMap(parsed.playerDataMap, true);
+    if (!normalizedPlayerDataMap) {
+      return { status: 'invalid', savedAt: 0, playerDataMap: {} };
+    }
+
+    return {
+      status: 'ok',
+      savedAt: toFiniteNumber(parsed.savedAt, 0),
+      playerDataMap: normalizedPlayerDataMap,
+    };
+  } catch (error) {
+    return { status: 'invalid', savedAt: 0, playerDataMap: {} };
+  }
+}
+
+export function savePlayerDataSnapshotToStorage(rawPlayerDataMap) {
+  const normalizedPlayerDataMap = normalizeStoredPlayerDataMap(snapshotPlayerDataMap(rawPlayerDataMap), true);
+  if (!normalizedPlayerDataMap || Object.keys(normalizedPlayerDataMap).length === 0) {
+    throw new Error('invalid player data snapshot');
+  }
+  return upsertPlayerDataSnapshotToStorage(normalizedPlayerDataMap);
+}
+
+export function createPlayerDataSnapshotState() {
+  const loadResult = loadPlayerDataSnapshotFromStorage();
+  if (loadResult.status !== 'ok') {
+    return {
+      savedAt: 0,
+      playerDataMap: {},
+    };
+  }
+
+  return {
+    savedAt: Number(loadResult.savedAt || 0),
+    playerDataMap: loadResult.playerDataMap || {},
+  };
+}
+
+function normalizeActionSnapshotValueToHrid(rawValue) {
+  const source = String(rawValue || '').trim();
+  if (!source) {
+    return '';
+  }
+  if (source.startsWith('/actions/')) {
+    return source;
+  }
+
+  const normalized = source.toLowerCase();
+  for (const action of Object.values(actionDetailIndex || {})) {
+    const actionName = String(action?.name || '')
+      .trim()
+      .toLowerCase();
+    if (actionName && actionName === normalized) {
+      return String(action?.hrid || source);
+    }
+  }
+
+  return source;
+}
+
+function normalizeMonsterSnapshotValueToHrid(rawValue) {
+  const source = String(rawValue || '').trim();
+  if (!source) {
+    return '';
+  }
+  if (source.startsWith('/monsters/')) {
+    return source;
+  }
+
+  const normalized = source.toLowerCase();
+  for (const monster of Object.values(monsterDetailIndex || {})) {
+    const monsterName = String(monster?.name || '')
+      .trim()
+      .toLowerCase();
+    if (monsterName && monsterName === normalized) {
+      return String(monster?.hrid || source);
+    }
+  }
+
+  return source;
+}
+
+export function parsePlayerSnapshotSummary(playerDataJson) {
+  try {
+    const parsed = JSON.parse(playerDataJson);
+    const modernSettings = isPlainObject(parsed?.simulationSettings) ? parsed.simulationSettings : null;
+    const zoneHrid = normalizeActionSnapshotValueToHrid(modernSettings?.zoneHrid);
+    const dungeonHrid = normalizeActionSnapshotValueToHrid(modernSettings?.dungeonHrid);
+    const labyrinthHrid = normalizeMonsterSnapshotValueToHrid(modernSettings?.labyrinthHrid);
+    const difficultyRaw = String(modernSettings?.difficultyTier ?? '');
+    const difficultyDisplay = difficultyRaw
+      ? difficultyRaw.startsWith('T')
+        ? difficultyRaw
+        : `T${difficultyRaw}`
+      : '-';
+    const zoneFallback = String(modernSettings?.zoneHrid || zoneHrid || '-');
+    const dungeonFallback = String(modernSettings?.dungeonHrid || dungeonHrid || '-');
+    const labyrinthFallback = String(modernSettings?.labyrinthHrid || labyrinthHrid || '-');
+
+    return {
+      zoneHrid,
+      dungeonHrid,
+      labyrinthHrid,
+      zone: getIndexedActionName(zoneHrid, zoneFallback),
+      dungeon: getIndexedActionName(dungeonHrid, dungeonFallback),
+      difficulty: difficultyDisplay,
+      simulationTime: String(modernSettings?.simulationTimeHours ?? '-'),
+      labyrinth: getIndexedMonsterName(labyrinthHrid, labyrinthFallback),
+      roomLevel: String(modernSettings?.roomLevel ?? '-'),
+    };
+  } catch (error) {
+    return {
+      zoneHrid: '',
+      dungeonHrid: '',
+      labyrinthHrid: '',
+      zone: '-',
+      dungeon: '-',
+      difficulty: '-',
+      simulationTime: '-',
+      labyrinth: '-',
+      roomLevel: '-',
+    };
+  }
+}
+
+export function loadEquipmentSetsFromStorage() {
+  const modernData = readJsonStorage(EQUIPMENT_SET_STORAGE_KEY);
+  const source = modernData;
+
+  const normalized = {};
+  for (const [rawName, rawEntry] of Object.entries(source)) {
+    const name = String(rawName || '').trim();
+    if (!name) {
+      continue;
+    }
+
+    const entry = isPlainObject(rawEntry) ? rawEntry : {};
+    const hasModernShape = isPlainObject(rawEntry) && Object.prototype.hasOwnProperty.call(rawEntry, 'queueChanges');
+    if (!hasModernShape) {
+      continue;
+    }
+
+    normalized[name] = {
+      savedAt: clampPositiveInteger(entry.savedAt, Date.now()),
+      queueChanges: normalizeEquipmentSetQueueChanges(entry.queueChanges),
+    };
+  }
+
+  if (hasJsonStorageChanged(source, normalized)) {
+    persistEquipmentSetsToStorage(normalized);
+  }
+  return normalized;
+}
+
+export function persistEquipmentSetsToStorage(equipmentSets) {
+  const source = isPlainObject(equipmentSets) ? equipmentSets : {};
+  const normalized = {};
+  for (const [rawName, rawEntry] of Object.entries(source)) {
+    const name = String(rawName || '').trim();
+    if (!name) {
+      continue;
+    }
+    const entry = isPlainObject(rawEntry) ? rawEntry : {};
+    normalized[name] = {
+      savedAt: clampPositiveInteger(entry.savedAt, Date.now()),
+      queueChanges: normalizeEquipmentSetQueueChanges(entry.queueChanges),
+    };
+  }
+  setJsonStorage(EQUIPMENT_SET_STORAGE_KEY, normalized);
+}

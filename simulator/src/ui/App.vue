@@ -1,262 +1,222 @@
 <template>
-  <div class="mx-auto w-full max-w-[1440px] px-4 py-5 lg:px-8">
-    <header class="sticky top-0 z-40 mb-4">
-      <div class="panel overflow-hidden">
-        <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div class="flex flex-wrap items-center gap-2">
-            <h1 class="font-heading text-2xl font-bold text-amber-300">{{ t("common:title", "MWI Combat Simulator") }}</h1>
-            <span class="rounded-full border border-amber-300/30 bg-amber-300/10 px-2 py-1 text-xs font-semibold text-amber-200/80">
-              v{{ appVersion }}
-            </span>
-          </div>
+  <SidebarProvider>
+    <AppSidebar
+      :version="appVersion"
+      :ironcow-mode="isIroncowMode"
+      :unread-patch-notes-count="patchNotesUnreadCount"
+      :patch-notes-label="patchNotesButtonAriaLabel"
+      @feedback="openFeedbackModal"
+      @open-patch-notes="openPatchNotesUnreadModal"
+    />
 
-          <div class="flex flex-wrap items-center gap-2">
-            <RouterLink class="action-button-muted" exact-active-class="top-nav-active" to="/home">{{ t('common:menu.home', 'Home') }}</RouterLink>
-            <RouterLink class="action-button-muted" exact-active-class="top-nav-active" to="/advisor">{{ t('common:menu.advisor', 'Advisor / 刷图推荐') }}</RouterLink>
-            <RouterLink class="action-button-muted" exact-active-class="top-nav-active" to="/enhancement">{{ t('common:menu.enhancement', 'Enhancement') }}</RouterLink>
-            <RouterLink class="action-button-muted" exact-active-class="top-nav-active" to="/skilling">{{ t('common:menu.skilling', 'Skilling') }}</RouterLink>
-            <RouterLink class="action-button-muted" exact-active-class="top-nav-active" to="/queue">{{ t('common:menu.queue', 'Queue') }}</RouterLink>
-            <RouterLink class="action-button-muted" exact-active-class="top-nav-active" to="/multi-results">{{ t('common:menu.multiResults', 'Multi-round') }}</RouterLink>
-            <RouterLink class="action-button-muted" exact-active-class="top-nav-active" to="/settings">{{ t('common:menu.settings', 'Settings') }}</RouterLink>
-            <button
-              type="button"
-              class="action-button-muted patch-notes-trigger"
-              :class="{ 'patch-notes-trigger-unread': hasUnreadPatchNotes }"
-              :aria-label="patchNotesButtonAriaLabel"
-              :title="patchNotesButtonAriaLabel"
-              @click="openPatchNotesModal"
+    <SidebarInset :style="{ '--app-sticky-shell-height': stickyShellHeight }">
+      <header
+        class="sticky top-0 z-40 border-b border-border bg-background/94 backdrop-blur supports-[backdrop-filter]:bg-background/84"
+      >
+        <div class="mx-auto flex h-12 max-w-[1500px] items-center gap-2 px-3 sm:px-5">
+          <SidebarTrigger class="md:hidden" mobile />
+          <SidebarTrigger class="hidden md:inline-flex" />
+          <div class="mx-1 h-4 w-px bg-border" aria-hidden="true" />
+          <h1 class="min-w-0 flex-1 truncate font-heading text-sm font-semibold text-foreground">
+            {{ currentPageTitle }}
+          </h1>
+          <template v-if="showCombatToolbar && simulator.players.length">
+            <div class="mx-1 h-4 w-px bg-border" aria-hidden="true" />
+            <PlayerCardsStrip
+              class="min-w-0 max-w-[78%]"
+              :players="simulator.players"
+              :active-player-id="simulator.activePlayerId"
+              @select-player="simulator.setActivePlayer"
+            />
+          </template>
+          <div class="mx-1 h-4 w-px bg-border" aria-hidden="true" />
+          <MarketPriceIndicator v-if="!isIroncowMode" />
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            :disabled="gameModeSwitchLocked"
+            :class="isIroncowMode ? 'text-primary' : ''"
+            :aria-label="gameModeToggleAriaLabel"
+            :title="gameModeToggleAriaLabel"
+            data-game-mode-toggle
+            @click="toggleGameMode"
+          >
+            <!-- 模式图标为成对自定义 SVG（沿用 lucide 风格的 2px 圆头描边，尺寸由 Button
+                 的 [&_svg]:size-4 统一约束）：铁牛 → 牛头（铁牛本牛）；标准 → 天平（衡量
+                 基准，对应市场开放的常规玩法）。描边取 currentColor，铁牛态自动染主色。 -->
+            <svg
+              v-if="isIroncowMode"
+              data-game-mode-icon="ironcow"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
             >
-              <span>{{ t("common:patchNotes", "Patch Notes") }}</span>
-              <span v-if="hasUnreadPatchNotes" class="patch-notes-unread-badge" aria-hidden="true">
-                {{ t("common:vue.app.patchNotesUnreadBadge", "Unread") }}
-              </span>
-            </button>
-            <a
-              href="https://github.com/MarkLiu1205/MwiExtenstion"
-              class="action-button-muted header-icon-link"
-              :aria-label="t('common:vue.app.feedbackGitHubAriaLabel', 'GitHub Repository')"
-              :title="t('common:vue.app.feedbackGitHubAriaLabel', 'GitHub Repository')"
-              target="_blank"
-              rel="noopener noreferrer"
+              <path d="M6.3 8.1C5 7.3 4.2 5.7 4.5 3.9" />
+              <path d="M17.7 8.1C19 7.3 19.8 5.7 19.5 3.9" />
+              <path
+                d="M8.5 7.5H15.5C17.8 7.5 19 9.4 19 11.5C19 15.5 16 19 12 19C8 19 5 15.5 5 11.5C5 9.4 6.2 7.5 8.5 7.5Z"
+              />
+              <path d="M9.9 14.8h.01" />
+              <path d="M14.1 14.8h.01" />
+            </svg>
+            <svg
+              v-else
+              data-game-mode-icon="standard"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
             >
-              <svg aria-hidden="true" class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-                <path
-                  d="M12 .5a12 12 0 0 0-3.79 23.39c.6.11.82-.26.82-.58v-2.05c-3.34.73-4.04-1.41-4.04-1.41-.55-1.38-1.33-1.74-1.33-1.74-1.09-.74.08-.73.08-.73 1.21.08 1.85 1.21 1.85 1.21 1.07 1.8 2.81 1.28 3.49.98.11-.76.42-1.28.76-1.58-2.66-.3-5.47-1.3-5.47-5.8 0-1.28.47-2.33 1.22-3.15-.12-.3-.53-1.53.12-3.18 0 0 1-.31 3.3 1.2a11.61 11.61 0 0 1 6 0c2.29-1.51 3.29-1.2 3.29-1.2.66 1.65.25 2.88.12 3.18.76.82 1.22 1.87 1.22 3.15 0 4.51-2.81 5.5-5.49 5.79.43.37.81 1.08.81 2.18v3.24c0 .32.22.7.83.58A12 12 0 0 0 12 .5Z"
-                />
-              </svg>
-              <span class="sr-only">{{ t("common:vue.app.feedbackGitHubAriaLabel", "GitHub Repository") }}</span>
-            </a>
-            <button
-              type="button"
-              class="action-button-muted header-icon-button"
-              :aria-label="themeToggleAriaLabel"
-              :title="themeToggleAriaLabel"
-              @click="toggleTheme"
-            >
-              <svg
-                v-if="theme === 'dark'"
-                aria-hidden="true"
-                class="h-4 w-4"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="1.8"
-              >
-                <path d="M21.752 15.002A9.718 9.718 0 0 1 18 15.75 9.75 9.75 0 0 1 8.25 6c0-1.33.266-2.597.748-3.752A9.753 9.753 0 1 0 21.752 15.002Z" />
-              </svg>
-              <svg
-                v-else
-                aria-hidden="true"
-                class="h-4 w-4"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="1.8"
-              >
-                <circle cx="12" cy="12" r="4" />
-                <path d="M12 2.75v2.5M12 18.75v2.5M21.25 12h-2.5M5.25 12h-2.5M18.541 5.459l-1.768 1.768M7.227 16.773l-1.768 1.768M18.541 18.541l-1.768-1.768M7.227 7.227 5.459 5.459" />
-              </svg>
-              <span class="sr-only">{{ themeToggleAriaLabel }}</span>
-            </button>
+              <path d="M10.5 3h3" />
+              <path d="M12 3v18" />
+              <path d="M8.5 21h7" />
+              <path d="M5 7.5h14" />
+              <path d="M5 7.5l-2.3 5.1" />
+              <path d="M5 7.5l2.3 5.1" />
+              <path d="M2.7 12.6a2.3 2.3 0 0 0 4.6 0" />
+              <path d="M19 7.5l-2.3 5.1" />
+              <path d="M19 7.5l2.3 5.1" />
+              <path d="M16.7 12.6a2.3 2.3 0 0 0 4.6 0" />
+            </svg>
+            {{ gameModeLabel }}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            :aria-label="themeToggleAriaLabel"
+            :title="themeToggleAriaLabel"
+            @click="toggleTheme"
+          >
+            <Sun v-if="theme === 'dark'" />
+            <Moon v-else />
+          </Button>
+        </div>
+      </header>
+
+      <CombatCommandBar
+        v-if="showCombatToolbar"
+        :queue-actions-disabled="queueActionsDisabled"
+        :has-baseline="activeQueueHasBaseline"
+        :party-mismatch="activeQueuePartyMismatch"
+        :item-count="activeQueueItemCount"
+        :queue-progress-text="activeQueueProgressText"
+        :party-summary-text="activeQueuePartySummaryText"
+        :party-warning-text="activeQueuePartyWarningText"
+        :action-status-text="topQueueActionStatusText"
+        :action-status-class="topQueueActionStatusClass"
+        :show-simulation-actions="showHomeSimulationActions"
+        :simulation-running="simulator.runtime.isRunning"
+        :simulation-actions-disabled="queueActionsDisabled"
+        :show-runtime-summary="showRuntimeSummary"
+        :runtime-progress="simulator.runtime.progress"
+        :runtime-error="simulator.runtime.error"
+        :progress-label="progressLabel"
+        :show-advisor-actions="showAdvisorActions"
+        :advisor-running="advisorRunning"
+        :advisor-progress="advisorProgress"
+        :advisor-progress-text="advisorProgressText"
+        :advisor-phase-text="advisorPhaseText"
+        :show-advisor-summary="showAdvisorSummary"
+        @set-baseline="setQueueBaselineFromTopbar"
+        @add-queue="addToQueueFromTopbar"
+        @run-queue="runQueueFromTopbar"
+        @clear-queue="clearQueueFromTopbar"
+        @start-simulation="simulator.startSimulation()"
+        @stop-simulation="simulator.stopSimulation()"
+        @run-advisor="runAdvisorFromTopbar"
+        @stop-advisor="stopAdvisorFromTopbar"
+        @height-change="setCombatCommandBarHeight"
+        @view-error="openGlobalError('runtime', $event)"
+      />
+
+      <main class="mx-auto w-full max-w-[1500px] px-3 py-4 sm:px-5 sm:py-5">
+        <!-- 铁牛模式筹备中：主内容区替换为极简空态（引导加入 QQ 群讨论）；
+             补丁说明页（唯一保留的通用信息页）仍正常渲染，其余路由一律不渲染。 -->
+        <div
+          v-if="isIroncowMode && route.name !== 'patch-notes'"
+          class="flex min-h-[50vh] items-center justify-center"
+          data-ironcow-placeholder
+        >
+          <div class="space-y-1 text-center text-sm text-muted-foreground">
+            <p>{{ t('common:vue.app.ironcowInProgress', 'Iron Cow mode is in preparation') }}</p>
+            <p>
+              {{ t('common:vue.app.ironcowJoinGroup', FALLBACK_IRONCOW_JOIN_GROUP, { group: QQ_GROUP_NUMBER }) }}
+            </p>
           </div>
         </div>
+        <RouterView v-else />
+      </main>
+    </SidebarInset>
 
-        <div v-if="showCombatToolbar" class="mt-3 rounded-xl border border-white/10 bg-slate-900/40 p-3">
-          <div class="flex flex-col gap-3">
-            <div class="flex flex-col gap-3 xl:grid xl:grid-cols-[minmax(0,1fr)_640px] xl:items-start 2xl:grid-cols-[minmax(0,1fr)_720px]">
-              <div class="min-w-0 space-y-3">
-                <div class="flex flex-wrap items-center gap-2">
-                  <button type="button"
-                    class="action-button-muted"
-                   
-                    :disabled="queueActionsDisabled"
-                    @click="setQueueBaselineFromTopbar"
-                  >
-                    {{ t("common:queue.setBaseline", "Set Baseline") }}
-                  </button>
-                  <button type="button"
-                    class="action-button-muted"
-                   
-                    :disabled="queueActionsDisabled || !activeQueueHasBaseline || activeQueuePartyMismatch"
-                    @click="addToQueueFromTopbar"
-                  >
-                    {{ t("common:queue.addToQueue", "Add To Queue") }}
-                  </button>
-                  <button type="button"
-                    class="action-button-primary"
-                   
-                    :disabled="queueActionsDisabled || !activeQueueHasBaseline || activeQueueItemCount === 0 || activeQueuePartyMismatch"
-                    @click="runQueueFromTopbar"
-                  >
-                    {{ t("common:queue.runQueue", "Run Queue") }}
-                  </button>
-                  <button type="button"
-                    class="action-button-danger"
-                   
-                    :disabled="queueActionsDisabled || activeQueueItemCount === 0"
-                    @click="clearQueueFromTopbar"
-                  >
-                    {{ t("common:queue.clearQueue", "Clear Queue") }}
-                  </button>
-                  <span class="text-xs text-slate-400">
-                    {{ t("common:queue.queueList", "Queue List") }}:
-                    <span class="ml-1 text-slate-100">{{ activeQueueItemCount }}</span>
-                  </span>
-                  <span class="text-xs text-slate-400">
-                    {{ t("common:vue.queue.queueProgress", "Queue Progress") }}:
-                    <span class="ml-1 text-slate-100">{{ activeQueueProgressText }}</span>
-                  </span>
-                  <span v-if="activeQueuePartySummaryText" class="text-xs text-slate-400">
-                    {{ t("common:queue.partyLockedMembers", "Locked party") }}:
-                    <span class="ml-1 text-slate-100">{{ activeQueuePartySummaryText }}</span>
-                  </span>
-                </div>
-              </div>
-
-              <div class="grid gap-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-                <div
-                  v-for="player in simulator.players"
-                  :key="player.id"
-                  class="cursor-pointer rounded-xl border px-2 py-1.5 transition"
-                  :class="[
-                    simulator.activePlayerId === player.id ? 'border-amber-300 bg-amber-300/10' : 'border-white/10 bg-slate-900/40',
-                  ]"
-                  tabindex="0"
-                  @click="simulator.setActivePlayer(player.id)"
-                  @keydown.enter.self.prevent="simulator.setActivePlayer(player.id)"
-                  @keydown.space.self.prevent="simulator.setActivePlayer(player.id)"
-                >
-                  <div class="flex items-center gap-1.5">
-                    <input
-                      v-model="player.name"
-                      :aria-label="t('common:player', 'Player')"
-                      class="w-[72px] min-w-0 flex-none bg-transparent font-heading text-[11px] leading-none"
-                      @click.stop="simulator.setActivePlayer(player.id)"
-                      @focus="simulator.setActivePlayer(player.id)"
-                    />
-                    <label class="badge flex shrink-0 items-center justify-center px-1.5 py-1 text-slate-200" @click.stop>
-                      <input
-                        v-model="player.selected"
-                        :aria-label="t('common:vue.app.simToggle', 'Sim')"
-                        class="h-3.5 w-3.5"
-                        type="checkbox"
-                        @click.stop
-                      />
-                    </label>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <p v-if="topQueueActionStatusText" class="text-xs" :class="topQueueActionStatusClass">{{ topQueueActionStatusText }}</p>
-            <p v-if="activeQueuePartyWarningText" class="text-xs text-amber-300">{{ activeQueuePartyWarningText }}</p>
-
-            <div v-if="showRuntimeSummary" class="space-y-2 border-t border-white/10 pt-3">
-              <div class="flex flex-wrap items-center justify-between gap-2 text-xs uppercase tracking-[0.14em] text-slate-400">
-                <span>{{ t("common:vue.app.runtime", "Runtime") }}</span>
-                <span class="text-slate-300">{{ progressLabel }}</span>
-              </div>
-              <div class="h-2 overflow-hidden rounded-full bg-slate-800">
-                <div class="h-full bg-gradient-to-r from-teal-400 to-amber-300 transition-all" :style="{ width: `${Math.floor(simulator.runtime.progress * 100)}%` }"></div>
-              </div>
-              <div v-if="simulator.runtime.error" class="flex flex-wrap items-center gap-2">
-                <p class="text-sm text-rose-300">{{ runtimeErrorText }}</p>
-                <button
-                  v-if="isAdvisorRunningError"
-                  type="button"
-                  class="action-button-danger text-xs"
-                  @click="forceStopAdvisorScan"
-                >
-                  {{ t("common:vue.app.forceStopAdvisor", "Force stop advisor scan") }}
-                </button>
-                <button type="button" class="action-button-muted text-xs" @click="openGlobalError('runtime', simulator.runtime.error)">
-                  {{ t("common:vue.app.viewErrorDetails", "Details") }}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </header>
-
-    <main>
-      <RouterView />
-    </main>
-
-    <BaseModal :open="globalErrorModalOpen" :title="t('common:vue.app.globalErrorTitle', 'Error')" @close="globalErrorModalOpen = false">
-      <p class="text-sm text-slate-300">{{ t("common:vue.app.globalErrorDesc", "Please copy the following details if you report this issue.") }}</p>
-      <pre class="max-h-[320px] overflow-auto rounded-xl border border-white/10 bg-slate-950/70 p-3 text-xs text-rose-200">{{ globalErrorText }}</pre>
+    <BaseModal
+      :open="globalErrorModalOpen"
+      :title="t('common:vue.app.globalErrorTitle', 'Error')"
+      @close="globalErrorModalOpen = false"
+    >
+      <p class="text-sm text-foreground/85">
+        {{ t('common:vue.app.globalErrorDesc', 'Please copy the following details if you report this issue.') }}
+      </p>
+      <pre
+        class="max-h-[320px] overflow-auto rounded-md border border-border bg-muted/50 p-3 text-xs text-destructive"
+        >{{ globalErrorText }}</pre>
       <div class="flex flex-wrap items-center gap-2">
-        <button type="button" class="action-button-primary" @click="copyGlobalError">
-          {{ t("common:vue.common.copy", "Copy") }}
+        <button type="button" class="button-primary" @click="copyGlobalError">
+          {{ t('common:vue.common.copy', 'Copy') }}
         </button>
-        <span class="text-xs text-slate-400">{{ errorCopyStatus }}</span>
+        <span class="text-xs text-muted-foreground">{{ errorCopyStatus }}</span>
       </div>
     </BaseModal>
 
     <BaseModal
-      :open="patchNotesModalOpen"
-      :title="t('common:patchNotes', 'Patch Notes')"
-      panel-class="max-w-[96vw] xl:max-w-[1100px]"
-      initial-focus-selector="[data-patch-notes-start]"
-      @close="closePatchNotesModal"
+      :open="feedbackModalOpen"
+      :title="t('common:vue.app.feedback', 'Feedback')"
+      initial-focus-selector="[data-feedback-copy]"
+      @close="closeFeedbackModal"
     >
       <div class="space-y-3">
-        <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
-          <span>{{ t("common:vue.settings.versionsCount", "Versions", { count: patchNotesEntries.length }) }}</span>
-          <span v-if="hasUnreadPatchNotes">
-            {{ t("common:vue.app.patchNotesUnreadStatus", "Unread updates", { count: patchNotesUnreadCount }) }}
-          </span>
-        </div>
-
-        <p class="text-xs text-slate-400">
-          {{ t("common:vue.app.patchNotesMarkReadHint", "Unread patch notes will be marked as read when you close this dialog.") }}
+        <p class="text-sm text-foreground/85">
+          {{
+            t('common:vue.app.feedbackHint', 'Use the following channels for feedback, bug reports, or suggestions.')
+          }}
         </p>
 
-        <div
-          v-if="patchNotesEntries.length > 0"
-          class="max-h-[65vh] space-y-2 overflow-y-auto pr-1 outline-none"
-          data-patch-notes-start
-          tabindex="-1"
-        >
-          <DisclosurePanel
-            v-for="entry in patchNotesEntries"
-            :key="entry.entryId"
-            :title="entry.label"
-            :default-open="entry.entryId === patchNotesDefaultOpenEntryId"
-          >
-            <ul class="list-disc space-y-1 pl-5 text-sm text-slate-200">
-              <li v-for="note in entry.notes" :key="note">{{ note }}</li>
-            </ul>
-          </DisclosurePanel>
+        <div class="feedback-contact-list">
+          <div class="feedback-contact-row">
+            <div class="min-w-0">
+              <p class="feedback-contact-label">{{ t('common:vue.app.feedbackQqLabel', 'QQ Group') }}</p>
+              <p class="feedback-contact-value">{{ QQ_GROUP_NUMBER }}</p>
+            </div>
+            <button
+              type="button"
+              class="button-secondary text-xs"
+              data-feedback-copy
+              @click="copyFeedbackContact(QQ_GROUP_NUMBER)"
+            >
+              {{ t('common:vue.common.copy', 'Copy') }}
+            </button>
+          </div>
+
+          <div class="feedback-contact-row">
+            <div class="min-w-0">
+              <p class="feedback-contact-label">{{ t('common:vue.app.feedbackEmailLabel', 'QQ Email') }}</p>
+              <a class="feedback-contact-link" :href="`mailto:${FEEDBACK_EMAIL}`">{{ FEEDBACK_EMAIL }}</a>
+            </div>
+            <button type="button" class="button-secondary text-xs" @click="copyFeedbackContact(FEEDBACK_EMAIL)">
+              {{ t('common:vue.common.copy', 'Copy') }}
+            </button>
+          </div>
         </div>
 
-        <p v-else class="text-sm text-slate-300" data-patch-notes-start tabindex="-1">
-          {{ t("common:vue.app.patchNotesEmpty", "No patch notes yet.") }}
-        </p>
+        <p class="text-xs text-muted-foreground">{{ feedbackCopyStatus }}</p>
       </div>
     </BaseModal>
 
@@ -266,52 +226,64 @@
       initial-focus-selector="[data-simulation-results-confirm]"
       @close="closeSimulationCompleteModal"
     >
-      <p class="text-sm text-slate-300">{{ t("common:vue.app.simulationCompleteDesc", "Simulation completed. Go to Home results now?") }}</p>
+      <p class="text-sm text-foreground/85">
+        {{ t('common:vue.app.simulationCompleteDesc', 'Simulation completed. Go to Home results now?') }}
+      </p>
       <div class="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          class="action-button-primary"
-          data-simulation-results-confirm
-          @click="goToHomeResults"
-        >
-          {{ t("common:vue.app.goToHomeResults", "Go to Home Results") }}
+        <button type="button" class="button-primary" data-simulation-results-confirm @click="goToHomeResults">
+          {{ t('common:vue.app.goToHomeResults', 'Go to Home Results') }}
         </button>
-        <button type="button" class="action-button-muted" @click="closeSimulationCompleteModal">
-          {{ t("common:vue.app.stayHere", "Stay Here") }}
+        <button type="button" class="button-secondary" @click="closeSimulationCompleteModal">
+          {{ t('common:vue.app.stayHere', 'Stay Here') }}
         </button>
       </div>
     </BaseModal>
 
     <BaseModal
       :open="baselineReminderModalOpen"
-      :title="t('common:queue.baselineReminderTitle', 'Baseline Rounds Reminder')"
+      :title="t('common:queue.baselineReminderTitle', 'Rounds Reminder')"
       initial-focus-selector="[data-baseline-reminder-acknowledge]"
       @close="closeBaselineReminderModal"
     >
       <div class="space-y-3">
-        <p class="text-sm text-slate-300">
-          {{ t("common:queue.baselineReminderBody", "Fewer baseline rounds can make the result more volatile. Adjust the setting first if you want a more stable baseline.") }}
+        <p class="text-sm text-foreground/85">
+          {{
+            t(
+              'common:queue.baselineReminderBody',
+              'Fewer rounds can make the result more volatile. Adjust the setting first if you want more stable results.',
+            )
+          }}
         </p>
-        <p class="text-sm text-amber-200">
+        <p class="text-sm text-primary">
           {{ baselineReminderCurrentRoundsText }}
         </p>
-        <p class="text-xs text-amber-100">
-          {{ t("common:queue.baselineRecommendationHint", "Recommended: at least 10 rounds, with 20-30 as the usual stable range; use 50+ when comparing very close options.") }}
+        <p class="text-xs text-primary">
+          {{
+            t(
+              'common:queue.baselineRecommendationHint',
+              'Recommended: at least 10 rounds, with 20-30 as the usual stable range; use 50+ when comparing very close options.',
+            )
+          }}
         </p>
-        <p class="text-xs text-slate-400">
-          {{ t("common:queue.baselineReminderAggregationHint", "Set Baseline runs multiple rounds using the current baseline round count and uses the aggregated result as the queue comparison baseline.") }}
+        <p class="text-xs text-muted-foreground">
+          {{
+            t(
+              'common:queue.baselineReminderAggregationHint',
+              'Set Baseline runs the configured number of rounds; the baseline and queue items share the same seed set, so each round is paired, and the aggregated result becomes the queue comparison baseline.',
+            )
+          }}
         </p>
         <div class="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            class="action-button-primary"
+            class="button-primary"
             data-baseline-reminder-acknowledge
             @click="acknowledgeBaselineReminderAndRun"
           >
-            {{ t("common:queue.baselineReminderAcknowledge", "I understand, don't show again") }}
+            {{ t('common:queue.baselineReminderAcknowledge', "I understand, don't show again") }}
           </button>
-          <button type="button" class="action-button-muted" @click="openBaselineReminderSettings">
-            {{ t("common:queue.baselineReminderGoToSettings", "Go to Settings") }}
+          <button type="button" class="button-secondary" @click="openBaselineReminderSettings">
+            {{ t('common:queue.baselineReminderGoToSettings', 'Go to Settings') }}
           </button>
         </div>
       </div>
@@ -323,77 +295,626 @@
       initial-focus-selector="[data-multi-results-confirm]"
       @close="closeQueueCompleteModal"
     >
-      <p class="text-sm text-slate-300">{{ t("common:vue.app.queueCompleteDesc", "Queue run started. Go to the Multi-round page now?") }}</p>
+      <p class="text-sm text-foreground/85">
+        {{ t('common:vue.app.queueCompleteDesc', 'Queue run started. Go to the Multi-round page now?') }}
+      </p>
       <div class="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          class="action-button-primary"
-          data-multi-results-confirm
-          @click="goToMultiResults"
-        >
-          {{ t("common:vue.app.goToMultiResults", "Go to Multi-round") }}
+        <button type="button" class="button-primary" data-multi-results-confirm @click="goToMultiResults">
+          {{ t('common:vue.app.goToMultiResults', 'Go to Multi-round') }}
         </button>
-        <button type="button" class="action-button-muted" @click="closeQueueCompleteModal">
-          {{ t("common:vue.app.stayHere", "Stay Here") }}
+        <button type="button" class="button-secondary" @click="closeQueueCompleteModal">
+          {{ t('common:vue.app.stayHere', 'Stay Here') }}
         </button>
       </div>
     </BaseModal>
-  </div>
+
+    <BaseModal
+      :open="equipmentPriceConfirmationModalOpen"
+      :title="t('common:queue.confirmPriceChoiceTitle', 'Choose target equipment price')"
+      panel-class="max-w-[96vw] lg:max-w-[min(1280px,96vw)]"
+      initial-focus-selector="[data-confirm-price-rows]"
+      @close="cancelEquipmentPriceConfirmation"
+    >
+      <div class="space-y-3">
+        <p class="text-sm text-foreground/85">
+          {{
+            t(
+              'common:queue.confirmPriceChoiceBody',
+              "Each changed equipment row can use a reference price, a manual price, or a Philosopher's Mirror combination. Review each row before confirming.",
+            )
+          }}
+        </p>
+        <p v-if="equipmentPriceConfirmationRefreshFailed" class="text-xs text-warning">
+          {{
+            t(
+              'common:queue.confirmHourlyAverageCached',
+              'The official market refresh failed. Review the fallback source and data time below.',
+            )
+          }}
+        </p>
+        <p v-if="equipmentPriceConfirmationError" class="text-xs text-destructive" role="alert">
+          {{ equipmentPriceConfirmationError }}
+        </p>
+
+        <div class="rounded-md border border-border bg-muted/40 p-3">
+          <p class="control-label">
+            {{ t('common:queue.mirrorPriceShared', "Philosopher's Mirror price (shared)") }}
+          </p>
+          <div class="mt-1 flex items-center gap-2">
+            <input
+              type="text"
+              inputmode="numeric"
+              autocomplete="off"
+              class="control-input !rounded !px-2 !py-1.5 text-xs w-32"
+              :placeholder="t('common:queue.manualPricePlaceholder', 'Enter buy price (digits only)')"
+              :value="sharedMirrorPriceDraft"
+              @input="sanitizeSharedMirrorPriceInput"
+            />
+            <div
+              class="flex h-7 shrink-0 items-center gap-0.5 rounded border border-input bg-background p-0.5"
+              role="group"
+              :aria-label="t('common:queue.manualPriceUnit', 'Buy price unit')"
+            >
+              <button
+                v-for="unit in MANUAL_PRICE_UNITS"
+                :key="unit.value"
+                type="button"
+                class="h-6 w-7 rounded-sm text-xs font-semibold transition-colors"
+                :class="
+                  sharedMirrorPriceUnit === unit.value
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                "
+                :aria-pressed="sharedMirrorPriceUnit === unit.value"
+                @click="setSharedMirrorPriceUnit(unit.value)"
+              >
+                {{ unit.value }}
+              </button>
+            </div>
+            <span v-if="autoMirrorPrice != null" class="text-xs text-muted-foreground">
+              {{
+                t('common:queue.mirrorPriceAuto', FALLBACK_MIRROR_PRICE_AUTO, {
+                  price: formatConfirmedMarketPrice(autoMirrorPrice),
+                })
+              }}
+            </span>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto rounded-md border border-border" data-confirm-price-rows>
+          <table class="w-full table-fixed text-left text-sm">
+            <thead class="bg-muted/60 text-xs text-muted-foreground">
+              <tr>
+                <th class="w-[13%] whitespace-nowrap px-3 py-2">
+                  {{ t('common:queue.confirmPriceEquipment', 'Equipment') }}
+                </th>
+                <th class="w-[22%] whitespace-nowrap px-3 py-2">
+                  {{ t('common:queue.confirmPriceMethod', 'Method') }}
+                </th>
+                <th class="w-[26%] whitespace-nowrap px-3 py-2">
+                  {{ t('common:queue.confirmPriceReference', 'Reference Price') }}
+                </th>
+                <th class="w-[19%] whitespace-nowrap px-3 py-2">{{ t('common:queue.confirmPriceValue', 'Price') }}</th>
+                <th class="w-[20%] whitespace-nowrap px-3 py-2">
+                  {{ t('common:queue.confirmPriceMirrorCost', 'Mirror Cost (incl. baseline)') }}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="entry in pendingEquipmentPriceConfirmations"
+                :key="`${entry.itemHrid}|${entry.enhancementLevel}`"
+                class="border-t border-border align-top"
+              >
+                <td class="w-[13%] whitespace-nowrap px-3 py-2">
+                  {{ localizeHridDisplayName(entry.itemHrid) }}
+                  <span class="text-muted-foreground">+{{ entry.enhancementLevel }}</span>
+                </td>
+                <td class="w-[22%] px-3 py-2">
+                  <div class="flex flex-nowrap items-center gap-x-3">
+                    <label
+                      class="flex items-center gap-1.5 whitespace-nowrap text-xs"
+                      :class="!hasReferencePrice(entry) ? 'cursor-not-allowed opacity-50' : ''"
+                      :title="
+                        !hasReferencePrice(entry)
+                          ? t('common:queue.left1Unavailable', 'No reference price is available for this target.')
+                          : ''
+                      "
+                    >
+                      <input
+                        type="radio"
+                        :name="`price-method-${entry.itemHrid}-${entry.enhancementLevel}`"
+                        :value="QUEUE_PRICE_METHOD_LEFT1"
+                        :checked="getPriceMethod(entry) === QUEUE_PRICE_METHOD_LEFT1"
+                        :disabled="!hasReferencePrice(entry)"
+                        @change="setPriceMethod(entry, QUEUE_PRICE_METHOD_LEFT1)"
+                      />
+                      {{ t('common:queue.priceMethodLeft1', 'Left 1') }}
+                    </label>
+                    <label
+                      class="flex items-center gap-1.5 whitespace-nowrap text-xs"
+                      :class="!hasRealTargetBid(entry) ? 'cursor-not-allowed opacity-50' : ''"
+                      :title="
+                        !hasRealTargetBid(entry)
+                          ? t('common:queue.right1Unavailable', 'No valid bid is available for this target.')
+                          : ''
+                      "
+                    >
+                      <input
+                        type="radio"
+                        :name="`price-method-${entry.itemHrid}-${entry.enhancementLevel}`"
+                        :value="QUEUE_PRICE_METHOD_RIGHT1"
+                        :checked="getPriceMethod(entry) === QUEUE_PRICE_METHOD_RIGHT1"
+                        :disabled="!hasRealTargetBid(entry)"
+                        @change="setPriceMethod(entry, QUEUE_PRICE_METHOD_RIGHT1)"
+                      />
+                      {{ t('common:queue.priceMethodRight1', 'Right 1') }}
+                    </label>
+                    <label class="flex items-center gap-1.5 whitespace-nowrap text-xs">
+                      <input
+                        type="radio"
+                        :name="`price-method-${entry.itemHrid}-${entry.enhancementLevel}`"
+                        :value="QUEUE_PRICE_METHOD_MANUAL"
+                        :checked="getPriceMethod(entry) === QUEUE_PRICE_METHOD_MANUAL"
+                        @change="setPriceMethod(entry, QUEUE_PRICE_METHOD_MANUAL)"
+                      />
+                      {{ t('common:queue.priceMethodManual', 'Manual') }}
+                    </label>
+                    <label
+                      class="flex items-center gap-1.5 whitespace-nowrap text-xs"
+                      :class="entry.mirrorPlan?.unavailable ? 'cursor-not-allowed opacity-50' : ''"
+                      :title="
+                        entry.mirrorPlan?.unavailable
+                          ? t('common:queue.mirrorUnavailable', 'Mirror plan is unavailable for this target.')
+                          : ''
+                      "
+                    >
+                      <input
+                        type="radio"
+                        :name="`price-method-${entry.itemHrid}-${entry.enhancementLevel}`"
+                        :value="QUEUE_PRICE_METHOD_MIRROR"
+                        :checked="getPriceMethod(entry) === QUEUE_PRICE_METHOD_MIRROR"
+                        :disabled="entry.mirrorPlan?.unavailable"
+                        @change="setPriceMethod(entry, QUEUE_PRICE_METHOD_MIRROR)"
+                      />
+                      {{ t('common:queue.priceMethodMirror', 'Mirror') }}
+                    </label>
+                  </div>
+                </td>
+                <td class="w-[26%] px-3 py-2">
+                  <div class="flex flex-col gap-1">
+                    <div class="flex flex-wrap items-center gap-x-2 gap-y-1 whitespace-nowrap text-xs">
+                      <span>
+                        {{ t('common:queue.confirmPriceLeft1', 'Left 1 (Buy)') }}:
+                        <template v-if="entry.reference">{{
+                          formatConfirmedMarketPrice(entry.reference.price)
+                        }}</template>
+                        <template v-else
+                          ><span class="text-muted-foreground">{{
+                            t('common:queue.confirmPriceMissing', '—')
+                          }}</span></template
+                        >
+                      </span>
+                      <span>
+                        {{ t('common:queue.confirmPriceRight1', 'Right 1 (Sell)') }}:
+                        <template v-if="hasRealTargetBid(entry)">{{
+                          formatConfirmedMarketPrice(entry.targetBid.price)
+                        }}</template>
+                        <template v-else
+                          ><span class="text-muted-foreground">{{
+                            t('common:queue.confirmPriceMissing', '—')
+                          }}</span></template
+                        >
+                      </span>
+                    </div>
+                    <span class="text-xs text-muted-foreground">
+                      {{ formatConfirmationSource(entry)
+                      }}<template v-if="isHistoricalAskEntry(entry)">
+                        · {{ t('common:queue.confirmPriceDataTime', 'Data Time') }}:
+                        {{ formatMarketDataTime(entry?.reference?.marketTimestamp) }}</template
+                      >
+                    </span>
+                    <template v-if="hasMarketUpdate(entry)">
+                      <span
+                        class="inline-flex w-fit items-center gap-1 rounded-md border border-warning/40 bg-warning/10 px-2 py-0.5 text-[11px] text-warning"
+                      >
+                        {{ t('common:queue.marketUpdatedBadge', 'New price') }}
+                      </span>
+                      <span v-if="getMarketUpdateInfo(entry)?.currentPrice != null" class="text-xs text-foreground/85">
+                        {{
+                          t('common:queue.marketUpdatedCurrent', FALLBACK_MARKET_UPDATED_CURRENT, {
+                            price: formatConfirmedMarketPrice(getMarketUpdateInfo(entry).currentPrice),
+                          })
+                        }}
+                      </span>
+                      <button
+                        type="button"
+                        class="button-secondary !px-2 !py-0.5 text-[11px]"
+                        @click="useUpdatedReferencePrice(entry)"
+                      >
+                        {{ t('common:queue.marketUpdatedUseNew', 'Use new price') }}
+                      </button>
+                    </template>
+                  </div>
+                </td>
+                <td class="px-3 py-2">
+                  <template v-if="getPriceMethod(entry) === QUEUE_PRICE_METHOD_MANUAL">
+                    <div class="flex items-center gap-1">
+                      <input
+                        type="text"
+                        inputmode="numeric"
+                        autocomplete="off"
+                        autocapitalize="off"
+                        spellcheck="false"
+                        data-manual-price-input
+                        :data-price-key="getManualPriceKey(entry)"
+                        class="control-input !rounded !px-2 !py-1.5 text-xs w-24"
+                        :placeholder="t('common:queue.manualPricePlaceholder', 'Enter buy price (digits only)')"
+                        :value="manualPriceDrafts[getManualPriceKey(entry)]"
+                        @input="sanitizeManualPriceInput($event, entry)"
+                      />
+                      <div
+                        class="flex h-7 shrink-0 items-center gap-0.5 rounded border border-input bg-background p-0.5"
+                        role="group"
+                        :aria-label="t('common:queue.manualPriceUnit', 'Buy price unit')"
+                      >
+                        <button
+                          v-for="unit in MANUAL_PRICE_UNITS"
+                          :key="unit.value"
+                          type="button"
+                          class="h-6 w-7 rounded-sm text-xs font-semibold transition-colors"
+                          :class="
+                            (manualPriceUnits[getManualPriceKey(entry)] || 'k') === unit.value
+                              ? 'bg-primary text-primary-foreground'
+                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                          "
+                          :aria-pressed="(manualPriceUnits[getManualPriceKey(entry)] || 'k') === unit.value"
+                          @click="handleManualPriceUnitChange(unit.value, entry)"
+                        >
+                          {{ unit.value }}
+                        </button>
+                      </div>
+                    </div>
+                  </template>
+                  <template v-else-if="getPriceMethod(entry) === QUEUE_PRICE_METHOD_MIRROR">
+                    <div class="flex flex-col gap-1">
+                      <div
+                        v-for="(missingItem, mIndex) in getMirrorMissingLevels(entry)"
+                        :key="`${getManualPriceKey(entry)}-mirror-input-${missingItem.itemHrid}-${missingItem.level}`"
+                        class="flex items-center gap-1"
+                      >
+                        <span
+                          v-if="
+                            mIndex === 0 &&
+                            (!entry.mirrorPlan ||
+                              entry.mirrorPlan.cost == null ||
+                              (entry.mirrorPlan.missing && entry.mirrorPlan.missing.length > 0))
+                          "
+                          class="inline-flex shrink-0 items-center text-warning"
+                          :title="getMirrorPlanMissingText(entry)"
+                          role="alert"
+                        >
+                          <AlertTriangle class="h-4 w-4" />
+                        </span>
+                        <span
+                          class="whitespace-nowrap text-xs text-muted-foreground"
+                          :title="
+                            t(
+                              'common:queue.mirrorInputHint',
+                              'Enter the buy price for this missing input piece (k/m/b unit)',
+                            )
+                          "
+                        >
+                          {{ formatMirrorInputMissingLevel(entry, missingItem) }}
+                        </span>
+                        <input
+                          type="text"
+                          inputmode="numeric"
+                          autocomplete="off"
+                          autocapitalize="off"
+                          spellcheck="false"
+                          data-mirror-manual-input
+                          :data-price-key="getManualPriceKey(entry)"
+                          :data-mirror-level="missingItem.level"
+                          :data-mirror-item="missingItem.itemHrid"
+                          class="control-input !rounded !px-1.5 !py-1 text-xs w-16"
+                          :placeholder="t('common:queue.manualPricePlaceholder', 'Enter buy price (digits only)')"
+                          :value="getMirrorInputDraft(entry, missingItem).raw"
+                          @input="sanitizeMirrorManualPriceInput($event, entry, missingItem)"
+                        />
+                        <div
+                          class="flex h-6 shrink-0 items-center gap-0.5 rounded border border-input bg-background p-0.5"
+                          role="group"
+                          :aria-label="t('common:queue.manualPriceUnit', 'Buy price unit')"
+                        >
+                          <button
+                            v-for="unit in MANUAL_PRICE_UNITS"
+                            :key="unit.value"
+                            type="button"
+                            class="h-5 w-6 rounded-sm text-[11px] font-semibold transition-colors"
+                            :class="
+                              getMirrorInputDraft(entry, missingItem).unit === unit.value
+                                ? 'bg-primary text-primary-foreground'
+                                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                            "
+                            :aria-pressed="getMirrorInputDraft(entry, missingItem).unit === unit.value"
+                            @click="handleMirrorManualPriceUnitChange(unit.value, entry, missingItem)"
+                          >
+                            {{ unit.value }}
+                          </button>
+                        </div>
+                        <!-- 即时反馈：该输入按当前单位（k/m/b）解析出的实际价格，避免位数误判。 -->
+                        <span
+                          v-if="getMirrorInputResolvedPrice(entry, missingItem) != null"
+                          class="whitespace-nowrap text-[11px] text-muted-foreground"
+                        >
+                          = {{ formatConfirmedMarketPrice(getMirrorInputResolvedPrice(entry, missingItem)) }}
+                        </span>
+                      </div>
+                    </div>
+                  </template>
+                  <template v-else-if="getPriceMethod(entry) === QUEUE_PRICE_METHOD_RIGHT1">
+                    <template v-if="hasRealTargetBid(entry)">
+                      {{ formatConfirmedMarketPrice(entry.targetBid.price) }}
+                    </template>
+                    <template v-else>
+                      <span class="text-muted-foreground">{{ t('common:queue.confirmPriceMissing', '—') }}</span>
+                    </template>
+                  </template>
+                  <template v-else>
+                    <template v-if="entry.reference">
+                      {{ formatConfirmedMarketPrice(entry.reference.price) }}
+                    </template>
+                    <template v-else>
+                      <span class="text-muted-foreground">{{ t('common:queue.confirmPriceMissing', '—') }}</span>
+                    </template>
+                  </template>
+                  <p
+                    v-if="manualPriceErrors[getManualPriceKey(entry)]"
+                    class="mt-1 text-xs text-destructive"
+                    role="alert"
+                  >
+                    {{ manualPriceErrors[getManualPriceKey(entry)] }}
+                  </p>
+                </td>
+                <td class="whitespace-nowrap px-3 py-2">
+                  <template
+                    v-if="
+                      getPriceMethod(entry) === QUEUE_PRICE_METHOD_MIRROR &&
+                      entry.mirrorPlan &&
+                      entry.mirrorPlan.cost != null
+                    "
+                  >
+                    <!-- 合并列：主数字为总成本（含基准件，与队列页合计、多轮买入价同口径），
+                         绿/红着色 vs 直购；副行为构成明细（现金 + 基准件）。 -->
+                    <div class="flex flex-col gap-0.5" :title="getMirrorTotalCostTooltip(entry)">
+                      <div class="flex flex-wrap items-baseline gap-x-1">
+                        <span
+                          :class="
+                            entry.reference && getMirrorPrimaryCost(entry) > entry.reference.price
+                              ? 'text-xs font-semibold text-destructive'
+                              : 'text-xs font-semibold text-emerald-500'
+                          "
+                        >
+                          {{ formatConfirmedMarketPrice(getMirrorPrimaryCost(entry)) }}
+                        </span>
+                        <span v-if="entry.reference" class="text-xs text-muted-foreground">
+                          ({{
+                            t('common:queue.mirrorVsDirect', FALLBACK_MIRROR_VS_DIRECT, {
+                              price: formatConfirmedMarketPrice(entry.reference.price),
+                            })
+                          }})
+                        </span>
+                      </div>
+                      <span
+                        v-if="getMirrorBreakdownText(entry) != null"
+                        :class="
+                          getMirrorBaselinePieceSaleValue(entry) > 0
+                            ? 'text-[11px] text-muted-foreground'
+                            : 'text-[11px] text-warning'
+                        "
+                      >
+                        {{ getMirrorBreakdownText(entry) }}
+                      </span>
+                    </div>
+                  </template>
+                  <template v-else>
+                    <span class="text-muted-foreground">{{ t('common:queue.confirmPriceMissing', '—') }}</span>
+                  </template>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button type="button" class="button-primary" @click="confirmEquipmentPricesAndAdd">
+            {{ t('common:queue.confirmFallbackPriceAction', 'Use these prices and enqueue') }}
+          </button>
+          <button type="button" class="button-secondary" @click="cancelEquipmentPriceConfirmation">
+            {{ t('common:vue.common.cancel', 'Cancel') }}
+          </button>
+        </div>
+      </div>
+    </BaseModal>
+
+    <BaseModal
+      :open="patchNotesUnreadModalOpen"
+      :title="t('common:patchNotes', 'Patch Notes')"
+      panel-class="max-w-[96vw] lg:max-w-2xl"
+      initial-focus-selector="[data-patch-notes-dismiss]"
+      @close="closePatchNotesUnreadModal"
+    >
+      <div class="space-y-4">
+        <p class="text-sm text-foreground/85">
+          {{ patchNotesUnreadDialogText }}
+        </p>
+        <div class="max-h-[60vh] space-y-4 overflow-y-auto pr-1">
+          <article
+            v-for="entry in patchNotesUnreadPreviewItems"
+            :key="entry.entryId"
+            class="rounded-lg border border-border bg-muted/30 p-4"
+          >
+            <h3 class="mb-3 font-heading text-sm font-semibold text-foreground">{{ entry.label }}</h3>
+            <PatchNoteSections :sections="entry.sections" />
+          </article>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button type="button" class="button-primary" data-patch-notes-view-all @click="viewAllPatchNotes">
+            {{ t('common:vue.app.patchNotesViewAll', 'View all patch notes') }}
+          </button>
+          <button
+            type="button"
+            class="button-secondary"
+            data-patch-notes-dismiss
+            @click="closePatchNotesUnreadModal('programmatic')"
+          >
+            {{ t('common:vue.app.patchNotesDismiss', 'Close') }}
+          </button>
+        </div>
+      </div>
+    </BaseModal>
+  </SidebarProvider>
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { RouterView, useRoute, useRouter } from 'vue-router';
+import { AlertTriangle, Languages, Moon, Sun } from '@lucide/vue';
 import {
   houseRoomDetailIndex as houseRoomDetailMap,
   itemDetailIndex as itemDetailMap,
-} from "../shared/gameDataIndex.js";
-import BaseModal from "./components/BaseModal.vue";
-import DisclosurePanel from "./components/DisclosurePanel.vue";
-import { useSimulatorStore } from "../stores/simulatorStore.js";
-import { useGameDataText } from "./composables/useGameDataText.js";
-import { useI18nText } from "./composables/useI18nText.js";
+} from '../shared/gameDataIndex.js';
+import BaseModal from './components/BaseModal.vue';
+import AppSidebar from './components/AppSidebar.vue';
+import CombatCommandBar from './components/CombatCommandBar.vue';
+import MarketPriceIndicator from './components/MarketPriceIndicator.vue';
+import PlayerCardsStrip from './components/PlayerCardsStrip.vue';
+import PatchNoteSections from './components/PatchNoteSections.vue';
+import { Button } from './components/ui/button/index.js';
+import { SidebarInset, SidebarProvider, SidebarTrigger } from './components/ui/sidebar/index.js';
+import { useSimulatorStore } from '../stores/simulatorStore.js';
+import { wasMarketPriceRefreshAttemptedRecently } from '../stores/simulatorPricingActions.js';
+import { formatCompactAmountForLocale } from '../services/amountFormatting.js';
+import { GAME_MODE_IRONCOW, GAME_MODE_STANDARD } from '../services/gameMode.js';
+import {
+  dungeonCalculatorRunInFlight,
+  isSimulationBusy,
+  isReactiveSimulationBusy,
+} from '../services/simulatorRunConflicts.js';
+// 顶栏模式切换兜底专用：触发器优化器运行注册表在两版统一忙碌清单之外（轻量模块，仅依赖
+// simulatorWorkerRuns，可安全静态引入，无主包体积风险）。
+import { hasTriggerOptimizerRunInProgress } from '../services/triggerOptimizerRunRegistry.js';
+import { useGameDataText } from './composables/useGameDataText.js';
+import { useI18nText } from './composables/useI18nText.js';
+import { useTheme } from './composables/useTheme.js';
 import {
   getUnreadPatchNoteEntries,
   initializePatchNotesState,
+  loadPatchNoteCatalog,
   markPatchNoteEntriesAsRead,
   resolvePatchNoteEntries,
-} from "./patchNotes.js";
+} from './patchNotes.js';
+import { dismissBaselineReminder, isBaselineReminderDismissed } from './baselineReminder.js';
+import { buildAdvisorProgressPercent, buildAdvisorRuntimePhaseText } from './advisorRuntimePresentation.js';
+import { deriveQueueItemStatusName } from './queueItemStatusPresentation.js';
+import { evaluateManualPriceDraft, normalizeManualPriceDraft } from './queueManualPriceValidation.js';
 import {
-  dismissBaselineReminder,
-  isBaselineReminderDismissed,
-} from "./baselineReminder.js";
-import { deriveQueueItemStatusName } from "./queueItemStatusPresentation.js";
+  computeMirrorPlan,
+  mergeConfirmedPricesAndSelections,
+  QUEUE_PRICE_METHOD_MANUAL,
+  QUEUE_PRICE_METHOD_MIRROR,
+  QUEUE_PRICE_METHOD_LEFT1,
+  QUEUE_PRICE_METHOD_RIGHT1,
+} from '../services/queueUpgradeCost.js';
+import { computeAssetScoreConfigSignature } from '../services/assetScorePresentation.js';
 
-const THEME_STORAGE_KEY = "mwi.ui.theme.v1";
 const appVersion = __APP_VERSION__;
+
+// 反馈联系方式——反馈弹窗的唯一数据来源。
+const QQ_GROUP_NUMBER = '1102475742';
+const FEEDBACK_EMAIL = '596846069@qq.com';
+
+// i18n fallback 字符串常量——这些字符串包含 i18next 的 {{price}} 插值占位符。
+// 必须在 <script setup> 中以普通 JS 字符串定义，而非直接写在 Vue 模板的 {{ t(...) }} 表达式内——
+// 否则 Vue 模板编译器会将 {{price}} 误识别为嵌套插值导致编译错误。
+// locale JSON 中已有对应翻译，这些常量仅在翻译缺失时作为 fallback 使用。
+const FALLBACK_MIRROR_PRICE_AUTO = 'Auto: {{price}}';
+const FALLBACK_MARKET_UPDATED_CURRENT = 'Now: {{price}}';
+const FALLBACK_MIRROR_VS_DIRECT = 'direct {{price}}';
+// 铁牛模式空态的"加群讨论"文案（{{group}} 为 QQ 群号插值，与反馈弹窗共用
+// QQ_GROUP_NUMBER 常量，避免群号两处维护）。
+const FALLBACK_IRONCOW_JOIN_GROUP = 'Join the QQ group to discuss: {{group}}';
 const simulator = useSimulatorStore();
 const router = useRouter();
 const route = useRoute();
-const theme = ref("dark");
+const { theme, toggleTheme } = useTheme();
 let deferredInitHandle = null;
 const globalErrorModalOpen = ref(false);
-const globalErrorText = ref("");
-const errorCopyStatus = ref("");
+const globalErrorText = ref('');
+const errorCopyStatus = ref('');
+const feedbackModalOpen = ref(false);
+const feedbackCopyStatus = ref('');
+// 语言切换进行中标记：用于禁用切换按钮，避免重复点击触发并发的语言包拉取。
+const languageSwitchPending = ref(false);
 const simulationCompleteModalOpen = ref(false);
 const queueCompleteModalOpen = ref(false);
 const baselineReminderModalOpen = ref(false);
+const equipmentPriceConfirmationModalOpen = ref(false);
+const pendingEquipmentPriceConfirmations = ref([]);
+const equipmentPriceConfirmationRefreshFailed = ref(false);
+// 确认失败（非草稿过期）时在弹窗内展示的错误横幅：顶部状态会被模态遮罩遮挡，
+// 仅靠它用户得不到任何反馈。保留弹窗与全部行数据，用户修正后可重试。
+const equipmentPriceConfirmationError = ref('');
+const manualPriceDrafts = ref({});
+const manualPriceUnits = ref({});
+const manualPriceErrors = ref({});
+const priceMethodByKey = ref({});
+const sharedMirrorPriceDraft = ref('');
+const sharedMirrorPriceUnit = ref('k');
+const autoMirrorPrice = ref(null);
+// prepareActivePlayerQueueAddition 异步拉取的历史 Ask 快照，供镜子方案取价链复用（与参考价列口径统一）。
+const historicalQuotesMap = ref(null);
+const marketUpdateByKey = ref({});
+// 镜子方案缺价件手动补价草稿：{ [rowKey]: { [itemHrid|level]: { raw, unit, count } } }。
+// 草稿键为 "itemHrid|level"（价格域感知）：精炼目标的低档输入件(+N-2)来自基础物品域，
+// 同一等级可能同时需要基础与精炼两种物品，仅按等级索引会混淆补价对象。
+const mirrorInputDrafts = ref({});
+const queueAdditionPending = ref(false);
+const pendingQueueDraftFingerprint = ref('');
 const baselineReminderDismissed = ref(isBaselineReminderDismissed());
-const patchNotesModalOpen = ref(false);
 const patchNotesUnreadEntries = ref([]);
+const patchNotesUnreadModalOpen = ref(false);
+const patchNotesUnreadPreviewEntryIds = ref([]);
 const topQueueActionStatus = ref({
-  tone: "secondary",
-  text: "",
+  tone: 'secondary',
+  text: '',
 });
-const { language, t } = useI18nText();
-const {
-  getAbilityName,
-  getActionName,
-  getHouseRoomName,
-  getItemName,
-  getSkillName,
-} = useGameDataText();
-const showCombatToolbar = computed(() => route.meta?.showCombatToolbar !== false);
+const { language, setLanguage, t } = useI18nText();
+const { getAbilityName, getActionName, getEquipmentSlotName, getHouseRoomName, getItemName, getSkillName } =
+  useGameDataText();
+// 全局游戏模式（标准 / 铁牛）：铁牛模式下模拟器功能尚未开发——主内容区替换为
+// 空态占位、战斗工具栏与市场价指示器隐藏、侧边栏只留底部通用入口；状态与
+// 持久化由 store 承载（simulator.gameMode / setGameMode）。
+const isIroncowMode = computed(() => simulator.gameMode === GAME_MODE_IRONCOW);
+const showCombatToolbar = computed(() => !isIroncowMode.value && route.meta?.showCombatToolbar !== false);
+const showHomeSimulationActions = computed(() => route.name === 'home');
+const showAdvisorActions = computed(() => route.name === 'advisor');
+const advisorRunning = computed(() => Boolean(simulator.advisor.runtime?.isRunning));
+const advisorProgress = computed(() => Number(simulator.advisor.runtime?.progress || 0));
+const advisorProgressText = computed(() => `${buildAdvisorProgressPercent(simulator.advisor.runtime)}%`);
+const advisorPhaseText = computed(() => buildAdvisorRuntimePhaseText(simulator.advisor.runtime || {}, t));
+// advisor 页进度摘要行常驻显示（替代被移走的页面内进度面板；空闲时 0% + 空闲）。
+const showAdvisorSummary = computed(() => showAdvisorActions.value);
+const combatCommandBarHeight = ref(0);
+const stickyShellHeight = computed(() => `${48 + (showCombatToolbar.value ? combatCommandBarHeight.value : 0)}px`);
+const currentPageTitle = computed(() =>
+  t(route.meta?.navLabelKey || 'common:title', route.meta?.navLabel || 'MWI Combat Simulator'),
+);
+
+function setCombatCommandBarHeight(height) {
+  const numericHeight = Number(height);
+  combatCommandBarHeight.value = Number.isFinite(numericHeight) ? Math.max(0, numericHeight) : 0;
+}
 
 const progressLabel = computed(() => {
   const progress = Math.floor(simulator.runtime.progress * 100);
@@ -401,134 +922,239 @@ const progressLabel = computed(() => {
   return `${progress}% | ${elapsed}s`;
 });
 
-const themeToggleAriaLabel = computed(() => (
-  theme.value === "dark"
-    ? t("common:vue.app.switchToLightTheme", "Switch to light mode")
-    : t("common:vue.app.switchToDarkTheme", "Switch to dark mode")
-));
+const themeToggleAriaLabel = computed(() =>
+  theme.value === 'dark'
+    ? t('common:vue.app.switchToLightTheme', 'Switch to light mode')
+    : t('common:vue.app.switchToDarkTheme', 'Switch to dark mode'),
+);
+const languageToggleTarget = computed(() => (language.value === 'zh' ? 'en' : 'zh'));
+const languageToggleLabel = computed(() => (language.value === 'zh' ? 'EN' : '中文'));
+const languageToggleAriaLabel = computed(() =>
+  language.value === 'zh'
+    ? t('common:vue.app.switchToEnglish', 'Switch to English')
+    : t('common:vue.app.switchToChinese', 'Switch to Chinese'),
+);
+// 顶栏模式按钮：显示当前模式名，点击切到另一模式；铁牛态用主色文案提示当前
+// 处于非默认模式（isIroncowMode 定义见上方 showCombatToolbar 前）。
+const gameModeLabel = computed(() =>
+  isIroncowMode.value
+    ? t('common:vue.app.gameModeIroncow', 'Iron Cow Mode')
+    : t('common:vue.app.gameModeStandard', 'Standard Mode'),
+);
+// 顶栏模式切换的运行态闸门：只锁「标准 → 铁牛」方向——运行中切入铁牛会卸载命令栏与
+// 页面组件（主内容区替换为占位），使运行中任务失去一切停止入口；反向保持可点，保证
+// 铁牛态残留运行时仍能切回标准恢复入口。按钮 disabled / aria 展示用响应式版
+// isReactiveSimulationBusy（运行态单一事实源；模块级 worker 句柄变化不触发 computed
+// 重算，完整版会缓存陈旧值，见 services/simulatorRunConflicts.js 顶部说明；首页多轮批
+// 运行期间 runtime.isRunning 持续为真，已被该响应式清单覆盖，不算盲区）。
+// 启动准备窗口（runtime.preparing：loadPlayerMapperModule 动态导入期间，isRunning 尚未
+// 置位，手动模拟与队列基线共用）不属于运行态清单，由下方计算式直读准备标志收口。
+// 计算器「模拟每轮时长」运行态属于 dungeonCalculatorStore、不在该清单内，且 App 顶层不得
+// import 该 store（dungeonProfitCalculator 的 6 份游戏数据 JSON 会进主包），故并入
+// dungeonCalculatorRunInFlight 响应式锚点（镜像 simulation.isRunning 的整个运行区间，含
+// 导入窗口与收尾复位）。预算优化停止收尾窗口由下方计算式直读其 runtime.serviceRunInFlight
+// 响应式锚点（stop 已把 isRunning 置假、搜索 promise 尚未结算，此前的可点失真即该窗口）。
+// 残余盲区还剩两类：一是预算优化「注册表已登记但两个 store 标志均为假」的纯模块级窗口（仅
+// 登记非响应式句柄/注册表，由 toggleGameMode 的点击时刻兜底以完整版 isSimulationBusy（非
+// 响应式）拦截，事件处理器内同步求值，不受 computed 缓存陈旧影响）；二是触发器优化器子运行
+// 窗口（换难度复核 / 追加复验 / 服务收尾只写 runtime 子状态、其运行登记在专属注册表，两版
+// 统一清单均不含，由下方计算式直读子状态、兜底判定注册表专项收口）。拦截分支补状态条提示
+// （回应「点击静默」缺口）。可见性局限：状态条随 CombatCommandBar 渲染，计算器 / 预算优化
+// 等 showCombatToolbar: false 的页面看不到该提示——这些页面的主盲区已由锚点真实禁用覆盖。
+const gameModeSwitchLocked = computed(
+  () =>
+    !isIroncowMode.value &&
+    (isReactiveSimulationBusy(simulator) ||
+      Boolean(simulator.runtime?.preparing) ||
+      dungeonCalculatorRunInFlight.value ||
+      Boolean(simulator.triggerOptimizer?.runtime?.robustness?.isRunning) ||
+      Boolean(simulator.triggerOptimizer?.runtime?.verifyAppend?.isRunning) ||
+      Boolean(simulator.triggerOptimizer?.runtime?.serviceRunInFlight) ||
+      // 预算优化停止收尾窗口：stop 已把 isRunning 置假、搜索 promise 尚未结算。
+      // 与上一行是两个独立 runtime 的同名字段，必须写全路径区分。
+      Boolean(simulator.budgetOptimizer?.runtime?.serviceRunInFlight)),
+);
+const gameModeToggleAriaLabel = computed(() => {
+  if (gameModeSwitchLocked.value) {
+    return t('common:vue.app.gameModeSwitchLocked', 'Stop the running task before switching to Iron Cow Mode');
+  }
+  return isIroncowMode.value
+    ? t('common:vue.app.switchToStandardMode', 'Switch to Standard Mode')
+    : t('common:vue.app.switchToIroncowMode', 'Switch to Iron Cow Mode');
+});
+function toggleGameMode() {
+  // 点击时刻的非响应式兜底，拦截两类响应式清单不可见 / 失真的窗口：完整版
+  // isSimulationBusy 拦预算优化注册表收尾等非响应式模块级窗口（只登记非响应式句柄 /
+  // 注册表，disabled 展示可能失真）；触发器优化器运行注册表（搜索 / 复核 / 追加复验
+  // 服务层登记，含停止后收尾）在两版统一清单之外，另行并列判定。事件处理器内同步求值，
+  // 不受 computed 缓存陈旧影响。保持单向锁定：铁牛态必须始终能切回标准恢复入口（兜底
+  // 只在标准态生效，铁牛 → 标准不拦）。计算器运行区间已由响应式锚点提前真实禁用按钮，
+  // 正常路径到不了这里；命中即补状态条提示，不留「点了没反应」的静默缺口（tone 取
+  // warning：可恢复的临时占用，与既有 warning 用例同款）。提示复用既有锁定键，fallback
+  // 与 gameModeToggleAriaLabel 逐字一致。
+  const notifyModeSwitchLocked = () => {
+    setTopQueueActionStatus(
+      'warning',
+      t('common:vue.app.gameModeSwitchLocked', 'Stop the running task before switching to Iron Cow Mode'),
+    );
+  };
+  // 启动准备窗口（动态导入 playerMapper）：运行标志尚未置位，但任务已在启动路径上，
+  // 此时切入铁牛会把它带进无停止入口的占位态。disabled 已覆盖正常点击，这里同步兜底。
+  if (!isIroncowMode.value && simulator.runtime?.preparing) {
+    notifyModeSwitchLocked();
+    return;
+  }
+  if (!isIroncowMode.value && isSimulationBusy(simulator)) {
+    notifyModeSwitchLocked();
+    return;
+  }
+  if (!isIroncowMode.value && hasTriggerOptimizerRunInProgress()) {
+    notifyModeSwitchLocked();
+    return;
+  }
+  simulator.setGameMode(isIroncowMode.value ? GAME_MODE_STANDARD : GAME_MODE_IRONCOW);
+}
 
 const activeQueueState = computed(() => simulator.activeQueueState || null);
-const activeQueuePartyStatus = computed(() => simulator.activeQueuePartyStatus || { hasMismatch: false, messageKey: "", memberNames: [] });
+const activeQueuePartyStatus = computed(
+  () => simulator.activeQueuePartyStatus || { hasMismatch: false, messageKey: '', memberNames: [] },
+);
 const activeQueuePartyMismatch = computed(() => Boolean(activeQueuePartyStatus.value?.hasMismatch));
-const activeQueuePartySummaryText = computed(() => (
+const activeQueuePartySummaryText = computed(() =>
   Array.isArray(activeQueuePartyStatus.value?.memberNames) && activeQueuePartyStatus.value.memberNames.length > 0
-    ? activeQueuePartyStatus.value.memberNames.join(" / ")
-    : ""
-));
-const activeQueuePartyWarningText = computed(() => (
+    ? activeQueuePartyStatus.value.memberNames.join(' / ')
+    : '',
+);
+const activeQueuePartyWarningText = computed(() =>
   activeQueuePartyMismatch.value
-    ? t(activeQueuePartyStatus.value?.messageKey || "common:queue.partyChangedSinceBaseline", activeQueuePartyStatus.value?.messageKey || "common:queue.partyChangedSinceBaseline")
-    : ""
-));
-const queueActionsDisabled = computed(() => Boolean(
-  simulator.runtime?.isRunning
-  || activeQueueState.value?.isRunning
-  || simulator.advisor.runtime?.isRunning
-));
+    ? t(
+        activeQueuePartyStatus.value?.messageKey || 'common:queue.partyChangedSinceBaseline',
+        activeQueuePartyStatus.value?.messageKey || 'common:queue.partyChangedSinceBaseline',
+      )
+    : '',
+);
+const queueActionsDisabled = computed(() => Boolean(isReactiveSimulationBusy(simulator) || queueAdditionPending.value));
 const activeQueueHasBaseline = computed(() => Boolean(activeQueueState.value?.baseline?.snapshot));
-const activeQueueItemCount = computed(() => (Array.isArray(activeQueueState.value?.items) ? activeQueueState.value.items.length : 0));
+const activeQueueItemCount = computed(() =>
+  Array.isArray(activeQueueState.value?.items) ? activeQueueState.value.items.length : 0,
+);
 const baselineReminderRoundCount = computed(() => {
-  const parsed = Number(activeQueueState.value?.settings?.baselineRounds || 1);
+  const parsed = Number(activeQueueState.value?.settings?.rounds ?? 30);
   if (!Number.isFinite(parsed)) {
-    return 1;
+    return 30;
   }
   return Math.max(1, Math.min(200, Math.floor(parsed)));
 });
-const baselineReminderCurrentRoundsText = computed(() => (
-  t(
-    "common:queue.baselineReminderCurrentRounds",
-    `Current baseline rounds: ${baselineReminderRoundCount.value}`,
-    { count: baselineReminderRoundCount.value }
-  )
-));
+const baselineReminderCurrentRoundsText = computed(() =>
+  t('common:queue.baselineReminderCurrentRounds', `Current rounds: ${baselineReminderRoundCount.value}`, {
+    count: baselineReminderRoundCount.value,
+  }),
+);
 const showRuntimeSummary = computed(() => Boolean(simulator.runtime.isRunning || simulator.runtime.error));
-// store 端的守衛訊息是固定英文字串，用完整比對辨識後在畫面上以繁中顯示並附上強制停止按鈕
-const ADVISOR_RUNNING_ERROR_TEXT = "Advisor scan is in progress. Stop the advisor scan before starting a manual simulation.";
-const isAdvisorRunningError = computed(() => String(simulator.runtime.error || "").trim() === ADVISOR_RUNNING_ERROR_TEXT);
-const runtimeErrorText = computed(() => (
-  isAdvisorRunningError.value
-    ? t("common:vue.app.advisorRunningError", "Advisor scan is in progress. Force-stop it or wait for it to finish before starting a manual simulation.")
-    : simulator.runtime.error
-));
-function forceStopAdvisorScan() {
-  simulator.stopAdvisorScan();
-  simulator.runtime.error = "";
-}
 const activeQueueProgressText = computed(() => {
   const progress = Number(activeQueueState.value?.progress || 0);
   if (!Number.isFinite(progress)) {
-    return "0%";
+    return '0%';
   }
   const clamped = Math.max(0, Math.min(1, progress));
   return `${Math.floor(clamped * 100)}%`;
 });
-const hasSimulationResults = computed(() => (
-  Boolean(simulator.results.simResult)
-  || (Array.isArray(simulator.results.simResults) && simulator.results.simResults.length > 0)
-  || (Array.isArray(simulator.results.summaryRows) && simulator.results.summaryRows.length > 0)
-  || (Array.isArray(simulator.results.batchRows) && simulator.results.batchRows.length > 0)
-));
-const topQueueActionStatusText = computed(() => topQueueActionStatus.value.text || "");
+const hasSimulationResults = computed(
+  () =>
+    Boolean(simulator.results.simResult) ||
+    (Array.isArray(simulator.results.simResults) && simulator.results.simResults.length > 0) ||
+    (Array.isArray(simulator.results.summaryRows) && simulator.results.summaryRows.length > 0) ||
+    (Array.isArray(simulator.results.batchRows) && simulator.results.batchRows.length > 0),
+);
+const topQueueActionStatusText = computed(() => topQueueActionStatus.value.text || '');
 const topQueueActionStatusClass = computed(() => {
-  if (topQueueActionStatus.value.tone === "success") {
-    return "text-emerald-300";
+  if (topQueueActionStatus.value.tone === 'success') {
+    return 'text-success';
   }
-  if (topQueueActionStatus.value.tone === "danger") {
-    return "text-rose-300";
+  if (topQueueActionStatus.value.tone === 'danger') {
+    return 'text-destructive';
   }
-  return "text-slate-300";
+  if (topQueueActionStatus.value.tone === 'warning') {
+    return 'text-warning';
+  }
+  return 'text-foreground/85';
 });
-const patchNotesEntries = computed(() => resolvePatchNoteEntries(undefined, language.value));
+// 补丁目录按需加载（见 patchNotes.js）：数据就绪前列表为空、未读徽标隐藏；
+// 拉取在挂载后立即发起，与首屏渲染并行，对用户不可感。
+const patchNotesEntries = ref([]);
+const patchNotesCatalog = ref(null);
+
+async function refreshPatchNotesEntries() {
+  if (!patchNotesCatalog.value) {
+    patchNotesCatalog.value = await loadPatchNoteCatalog();
+  }
+  patchNotesEntries.value = resolvePatchNoteEntries(patchNotesCatalog.value, language.value);
+  return patchNotesEntries.value;
+}
+const patchNotesUnreadPreviewItems = computed(() => {
+  const previewEntryIds = patchNotesUnreadPreviewEntryIds.value;
+  if (previewEntryIds.length === 0) {
+    return [];
+  }
+  const entriesById = new Map(patchNotesEntries.value.map((entry) => [entry.entryId, entry]));
+  return previewEntryIds.map((entryId) => entriesById.get(entryId)).filter((entry) => Boolean(entry));
+});
+
+// 将“缺失条目”诊断从 computed 移到 watch：computed 应保持纯函数、避免副作用，
+// 且仅在预览 id 列表实际变化时检查一次（渲染层已用 filter(Boolean) 兜底缺失项）。
+watch(patchNotesUnreadPreviewEntryIds, (previewEntryIds) => {
+  if (!import.meta.env.DEV || previewEntryIds.length === 0) {
+    return;
+  }
+  const entriesById = new Map(patchNotesEntries.value.map((entry) => [entry.entryId, entry]));
+  const missingEntryIds = previewEntryIds.filter((entryId) => !entriesById.has(entryId));
+  if (missingEntryIds.length > 0) {
+    console.warn('[patchNotes] preview entry ids missing from catalog:', missingEntryIds);
+  }
+});
 const patchNotesUnreadCount = computed(() => patchNotesUnreadEntries.value.length);
 const hasUnreadPatchNotes = computed(() => patchNotesUnreadCount.value > 0);
-const patchNotesDefaultOpenEntryId = computed(() => (
-  patchNotesUnreadEntries.value[0]?.entryId
-  || patchNotesEntries.value[0]?.entryId
-  || ""
-));
-const patchNotesButtonAriaLabel = computed(() => (
+const patchNotesButtonAriaLabel = computed(() =>
   hasUnreadPatchNotes.value
-    ? t("common:vue.app.patchNotesUnreadAriaLabel", "Patch Notes, {{count}} unread updates", { count: patchNotesUnreadCount.value })
-    : t("common:patchNotes", "Patch Notes")
-));
+    ? t('common:vue.app.patchNotesUnreadAriaLabel', 'Patch Notes, {{count}} unread versions', {
+        count: patchNotesUnreadCount.value,
+      })
+    : t('common:patchNotes', 'Patch Notes'),
+);
+const patchNotesUnreadDialogText = computed(() =>
+  t('common:vue.app.patchNotesUnreadDialogDesc', 'You have {{count}} unread versions:', {
+    count: patchNotesUnreadPreviewItems.value.length,
+  }),
+);
 const actionNameFallbackMap = computed(() => {
   const map = {};
-  const actionOptions = [
-    ...(simulator.options?.zones || []),
-    ...(simulator.options?.dungeons || []),
-  ];
+  const actionOptions = [...(simulator.options?.zones || []), ...(simulator.options?.dungeons || [])];
   for (const option of actionOptions) {
-    const hrid = String(option?.hrid || "");
+    const hrid = String(option?.hrid || '');
     if (!hrid || Object.prototype.hasOwnProperty.call(map, hrid)) {
       continue;
     }
-    map[hrid] = String(option?.name || "");
+    map[hrid] = String(option?.name || '');
   }
   return map;
 });
 
-function normalizeTheme(value) {
-  return value === "light" ? "light" : "dark";
-}
-
-function applyTheme(nextTheme) {
-  const normalizedTheme = normalizeTheme(nextTheme);
-  theme.value = normalizedTheme;
-  document.documentElement.dataset.theme = normalizedTheme;
-  localStorage.setItem(THEME_STORAGE_KEY, normalizedTheme);
-}
-
-function toggleTheme() {
-  applyTheme(theme.value === "dark" ? "light" : "dark");
-}
-
 function runDeferredInitialization() {
-  simulator.ensureMarketPricesLoaded(true);
+  // 铁牛态门控：铁牛语义禁用玩家市场（见 src/services/gameMode.js 自述），且铁牛态
+  // 无行情消费方（主内容区替换为占位、MarketPriceIndicator 已按 v-if 卸载）——
+  // ensureMarketPricesLoaded(true) 不经新鲜度短路、必发网络请求，故整体跳过。
+  // 铁牛态启动缺失的该次强制拉取由 gameMode watch 的切回补偿覆盖（见下方资产分
+  // 触发器 watch 旁）：「铁牛 → 标准」时补拉一次，标准态启动路径不变。
+  // ensureAbilityUpgradeReferenceDataLoaded 不门控：本地 bundle 参考数据 + 队列结果
+  // 刷新，无网络请求。
+  if (!isIroncowMode.value) {
+    simulator.ensureMarketPricesLoaded(true);
+  }
   simulator.ensureAbilityUpgradeReferenceDataLoaded();
 }
 
 function scheduleDeferredInitialization() {
-  if (typeof window.requestIdleCallback === "function") {
+  if (typeof window.requestIdleCallback === 'function') {
     deferredInitHandle = window.requestIdleCallback(runDeferredInitialization, { timeout: 1200 });
     return;
   }
@@ -540,7 +1166,7 @@ function cancelDeferredInitialization() {
     return;
   }
 
-  if (typeof window.cancelIdleCallback === "function") {
+  if (typeof window.cancelIdleCallback === 'function') {
     window.cancelIdleCallback(deferredInitHandle);
   } else {
     clearTimeout(deferredInitHandle);
@@ -550,38 +1176,57 @@ function cancelDeferredInitialization() {
 
 function setTopQueueActionStatus(tone, text) {
   topQueueActionStatus.value = {
-    tone: tone || "secondary",
-    text: String(text || ""),
+    tone: tone || 'secondary',
+    text: String(text || ''),
   };
 }
 
 function resolveQueueActionErrorMessage(error) {
-  const messageKey = typeof error === "string"
-    ? error
-    : (error?.message || String(error));
+  const messageKey = typeof error === 'string' ? error : error?.message || String(error);
+  if (error?.code === 'invalid_manual_price') {
+    const fallback =
+      messageKey === 'common:queue.priceSelectionInvalid'
+        ? 'The selected price must be greater than 0.'
+        : 'Enter a valid integer buy price greater than 0.';
+    return t(messageKey, fallback);
+  }
+  if (error?.code === 'missing_enhancement_ask') {
+    if (error?.queued) {
+      return t(
+        messageKey,
+        'A queued enhancement no longer has an exact sell listing. Remove that variant or wait for a valid listing before running the queue.',
+      );
+    }
+    const details = error?.details || {};
+    return t(messageKey, '{{slot}}: {{item}} +{{level}} has no exact sell listing and cannot be added to the queue.', {
+      slot: getEquipmentSlotName(details.slotKey, details.slotKey || 'Equipment'),
+      item: localizeHridDisplayName(details.itemHrid),
+      level: Number(details.enhancementLevel || 0),
+    });
+  }
   return t(messageKey, messageKey);
 }
 
 function isQueueActionCancelled(error) {
-  return Boolean(error?.code === "cancelled");
+  return Boolean(error?.code === 'cancelled');
 }
 
 function localizeHridDisplayName(hrid) {
-  const value = String(hrid || "");
+  const value = String(hrid || '');
   if (!value) {
-    return "-";
+    return '-';
   }
 
   if (Object.prototype.hasOwnProperty.call(itemDetailMap || {}, value)) {
     return getItemName(value, itemDetailMap[value]?.name || value);
   }
 
-  const abilityName = getAbilityName(value, "");
+  const abilityName = getAbilityName(value, '');
   if (abilityName && abilityName !== value) {
     return abilityName;
   }
 
-  if (Object.prototype.hasOwnProperty.call(actionNameFallbackMap.value || {}, value) || value.startsWith("/actions/")) {
+  if (Object.prototype.hasOwnProperty.call(actionNameFallbackMap.value || {}, value) || value.startsWith('/actions/')) {
     return getActionName(value, actionNameFallbackMap.value?.[value] || value);
   }
 
@@ -589,17 +1234,17 @@ function localizeHridDisplayName(hrid) {
 }
 
 function localizeQueueSkillName(skillKey) {
-  const fallback = String(skillKey || "").trim();
+  const fallback = String(skillKey || '').trim();
   return getSkillName(skillKey, fallback);
 }
 
 function localizeHouseRoomName(roomHrid) {
-  const value = String(roomHrid || "");
-  return getHouseRoomName(value, houseRoomDetailMap?.[value]?.name || value || "House Room");
+  const value = String(roomHrid || '');
+  return getHouseRoomName(value, houseRoomDetailMap?.[value]?.name || value || 'House Room');
 }
 
 function formatTopQueueVariantName(item, fallbackIndex = 1) {
-  const fallbackName = String(item?.name || `${t("common:queue.queueItem", "Queue Item")} ${fallbackIndex}`);
+  const fallbackName = String(item?.name || `${t('common:queue.queueItem', 'Queue Item')} ${fallbackIndex}`);
   return deriveQueueItemStatusName(item?.changeDetails, {
     t,
     fallbackText: fallbackName,
@@ -613,26 +1258,30 @@ function formatTopQueueVariantName(item, fallbackIndex = 1) {
 
 async function runTopbarBaselineSimulation() {
   try {
-    setTopQueueActionStatus("secondary", t("common:queue.baselineRunning", "Running baseline simulation..."));
+    setTopQueueActionStatus('secondary', t('common:queue.baselineRunning', 'Running baseline simulation...'));
     const baseline = await simulator.setQueueBaselineForActivePlayer({ runSimulation: true });
-    const baselineRounds = Math.max(
+    const capturedRounds = Math.max(
       1,
-      Math.floor(Number(baseline?.settings?.baselineRounds || activeQueueState.value?.settings?.baselineRounds || 1))
+      Math.floor(Number(baseline?.settings?.rounds ?? activeQueueState.value?.settings?.rounds ?? 30)),
     );
     setTopQueueActionStatus(
-      "success",
+      'success',
       t(
-        "common:vue.queue.msgBaselineCaptured",
-        `Baseline captured for active player. Current baseline rounds: ${baselineRounds}. Recommended: at least 10 rounds, with 20-30 as the usual stable range; use 50+ when comparing very close options.`,
-        { count: baselineRounds }
-      )
+        'common:vue.queue.msgBaselineCaptured',
+        `Baseline captured for active player. Current rounds: ${capturedRounds}. Recommended: at least 10 rounds, with 20-30 as the usual stable range; use 50+ when comparing very close options.`,
+        { count: capturedRounds },
+      ),
     );
   } catch (error) {
     if (isQueueActionCancelled(error)) {
-      setTopQueueActionStatus("secondary", t("common:vue.queue.msgBaselineCancelled", "Baseline simulation stopped."));
+      setTopQueueActionStatus('secondary', t('common:vue.queue.msgBaselineCancelled', 'Baseline simulation stopped.'));
       return;
     }
-    setTopQueueActionStatus("danger", resolveQueueActionErrorMessage(error));
+    setTopQueueActionStatus('danger', resolveQueueActionErrorMessage(error));
+    // 铁牛态命令栏与页面均已卸载，状态条不可见：拒绝启动的原因改走全局错误弹窗。
+    if (isIroncowMode.value) {
+      openGlobalError('runtime', resolveQueueActionErrorMessage(error));
+    }
   }
 }
 
@@ -644,65 +1293,997 @@ async function setQueueBaselineFromTopbar() {
   await runTopbarBaselineSimulation();
 }
 
-function addToQueueFromTopbar() {
-  try {
-    const items = simulator.addActivePlayerToQueue();
-    if (!Array.isArray(items) || items.length === 0) {
-      setTopQueueActionStatus("danger", t("common:vue.queue.msgNoChanges", "No changes detected (or baseline missing)."));
-      return;
-    }
-    if (items.length === 1) {
-      setTopQueueActionStatus("success", t("common:vue.queue.msgVariantAdded", "{{name}} added to queue.", { name: formatTopQueueVariantName(items[0], 1) }));
-      return;
-    }
-    setTopQueueActionStatus("success", t("common:vue.queue.msgVariantsAdded", "{{count}} variants added to queue.", { count: items.length }));
-  } catch (error) {
-    setTopQueueActionStatus("danger", resolveQueueActionErrorMessage(error));
+function reportAddedQueueItems(items) {
+  if (!Array.isArray(items) || items.length === 0) {
+    setTopQueueActionStatus('danger', t('common:vue.queue.msgNoChanges', 'No changes detected (or baseline missing).'));
+    return;
   }
+  if (items.length === 1) {
+    if (items.some((item) => Array.isArray(item?.costWarnings) && item.costWarnings.length > 0)) {
+      setTopQueueActionStatus(
+        'warning',
+        t(
+          'common:vue.queue.msgVariantAddedWithCostWarning',
+          '{{name}} added to queue. A market-price warning applies.',
+          { name: formatTopQueueVariantName(items[0], 1) },
+        ),
+      );
+      return;
+    }
+    setTopQueueActionStatus(
+      'success',
+      t('common:vue.queue.msgVariantAdded', '{{name}} added to queue.', {
+        name: formatTopQueueVariantName(items[0], 1),
+      }),
+    );
+    return;
+  }
+  if (items.some((item) => Array.isArray(item?.costWarnings) && item.costWarnings.length > 0)) {
+    setTopQueueActionStatus(
+      'warning',
+      t(
+        'common:vue.queue.msgVariantsAddedWithCostWarning',
+        '{{count}} variants added to queue. One or more market-price warnings apply.',
+        { count: items.length },
+      ),
+    );
+    return;
+  }
+  setTopQueueActionStatus(
+    'success',
+    t('common:vue.queue.msgVariantsAdded', '{{count}} variants added to queue.', { count: items.length }),
+  );
+}
+
+async function addToQueueFromTopbar() {
+  if (queueAdditionPending.value) {
+    return;
+  }
+  queueAdditionPending.value = true;
+  try {
+    setTopQueueActionStatus('secondary', t('common:queue.checkingMarketPrice', 'Checking latest market prices...'));
+    const preparation = await simulator.prepareActivePlayerQueueAddition();
+    if (preparation?.requiresConfirmation) {
+      pendingEquipmentPriceConfirmations.value = preparation.rows || [];
+      equipmentPriceConfirmationRefreshFailed.value = Boolean(preparation.refreshFailed);
+      pendingQueueDraftFingerprint.value = JSON.stringify(simulator.activePlayer);
+      autoMirrorPrice.value = preparation.mirrorPrice ?? null;
+      // 历史 Ask 快照：供镜子方案取价链复用，使镜子方案与参考价列口径一致。
+      historicalQuotesMap.value = preparation.historicalQuotes ?? null;
+      // 自动取到镜子价时直接预填到输入框（选最合适的 k/m/b 单位，保持整数整洁）；
+      // 金额无法用单位整除时留空，计算仍会自动兜底使用 autoMirrorPrice。
+      sharedMirrorPriceUnit.value = pickAmountUnitForDraft(autoMirrorPrice.value);
+      sharedMirrorPriceDraft.value = formatAmountDraftForUnit(autoMirrorPrice.value, sharedMirrorPriceUnit.value);
+      priceMethodByKey.value = {};
+      manualPriceDrafts.value = {};
+      manualPriceUnits.value = {};
+      manualPriceErrors.value = {};
+      equipmentPriceConfirmationError.value = '';
+      // 一次性快照：在弹窗打开时构建市场更新映射，不随后续刷新更新（见 buildMarketUpdateMap 注释）。
+      marketUpdateByKey.value = buildMarketUpdateMap();
+      mirrorInputDrafts.value = {};
+      equipmentPriceConfirmationModalOpen.value = true;
+      focusFirstManualPriceInput();
+      return;
+    }
+    reportAddedQueueItems(simulator.addActivePlayerToQueue());
+  } catch (error) {
+    setTopQueueActionStatus('danger', resolveQueueActionErrorMessage(error));
+  } finally {
+    queueAdditionPending.value = false;
+  }
+}
+
+function cancelEquipmentPriceConfirmation() {
+  equipmentPriceConfirmationModalOpen.value = false;
+  pendingEquipmentPriceConfirmations.value = [];
+  equipmentPriceConfirmationRefreshFailed.value = false;
+  equipmentPriceConfirmationError.value = '';
+  pendingQueueDraftFingerprint.value = '';
+  manualPriceDrafts.value = {};
+  manualPriceUnits.value = {};
+  manualPriceErrors.value = {};
+  priceMethodByKey.value = {};
+  sharedMirrorPriceDraft.value = '';
+  sharedMirrorPriceUnit.value = 'k';
+  autoMirrorPrice.value = null;
+  historicalQuotesMap.value = null;
+  marketUpdateByKey.value = {};
+  mirrorInputDrafts.value = {};
+}
+
+// 右一价（卖出）必须是真实的最高收购价（Bid）。市场没有买单时 resolveBaselineSaleQuote
+// 会用 Ask 兜底并把 source 标为 'ask'——这种兜底值不再展示，右一价方案也同步不可选。
+function hasRealTargetBid(entry) {
+  return Boolean(entry?.targetBid && entry.targetBid.price > 0 && entry.targetBid.source !== 'ask');
+}
+
+// 左一价（买入）必须有参考价（精确 Ask / 官方小时均价 / 历史 Ask）才能作为定价方式。
+function hasReferencePrice(entry) {
+  return Boolean(entry?.reference && entry.reference.price > 0);
+}
+
+function getPriceMethod(entry) {
+  const key = getManualPriceKey(entry);
+  const stored = priceMethodByKey.value[key];
+  if (stored === QUEUE_PRICE_METHOD_LEFT1) {
+    // 无参考价时左一价不可用：回退手动输入。
+    if (!hasReferencePrice(entry)) {
+      return QUEUE_PRICE_METHOD_MANUAL;
+    }
+    return stored;
+  }
+  if (stored === QUEUE_PRICE_METHOD_MANUAL) {
+    return stored;
+  }
+  if (stored === QUEUE_PRICE_METHOD_RIGHT1) {
+    // 无真实 Bid 时右一价不可用：回退到参考价方案（无参考价则手动）。
+    if (!hasRealTargetBid(entry)) {
+      return entry?.reference ? QUEUE_PRICE_METHOD_LEFT1 : QUEUE_PRICE_METHOD_MANUAL;
+    }
+    return stored;
+  }
+  if (stored === QUEUE_PRICE_METHOD_MIRROR) {
+    // 镜子方案不可用（与基准等级差不为 1）时，回退到默认方案，不允许选中镜子。
+    if (entry?.mirrorPlan?.unavailable) {
+      if (!entry?.reference) {
+        return QUEUE_PRICE_METHOD_MANUAL;
+      }
+      return QUEUE_PRICE_METHOD_LEFT1;
+    }
+    return stored;
+  }
+  // 无参考价时默认手动，否则默认左一价（买入参考）。
+  if (!entry?.reference) {
+    return QUEUE_PRICE_METHOD_MANUAL;
+  }
+  return QUEUE_PRICE_METHOD_LEFT1;
+}
+
+function setPriceMethod(entry, method) {
+  const key = getManualPriceKey(entry);
+  priceMethodByKey.value[key] = method;
+  // 切换定价方式即作废上一次确认失败在该行留下的错误提示（文案与旧方式绑定，避免残留误导）。
+  delete manualPriceErrors.value[key];
+  if (method === QUEUE_PRICE_METHOD_MIRROR) {
+    recomputeMirrorPlan(entry);
+  }
+}
+
+// 弹窗打开后聚焦第一个默认手动（无参考价）行的输入框。
+function focusFirstManualPriceInput() {
+  nextTick(() => {
+    const rows = Array.isArray(pendingEquipmentPriceConfirmations.value)
+      ? pendingEquipmentPriceConfirmations.value
+      : [];
+    const firstManualRow = rows.find((entry) => getPriceMethod(entry) === QUEUE_PRICE_METHOD_MANUAL);
+    if (!firstManualRow) {
+      return;
+    }
+    const key = getManualPriceKey(firstManualRow);
+    const inputs = Array.from(document.querySelectorAll('[data-manual-price-input]'));
+    const input = inputs.find((candidate) => candidate instanceof HTMLElement && candidate.dataset.priceKey === key);
+    if (input instanceof HTMLElement) {
+      input.focus();
+    }
+  });
+}
+
+// 对比已保存的队列项价格选择与当前市场参考价，标记"市场更新"（新出现精确价或价格变化）。
+// 设计说明：本函数在弹窗打开时（addToQueueFromTopbar）一次性构建快照存入 marketUpdateByKey，
+// 不随后续市场刷新自动更新——这是有意为之，避免用户确认过程中价格跳动造成困惑。
+// 弹窗关闭（cancelEquipmentPriceConfirmation）时清空，再次打开时重建。
+function buildMarketUpdateMap() {
+  const updateMap = {};
+  const queueItems = Array.isArray(simulator.activeQueueState?.items) ? simulator.activeQueueState.items : [];
+  for (const item of queueItems) {
+    // 合并 confirmedEquipmentPrices 与 priceSelections 后统一检查：
+    // 旧版（v2.2.0）队列项只保存 confirmedEquipmentPrices 而无 priceSelections，
+    // 若仅检查 priceSelections，这些旧队列项的市场更新检测会失效（不会显示"新价格"徽标）。
+    // mergeConfirmedPricesAndSelections 内置归一化（去重、过滤无效 price），对已归一化输入幂等。
+    const selections = mergeConfirmedPricesAndSelections(item);
+    for (const selection of selections) {
+      const key = getManualPriceKey(selection);
+      const currentRow = pendingEquipmentPriceConfirmations.value.find((row) => getManualPriceKey(row) === key);
+      if (!currentRow) {
+        continue;
+      }
+      // 仅对 left1（或无 method 的旧版 confirmed 条目）执行价格变化检测：
+      // mirror/right1/manual 的 selection.price 语义不同于参考价（Ask）——
+      // mirror 存总成本（现金合成成本 + 基准件出售价值）、right1 存 Bid 价、manual 存用户手输价，
+      // 与参考 Ask 价直接比几乎必然不等，会产生误报"新价格"徽标；点击"Use new price"还会强制
+      // 切回 left1，覆盖用户有意选择的定价方式。无 method 的旧版条目其 price 语义即参考价，仍参与比较。
+      if (selection.method && selection.method !== QUEUE_PRICE_METHOD_LEFT1) {
+        continue;
+      }
+      const currentReference = currentRow.reference;
+      const savedPrice = Number(selection.price || 0);
+      const currentPrice = currentReference ? Number(currentReference.price || 0) : 0;
+      // 只在"当前存在参考价且与入队时保存的价格不同"时标记市场更新。
+      // 旧逻辑中的 hasNewPrice（!currentReference && savedPrice > 0）语义实为"参考价消失"，
+      // 并非"出现新价格"，且会在无参考价时渲染出点击无效的"Use new price"按钮，故移除。
+      const priceChanged = currentReference && currentPrice > 0 && currentPrice !== savedPrice;
+      if (priceChanged) {
+        updateMap[key] = {
+          priceChanged,
+          savedPrice,
+          currentPrice,
+          currentSource: currentReference?.source || null,
+        };
+      }
+    }
+  }
+  return updateMap;
+}
+
+function hasMarketUpdate(entry) {
+  const key = getManualPriceKey(entry);
+  return Boolean(marketUpdateByKey.value[key]);
+}
+
+function getMarketUpdateInfo(entry) {
+  return marketUpdateByKey.value[getManualPriceKey(entry)] || null;
+}
+
+function useUpdatedReferencePrice(entry) {
+  const key = getManualPriceKey(entry);
+  const info = marketUpdateByKey.value[key];
+  if (!info || info.currentPrice == null) {
+    return;
+  }
+  // 切回左一价并锁定新价格。
+  priceMethodByKey.value[key] = QUEUE_PRICE_METHOD_LEFT1;
+  // 方式切换即作废旧错误提示，与 setPriceMethod 保持一致。
+  delete manualPriceErrors.value[key];
+  // 整体替换 .value 触发更新，不依赖 ref 的深度响应式代理——即使改为 shallowRef 也安全。
+  pendingEquipmentPriceConfirmations.value = pendingEquipmentPriceConfirmations.value.map((candidate) => {
+    const candidateKey = getManualPriceKey(candidate);
+    if (candidateKey !== key || !candidate.reference) {
+      return candidate;
+    }
+    return { ...candidate, reference: { ...candidate.reference, price: info.currentPrice } };
+  });
+  delete marketUpdateByKey.value[key];
+}
+
+function sanitizeSharedMirrorPriceInput(event) {
+  const rawValue = String(event.target.value || '');
+  const { normalized } = normalizeManualPriceDraft(rawValue);
+  sharedMirrorPriceDraft.value = normalized;
+  if (normalized !== rawValue) {
+    event.target.value = normalized;
+  }
+  // normalize 已剔除字母得到稳定纯数字串，无论原始输入是否含字母都应刷新，
+  // 避免粘贴 "12k" 等带字母输入时显示价与生效价短暂不一致。
+  refreshMirrorPlans();
+}
+
+function resolveSharedMirrorPrice() {
+  const unitMultiplier = getManualPriceUnitMultiplier(sharedMirrorPriceUnit.value);
+  const evaluation = evaluateManualPriceDraft(sharedMirrorPriceDraft.value, unitMultiplier);
+  if (evaluation.valid) {
+    return evaluation.actualPrice;
+  }
+  return autoMirrorPrice.value;
+}
+
+// 镜子补价草稿键："itemHrid|level"，与 computeMirrorPlan 的 manualInputPrices 域键同构，
+// 非精炼目标下 itemHrid 即行物品（与旧纯 level 键语义等价）。
+function getMirrorInputDraftKey(missingItem) {
+  const itemHrid = String(missingItem?.itemHrid || '');
+  const level = Math.max(0, Math.floor(Number(missingItem?.level || 0)));
+  return `${itemHrid}|${level}`;
+}
+
+function ensureMirrorInputDrafts(entry) {
+  const rowKey = getManualPriceKey(entry);
+  if (!mirrorInputDrafts.value[rowKey] || typeof mirrorInputDrafts.value[rowKey] !== 'object') {
+    mirrorInputDrafts.value[rowKey] = {};
+  }
+  return mirrorInputDrafts.value[rowKey];
+}
+
+// 收集该行镜子方案已填的有效手动补价：{ "itemHrid|level": 价格 }（价格域感知键，
+// computeMirrorPlan 据此把补价精确应用到对应物品的输入件上）。
+function collectMirrorManualPrices(entry) {
+  const drafts = mirrorInputDrafts.value[getManualPriceKey(entry)];
+  if (!drafts || typeof drafts !== 'object') {
+    return {};
+  }
+  const prices = {};
+  for (const [draftKey, draft] of Object.entries(drafts)) {
+    const unitMultiplier = getManualPriceUnitMultiplier(draft?.unit);
+    const evaluation = evaluateManualPriceDraft(draft?.raw, unitMultiplier);
+    if (evaluation.valid) {
+      prices[draftKey] = evaluation.actualPrice;
+    }
+  }
+  return prices;
+}
+
+// 需要手动补价的输入件 = 当前缺价 ∪ 已配置草稿（sticky，填完后仍可修改/清空）。
+// 每项携带 { itemHrid, level, count }：itemHrid 指明补价物品（精炼目标时低档输入为基础物品）。
+function getMirrorMissingLevels(entry) {
+  const drafts = mirrorInputDrafts.value[getManualPriceKey(entry)];
+  const sticky = drafts && typeof drafts === 'object' ? drafts : {};
+  const missingItems = (entry?.mirrorPlan?.missing || []).map((item) => ({
+    itemHrid: String(item.itemHrid || entry.itemHrid || ''),
+    level: Number(item.level),
+    // 软缺价条目 count 为 null（份数需补价后才能确定），保持 null 以便标签不渲染 ×N；
+    // 硬缺价/兜底条目 count 为确定正整数。
+    count: item.count == null ? null : Math.max(1, Math.floor(Number(item.count) || 1)),
+  }));
+  const byKey = new Map();
+  for (const missingItem of missingItems) {
+    byKey.set(getMirrorInputDraftKey(missingItem), missingItem);
+  }
+  for (const draftKey of Object.keys(sticky)) {
+    // 草稿键为 "itemHrid|level"，拆出补价物品与等级；无 '|' 的旧形状键忽略（每次弹窗打开时重建）。
+    const pipeIndex = draftKey.lastIndexOf('|');
+    if (pipeIndex <= 0) {
+      continue;
+    }
+    const itemHrid = draftKey.slice(0, pipeIndex);
+    const level = Number(draftKey.slice(pipeIndex + 1));
+    if (!itemHrid || !Number.isFinite(level) || level <= 0) {
+      continue;
+    }
+    if (!byKey.has(draftKey)) {
+      byKey.set(draftKey, {
+        itemHrid,
+        level,
+        count: sticky[draftKey]?.count == null ? null : Math.max(1, Math.floor(Number(sticky[draftKey]?.count) || 1)),
+      });
+    }
+  }
+  return Array.from(byKey.values()).sort(
+    (left, right) => left.level - right.level || left.itemHrid.localeCompare(right.itemHrid),
+  );
+}
+
+// 缺价输入框标签：count 确定（硬缺价/兜底）时显示"缺 +N ×count"；
+// 软缺价 count 为 null 时不显示份数——补价前无法确定展开后的真实需求份数。
+// 跨价格域的输入件（精炼目标的低档基础物品，itemHrid 与行物品不同）额外显示物品名，
+// 避免"缺 +13"被误读为行物品（精炼）+13 而补错价格。
+function formatMirrorInputMissingLevel(entry, missingItem) {
+  const level = Number(missingItem?.level || 0);
+  const count = missingItem?.count;
+  const itemHrid = String(missingItem?.itemHrid || entry?.itemHrid || '');
+  const crossDomain = Boolean(entry) && itemHrid !== String(entry.itemHrid || '');
+  if (count == null || !(count > 0)) {
+    if (crossDomain) {
+      return t('common:queue.mirrorInputMissingItemNoCount', 'Missing {{name}} +{{level}}', {
+        name: localizeHridDisplayName(itemHrid),
+        level,
+      });
+    }
+    return t('common:queue.mirrorInputMissingLevelNoCount', 'Missing +{{level}}', { level });
+  }
+  if (crossDomain) {
+    return t('common:queue.mirrorInputMissingItem', 'Missing {{name}} +{{level}} ×{{count}}', {
+      name: localizeHridDisplayName(itemHrid),
+      level,
+      count: Number(count),
+    });
+  }
+  return t('common:queue.mirrorInputMissingLevel', 'Missing +{{level}} ×{{count}}', {
+    level,
+    count: Number(count),
+  });
+}
+
+// 缺价等级的提示文案片段：同域（与行物品同款）仅显示等级（如 "+11"）；
+// 跨价格域（精炼目标的低档基础物品）附物品名（如 "轻灵兜帽 +13"），确保用户补对物品。
+function formatMirrorMissingLevelToken(entry, missingItem) {
+  const level = Number(missingItem?.level || 0);
+  const itemHrid = String(missingItem?.itemHrid || '');
+  if (entry && itemHrid && itemHrid !== String(entry.itemHrid || '')) {
+    return `${localizeHridDisplayName(itemHrid)} +${level}`;
+  }
+  return `+${level}`;
+}
+
+// 共享镜子价是否缺失：无自动价且顶部输入无效。行内错误与 hover 提示共用同一判定，避免口径漂移。
+function isSharedMirrorPriceMissing() {
+  const sharedMirrorPriceValid = evaluateManualPriceDraft(
+    sharedMirrorPriceDraft.value,
+    getManualPriceUnitMultiplier(sharedMirrorPriceUnit.value),
+  ).valid;
+  return autoMirrorPrice.value == null && !sharedMirrorPriceValid;
+}
+
+// 生成镜子方案缺价的明确提示：列出未填的输入件（跨价格域时附物品名）与缺失的镜子价。
+function getMirrorPlanMissingText(entry) {
+  const missingLevels = getMirrorMissingLevels(entry)
+    .filter((item) => {
+      const draft = getMirrorInputDraft(entry, item);
+      const unitMultiplier = getManualPriceUnitMultiplier(draft.unit);
+      return !evaluateManualPriceDraft(draft.raw, unitMultiplier).valid;
+    })
+    .map((item) => formatMirrorMissingLevelToken(entry, item));
+  const mirrorPriceMissing = isSharedMirrorPriceMissing();
+  const levelsText = missingLevels.join(', ');
+
+  if (missingLevels.length > 0 && mirrorPriceMissing) {
+    return t(
+      'common:queue.mirrorPlanMissingAll',
+      "Mirror plan still needs prices for +{{levels}} and the Philosopher's Mirror. Fill them in before confirming.",
+      { levels: levelsText },
+    );
+  }
+  if (missingLevels.length > 0) {
+    return t(
+      'common:queue.mirrorPlanMissingLevels',
+      'Mirror plan still needs prices for +{{levels}}. Enter them in the inputs below.',
+      { levels: levelsText },
+    );
+  }
+  if (mirrorPriceMissing) {
+    return t(
+      'common:queue.mirrorPlanMissingMirrorPrice',
+      "Mirror plan still needs the Philosopher's Mirror price. Enter it in the input at the top.",
+    );
+  }
+  return t(
+    'common:queue.mirrorPlanMissingUnavailable',
+    'The mirror plan is missing prices and cannot be calculated. Review the prices and confirm again.',
+  );
+}
+
+// 写入/刷新该行镜子方案的确认失败文案：仍缺输入价时列出具体输入件（跨价格域时附物品名，
+// 镜子价同时缺失时用组合文案），否则给出缺镜子价/方案不可用提示。供确认失败与补价过程中的
+// 错误刷新共用，保证行内文案始终与当前草稿一致。
+function setMirrorRowError(entry) {
+  const stillMissingLevels = getMirrorMissingLevels(entry)
+    .filter((item) => {
+      const draft = getMirrorInputDraft(entry, item);
+      const unitMultiplier = getManualPriceUnitMultiplier(draft.unit);
+      return !evaluateManualPriceDraft(draft.raw, unitMultiplier).valid;
+    })
+    .map((item) => formatMirrorMissingLevelToken(entry, item));
+  manualPriceErrors.value[getManualPriceKey(entry)] =
+    stillMissingLevels.length > 0 && !isSharedMirrorPriceMissing()
+      ? t(
+          'common:queue.mirrorPlanMissingInputs',
+          '{{name}} +{{level}}: enter the missing input prices ({{levels}}) for the mirror plan.',
+          {
+            name: localizeHridDisplayName(entry.itemHrid),
+            level: Number(entry.enhancementLevel || 0),
+            levels: stillMissingLevels.join(', '),
+          },
+        )
+      : getMirrorPlanMissingText(entry);
+}
+
+// 仅当该行已存在确认失败错误时刷新文案：错误仅在确认失败后出现，补价过程中保持实时准确。
+function refreshMirrorRowErrorIfPresent(entry) {
+  if (manualPriceErrors.value[getManualPriceKey(entry)] != null) {
+    setMirrorRowError(entry);
+  }
+}
+
+function getMirrorInputDraft(entry, missingItem) {
+  const drafts = mirrorInputDrafts.value[getManualPriceKey(entry)];
+  const draft = drafts && typeof drafts === 'object' ? drafts[getMirrorInputDraftKey(missingItem)] : null;
+  return draft && typeof draft === 'object' ? draft : { raw: '', unit: 'k', count: 1 };
+}
+
+// 缺价输入框当前草稿按所选单位（k/m/b）解析出的实际价格；无效时返回 null。用于即时反馈。
+function getMirrorInputResolvedPrice(entry, missingItem) {
+  const draft = getMirrorInputDraft(entry, missingItem);
+  const unitMultiplier = getManualPriceUnitMultiplier(draft.unit);
+  const evaluation = evaluateManualPriceDraft(draft.raw, unitMultiplier);
+  return evaluation.valid ? evaluation.actualPrice : null;
+}
+
+// 用当前缺价件手动价 + 共享镜子价重算该行镜子方案，并把结果写回行数据（响应式）。
+function recomputeMirrorPlan(entry) {
+  if (!entry || getPriceMethod(entry) !== QUEUE_PRICE_METHOD_MIRROR) {
+    return entry?.mirrorPlan || null;
+  }
+  const drafts = ensureMirrorInputDrafts(entry);
+  for (const missingItem of entry?.mirrorPlan?.missing || []) {
+    const draftKey = getMirrorInputDraftKey({ ...missingItem, itemHrid: missingItem.itemHrid || entry.itemHrid });
+    // 软缺价条目（count 为 null）的草稿同样保持 null：份数未知，标签不渲染 ×N。
+    const count = missingItem.count == null ? null : Math.max(1, Math.floor(Number(missingItem.count) || 1));
+    if (!drafts[draftKey]) {
+      drafts[draftKey] = { raw: '', unit: 'k', count };
+    } else {
+      drafts[draftKey].count = count;
+    }
+  }
+  const manualPrices = collectMirrorManualPrices(entry);
+  const mirrorPrice = resolveSharedMirrorPrice();
+  const recomputed = computeMirrorPlan({
+    itemHrid: entry.itemHrid,
+    targetLevel: entry.enhancementLevel,
+    baselineLevel: entry.baselineLevel || 0,
+    pricingState: simulator.pricing,
+    confirmedEquipmentPrices: [],
+    mirrorPrice,
+    manualInputPrices: manualPrices,
+    historicalQuotes: historicalQuotesMap.value,
+    // 基准件出售价值口径与转行出售抵扣一致（baselineSaleSide 设置）；computeMirrorPlan 内部归一化。
+    saleSide: simulator.activeQueueState?.settings?.baselineSaleSide,
+  });
+  // 整体替换 .value 触发更新，不依赖 ref 的深度响应式代理——即使改为 shallowRef 也安全。
+  const updatedUsedBaselineLevels = Array.isArray(recomputed?.usedBaselineLevels) ? recomputed.usedBaselineLevels : [];
+  pendingEquipmentPriceConfirmations.value = pendingEquipmentPriceConfirmations.value.map((candidate) => {
+    if (getManualPriceKey(candidate) !== getManualPriceKey(entry)) {
+      return candidate;
+    }
+    return { ...candidate, mirrorPlan: recomputed, usedBaselineLevels: updatedUsedBaselineLevels };
+  });
+  // 镜子方案成本变为有效时，清除该行上一次确认失败留下的错误提示，
+  // 对齐手动价"输入修正即清错"的体验；输入编辑、单位切换、共享镜子价变更、确认重算都会经过此处。
+  // 该函数仅在 MIRROR 行执行（上方早退保护），不会误清其他定价方式的错误。
+  const recomputedCost = Number(recomputed?.cost);
+  if (recomputed?.cost != null && Number.isFinite(recomputedCost) && recomputedCost > 0) {
+    delete manualPriceErrors.value[getManualPriceKey(entry)];
+  }
+  return recomputed;
+}
+
+// 镜子方案是否顶替了基准件（顶替件 = 与目标同款的基准装备；等级差恰为 1 时必然顶替）。
+function isMirrorBaselineSubstituted(entry) {
+  const levels = Array.isArray(entry?.mirrorPlan?.usedBaselineLevels) ? entry.mirrorPlan.usedBaselineLevels : [];
+  return levels.length > 0;
+}
+
+// 顶替基准件的出售价值（fee 后快照）；无顶替或无市场价时为 0。
+function getMirrorBaselinePieceSaleValue(entry) {
+  return Math.max(0, Number(entry?.mirrorPlan?.baselinePieceSaleValue) || 0);
+}
+
+// 总成本（含基准件）= 现金合成成本 + 基准件出售价值（按出售价值口径计入，与转行出售抵扣
+// 同源，保证 多轮 买入价 − 出售抵扣 = 现金合成成本）。方案缺价、或顶替基准件无市场价时
+// 返回 null（总成本列显示"—"，多轮买入价回落现金口径）。无顶替时与镜子成本同值。
+function getMirrorTotalCost(entry) {
+  const cost = Number(entry?.mirrorPlan?.cost);
+  if (entry?.mirrorPlan?.cost == null || !Number.isFinite(cost) || cost <= 0) {
+    return null;
+  }
+  if (!isMirrorBaselineSubstituted(entry)) {
+    return cost;
+  }
+  const pieceValue = getMirrorBaselinePieceSaleValue(entry);
+  return pieceValue > 0 ? cost + pieceValue : null;
+}
+
+// 合并列 tooltip：有价时展示计入的基准件等级与出售价值；基准件无市场价时给出完整解释
+//（行内只显示短警告，见 getMirrorBreakdownText）。无顶替（如跨物品换装，基准件与目标不同款）
+// 时返回 null——无基准件计入可讲，:title 为 null 不渲染提示，与 getMirrorBreakdownText 的
+// 无顶替守卫对称；此时主数字即现金合成成本。
+function getMirrorTotalCostTooltip(entry) {
+  if (!isMirrorBaselineSubstituted(entry)) {
+    return null;
+  }
+  if (getMirrorBaselinePieceSaleValue(entry) <= 0) {
+    return t(
+      'common:queue.mirrorBaselinePieceNoPriceHint',
+      'The baseline piece has no market price; the total falls back to cash cost (excluded).',
+    );
+  }
+  const levels = Array.isArray(entry?.mirrorPlan?.usedBaselineLevels) ? entry.mirrorPlan.usedBaselineLevels : [];
+  return t(
+    'common:queue.mirrorBaselinePieceTooltip',
+    'Includes baseline piece +{{level}} ×1, counted at its sale value {{price}}',
+    {
+      level: levels.join(', +'),
+      price: formatConfirmedMarketPrice(getMirrorBaselinePieceSaleValue(entry)),
+    },
+  );
+}
+
+// 合并列主数字：有顶替且基准件有价时为总成本（与队列页合计、多轮买入价同口径），
+// 无顶替或基准件无市场价时回落现金合成成本。方案缺价时返回 null。
+function getMirrorPrimaryCost(entry) {
+  const total = getMirrorTotalCost(entry);
+  if (total != null) {
+    return total;
+  }
+  const cost = Number(entry?.mirrorPlan?.cost);
+  return entry?.mirrorPlan?.cost != null && Number.isFinite(cost) && cost > 0 ? cost : null;
+}
+
+// 合并列副行：构成明细（现金 + 基准件出售价值）。无顶替返回 null（无构成可拆，仅主数字）；
+// 顶替但基准件无市场价时返回短警告（行内空间有限，完整解释见 getMirrorTotalCostTooltip）。
+function getMirrorBreakdownText(entry) {
+  if (!isMirrorBaselineSubstituted(entry)) {
+    return null;
+  }
+  const pieceValue = getMirrorBaselinePieceSaleValue(entry);
+  if (pieceValue > 0) {
+    const levels = Array.isArray(entry?.mirrorPlan?.usedBaselineLevels) ? entry.mirrorPlan.usedBaselineLevels : [];
+    return t('common:queue.mirrorTotalBreakdown', 'Cash {{cash}} + baseline +{{level}} valued at {{piece}}', {
+      cash: formatConfirmedMarketPrice(Number(entry?.mirrorPlan?.cost)),
+      level: levels.join(', +'),
+      piece: formatConfirmedMarketPrice(pieceValue),
+    });
+  }
+  return t('common:queue.priceSelectionBaselinePieceNoPrice', 'No market price; excluded from total');
+}
+
+function refreshMirrorPlans() {
+  for (const entry of pendingEquipmentPriceConfirmations.value) {
+    if (getPriceMethod(entry) === QUEUE_PRICE_METHOD_MIRROR) {
+      recomputeMirrorPlan(entry);
+      // 共享镜子价变更也可能改变失败原因（如"缺输入价" ↔ "输入价+镜子价组合缺失"），有错误时同步刷新行内文案。
+      refreshMirrorRowErrorIfPresent(entry);
+    }
+  }
+}
+
+function sanitizeMirrorManualPriceInput(event, entry, missingItem) {
+  const drafts = ensureMirrorInputDrafts(entry);
+  const draftKey = getMirrorInputDraftKey(missingItem);
+  const current = drafts[draftKey] || { raw: '', unit: 'k', count: 1 };
+  const rawValue = String(event?.target?.value ?? '');
+  const { normalized } = normalizeManualPriceDraft(rawValue);
+  current.raw = normalized;
+  drafts[draftKey] = current;
+  if (normalized !== rawValue) {
+    event.target.value = normalized;
+  }
+  // normalize 已剔除字母得到稳定纯数字串，无论原始输入是否含字母都应刷新，
+  // 避免粘贴 "12k" 等带字母输入时显示价与生效价短暂不一致。
+  recomputeMirrorPlan(entry);
+  refreshMirrorRowErrorIfPresent(entry);
+}
+
+function handleMirrorManualPriceUnitChange(value, entry, missingItem) {
+  const nextUnit = String(value || '').toLowerCase();
+  if (!MANUAL_PRICE_UNITS.some((item) => item.value === nextUnit)) {
+    return;
+  }
+  const drafts = ensureMirrorInputDrafts(entry);
+  const draftKey = getMirrorInputDraftKey(missingItem);
+  const current = drafts[draftKey] || { raw: '', unit: 'k', count: 1 };
+  current.unit = nextUnit;
+  drafts[draftKey] = current;
+  recomputeMirrorPlan(entry);
+  refreshMirrorRowErrorIfPresent(entry);
+}
+
+function setSharedMirrorPriceUnit(value) {
+  const nextUnit = String(value || '').toLowerCase();
+  if (!MANUAL_PRICE_UNITS.some((item) => item.value === nextUnit)) {
+    return;
+  }
+  sharedMirrorPriceUnit.value = nextUnit;
+  refreshMirrorPlans();
+}
+
+// 草稿指纹失效错误的消息键：throw 与 confirmEquipmentPricesAndAdd 的 catch 判定共用，防两处字面量漂移。
+const QUEUE_DRAFT_CHANGED_MESSAGE_KEY = 'common:queue.confirmHourlyAverageDraftChanged';
+
+function confirmEquipmentPricesAndAdd() {
+  try {
+    if (JSON.stringify(simulator.activePlayer) !== pendingQueueDraftFingerprint.value) {
+      throw new Error(QUEUE_DRAFT_CHANGED_MESSAGE_KEY);
+    }
+    // 每次确认尝试开始时重置错误快照：行内错误只反映最近一次确认的结果，
+    // 避免左一/右一行在市场刷新出价格后仍显示过期的"价格不可用"提示（本次循环会为仍失败的行重写）。
+    manualPriceErrors.value = {};
+    equipmentPriceConfirmationError.value = '';
+    const priceSelections = [];
+    let hasInvalidManualPrice = false;
+    const sharedMirrorPrice = resolveSharedMirrorPrice();
+    for (const entry of pendingEquipmentPriceConfirmations.value) {
+      const method = getPriceMethod(entry);
+      const key = getManualPriceKey(entry);
+      if (method === QUEUE_PRICE_METHOD_MANUAL) {
+        const unitMultiplier = getManualPriceUnitMultiplier(manualPriceUnits.value[key]);
+        const evaluation = evaluateManualPriceDraft(manualPriceDrafts.value[key], unitMultiplier);
+        if (!evaluation.valid) {
+          hasInvalidManualPrice = true;
+          manualPriceErrors.value[key] = t(
+            'common:queue.manualPriceInvalidRow',
+            '{{name}} +{{level}}: enter a valid integer buy price greater than 0.',
+            {
+              name: localizeHridDisplayName(entry.itemHrid),
+              level: Number(entry.enhancementLevel || 0),
+            },
+          );
+          continue;
+        }
+        delete manualPriceErrors.value[key];
+        priceSelections.push({
+          itemHrid: entry.itemHrid,
+          enhancementLevel: entry.enhancementLevel,
+          method: QUEUE_PRICE_METHOD_MANUAL,
+          price: evaluation.actualPrice,
+          confirmedAt: Date.now(),
+        });
+        continue;
+      }
+      if (method === QUEUE_PRICE_METHOD_MIRROR) {
+        const mirrorPlan = recomputeMirrorPlan(entry) || entry.mirrorPlan || {};
+        const mirrorPrice = sharedMirrorPrice ?? mirrorPlan.mirrorPrice ?? 0;
+        const mirrorCost = Number(mirrorPlan.cost);
+        if (mirrorPlan.cost == null || !Number.isFinite(mirrorCost) || mirrorCost <= 0) {
+          hasInvalidManualPrice = true;
+          setMirrorRowError(entry);
+          continue;
+        }
+        const inputs = Array.isArray(mirrorPlan.inputs)
+          ? mirrorPlan.inputs.map((input) => ({
+              itemHrid: String(input.itemHrid || ''),
+              level: input.level,
+              count: input.count,
+              price: input.price,
+              source: input.source,
+            }))
+          : [];
+        const usedBaselineLevels = Array.isArray(mirrorPlan?.usedBaselineLevels) ? mirrorPlan.usedBaselineLevels : [];
+        // 基准件出售价值快照（fee 后）：买入价按总成本口径落库——现金合成成本 + 基准件出售价值。
+        // 顶替基准件无市场价时为 0，买入价回落现金成本（总成本列显示"—"）。
+        // 下游 resolveEquipmentTransitionPricing 以该快照作顶替行的出售抵扣（两侧同源，
+        // 净成本 = 现金合成成本），队列页合计与多轮"目标装备买入价"均使用此 price。
+        const baselinePieceSaleValue =
+          usedBaselineLevels.length > 0 ? Math.max(0, Number(mirrorPlan.baselinePieceSaleValue) || 0) : 0;
+        priceSelections.push({
+          itemHrid: entry.itemHrid,
+          enhancementLevel: entry.enhancementLevel,
+          method: QUEUE_PRICE_METHOD_MIRROR,
+          price: mirrorCost + baselinePieceSaleValue,
+          mirrorPrice,
+          mirrorCount: mirrorPlan.mirrorCount || 0,
+          inputs,
+          baselinePieceSaleValue,
+          usedBaselineLevels,
+          confirmedAt: Date.now(),
+        });
+        continue;
+      }
+      if (method === QUEUE_PRICE_METHOD_LEFT1) {
+        // 左一价：锁定买入参考价
+        if (entry.reference) {
+          priceSelections.push({
+            itemHrid: entry.itemHrid,
+            enhancementLevel: entry.enhancementLevel,
+            method: QUEUE_PRICE_METHOD_LEFT1,
+            price: entry.reference.price,
+            source: entry.reference.source,
+            volume: entry.reference.volume,
+            marketTimestamp: entry.reference.marketTimestamp,
+            confirmedAt: Date.now(),
+          });
+        } else {
+          hasInvalidManualPrice = true;
+          manualPriceErrors.value[key] = t(
+            'common:queue.left1PriceMissingRow',
+            '{{name}} +{{level}}: reference price is unavailable. Switch to Manual or Mirror.',
+            {
+              name: localizeHridDisplayName(entry.itemHrid),
+              level: Number(entry.enhancementLevel || 0),
+            },
+          );
+        }
+        continue;
+      }
+      if (method === QUEUE_PRICE_METHOD_RIGHT1) {
+        // 右一价：目标装备在市场上的最高收购价（bid 侧），只接受真实 Bid（不接受 Ask 兜底）。
+        if (hasRealTargetBid(entry)) {
+          priceSelections.push({
+            itemHrid: entry.itemHrid,
+            enhancementLevel: entry.enhancementLevel,
+            method: QUEUE_PRICE_METHOD_RIGHT1,
+            price: entry.targetBid.price,
+            source: entry.targetBid.source,
+            confirmedAt: Date.now(),
+          });
+        } else {
+          hasInvalidManualPrice = true;
+          manualPriceErrors.value[key] = t(
+            'common:queue.right1PriceMissingRow',
+            '{{name}} +{{level}}: bid price is unavailable. Switch to Manual or Mirror.',
+            {
+              name: localizeHridDisplayName(entry.itemHrid),
+              level: Number(entry.enhancementLevel || 0),
+            },
+          );
+        }
+        continue;
+      }
+    }
+    if (hasInvalidManualPrice) {
+      return;
+    }
+    const items = simulator.addActivePlayerToQueue({ priceSelections });
+    cancelEquipmentPriceConfirmation();
+    reportAddedQueueItems(items);
+  } catch (error) {
+    // 草稿指纹失效（弹窗打开期间玩家数据被变更）：行数据已过期，关闭弹窗由用户重新发起。
+    if (error?.message === QUEUE_DRAFT_CHANGED_MESSAGE_KEY) {
+      cancelEquipmentPriceConfirmation();
+      setTopQueueActionStatus('danger', resolveQueueActionErrorMessage(error));
+      return;
+    }
+    // 其余确认失败不关闭弹窗、不清空任何行：错误以弹窗内横幅展示（顶部状态被模态遮罩遮挡），
+    // 保留全部行的定价选择与补价草稿，修正后可重试——单行失败不再"毒化"整次确认。
+    // 顶部状态同步写入，用户手动取消弹窗后仍能看到失败原因；下次成功入队会被覆盖。
+    equipmentPriceConfirmationError.value = resolveQueueActionErrorMessage(error);
+    setTopQueueActionStatus('danger', equipmentPriceConfirmationError.value);
+  }
+}
+
+function formatConfirmedMarketPrice(value) {
+  return formatCompactAmountForLocale(value, language.value === 'zh' ? 'zh-CN' : 'en-US');
+}
+
+const MANUAL_PRICE_UNITS = [
+  { value: 'k', multiplier: 1000 },
+  { value: 'm', multiplier: 1_000_000 },
+  { value: 'b', multiplier: 1_000_000_000 },
+];
+
+function getManualPriceUnitMultiplier(unit) {
+  const found = MANUAL_PRICE_UNITS.find((u) => u.value === String(unit || ''));
+  return found ? found.multiplier : 1000;
+}
+
+// 自动价预填：选最小的 k/m/b 单位使 raw = amount / 单位 为 ≥1 的整数；无法表达时兜底 'k'。
+function pickAmountUnitForDraft(amount) {
+  const safeAmount = Number.isFinite(Number(amount)) ? Math.max(0, Math.floor(Number(amount))) : 0;
+  for (const unit of MANUAL_PRICE_UNITS) {
+    if (safeAmount % unit.multiplier === 0 && safeAmount / unit.multiplier >= 1) {
+      return unit.value;
+    }
+  }
+  return 'k';
+}
+
+// 自动价预填：raw（输入框显示值）；金额无法用所选单位整除时返回 ''（留空，计算仍自动兜底）。
+function formatAmountDraftForUnit(amount, unit) {
+  const safeAmount = Number.isFinite(Number(amount)) ? Math.max(0, Math.floor(Number(amount))) : 0;
+  const multiplier = getManualPriceUnitMultiplier(unit);
+  if (safeAmount % multiplier !== 0 || safeAmount / multiplier < 1) {
+    return '';
+  }
+  return String(safeAmount / multiplier);
+}
+
+function sanitizeManualPriceInput(event, entry) {
+  const key = getManualPriceKey(entry);
+  const rawValue = String(event.target.value || '');
+  const { normalized, containsLetters } = normalizeManualPriceDraft(rawValue);
+  manualPriceDrafts.value[key] = normalized;
+  if (normalized !== rawValue) {
+    event.target.value = normalized;
+  }
+  if (containsLetters) {
+    manualPriceErrors.value[key] = t(
+      'common:queue.manualPriceDigitsOnly',
+      'Numbers only. Pick the k/m/b unit with the buttons.',
+    );
+    return;
+  }
+  if (evaluateManualPriceDraft(normalized).valid) {
+    delete manualPriceErrors.value[key];
+  }
+}
+
+function handleManualPriceUnitChange(value, entry) {
+  const nextUnit = String(value || '').toLowerCase();
+  if (!MANUAL_PRICE_UNITS.some((u) => u.value === nextUnit)) return;
+  manualPriceUnits.value[getManualPriceKey(entry)] = nextUnit;
+}
+
+function getManualPriceKey(entry) {
+  return `${String(entry?.itemHrid || '')}|${Math.max(0, Math.floor(Number(entry?.enhancementLevel || 0)))}`;
+}
+
+// 参考价列下方的"来源"标签：跟随用户当前选定的价格方式，
+// 选左一价时显示参考价来源（ask/历史/h均价），
+// 选右一价时显示收购价来源（bid/ask fallback），
+// 避免选右一价时仍显示"精确 Ask"造成误导。
+function formatConfirmationSource(entry) {
+  const method = getPriceMethod(entry);
+  if (method === QUEUE_PRICE_METHOD_MANUAL) {
+    return t('common:queue.manualPriceSource', 'Manual input');
+  }
+  if (method === QUEUE_PRICE_METHOD_MIRROR) {
+    return t('common:queue.confirmPriceSourceMirror', 'Mirror');
+  }
+  if (method === QUEUE_PRICE_METHOD_RIGHT1) {
+    const source = String(entry?.targetBid?.source || '');
+    if (source === 'bid') {
+      return t('common:queue.confirmPriceSourceExactBid', 'Exact Bid');
+    }
+    return t('common:queue.confirmPriceSourceUnavailable', 'No price');
+  }
+  // left1（默认）
+  if (!entry?.reference) {
+    return t('common:queue.confirmPriceSourceUnavailable', 'No price');
+  }
+  const source = String(entry?.reference?.source || entry?.source || '');
+  if (source === 'manual') {
+    return t('common:queue.manualPriceSource', 'Manual input');
+  }
+  if (source === 'historical_ask') {
+    return t('common:queue.confirmPriceSourceHistoricalAsk', 'Historical Ask');
+  }
+  if (source === 'ask') {
+    return t('common:queue.confirmPriceSourceExactAsk', 'Exact Ask');
+  }
+  if (source === 'mirror') {
+    return t('common:queue.confirmPriceSourceMirror', 'Mirror');
+  }
+  return t('common:queue.confirmPriceSourceOfficialHourlyAverage', 'Official hourly average');
+}
+
+function isHistoricalAskEntry(entry) {
+  return String(entry?.reference?.source || entry?.source || '') === 'historical_ask';
+}
+
+function formatMarketDataTime(timestampSeconds) {
+  const timestamp = Number(timestampSeconds || 0);
+  return timestamp > 0
+    ? new Date(timestamp * 1000).toLocaleString()
+    : t('common:queue.confirmPriceTimeUnknown', 'Unknown');
 }
 
 async function runQueueFromTopbar() {
   try {
     closeQueueCompleteModal();
-    setTopQueueActionStatus("secondary", t("common:queue.queueRunning", "Running queue..."));
+    setTopQueueActionStatus('secondary', t('common:queue.queueRunning', 'Running queue...'));
     const queueRunPromise = simulator.runActiveQueue();
-    if (route.name !== "multi-results" && (simulator.runtime.isRunning || activeQueueState.value?.isRunning)) {
+    if (route.name !== 'multi-results' && (simulator.runtime.isRunning || activeQueueState.value?.isRunning)) {
       queueCompleteModalOpen.value = true;
     }
     const rows = await queueRunPromise;
-    if (activeQueueState.value?.lastRunStatus === "cancelled") {
+    if (activeQueueState.value?.lastRunStatus === 'cancelled') {
       const partialCount = Array.isArray(activeQueueState.value?.ranking) ? activeQueueState.value.ranking.length : 0;
       if (partialCount > 0) {
-        setTopQueueActionStatus("secondary", t("common:vue.queue.msgRunCancelledPartial", "Queue run stopped. Kept {{count}} ranked variants.", { count: partialCount }));
+        setTopQueueActionStatus(
+          'secondary',
+          t('common:vue.queue.msgRunCancelledPartial', 'Queue run stopped. Kept {{count}} ranked variants.', {
+            count: partialCount,
+          }),
+        );
         return;
       }
-      setTopQueueActionStatus("secondary", t("common:vue.queue.msgRunCancelled", "Queue run stopped."));
+      setTopQueueActionStatus('secondary', t('common:vue.queue.msgRunCancelled', 'Queue run stopped.'));
       return;
     }
     if (Array.isArray(rows) && rows.length > 0) {
-      setTopQueueActionStatus("success", t("common:vue.queue.msgRunCompleted", "Queue run completed: {{count}} variants ranked.", { count: rows.length }));
+      setTopQueueActionStatus(
+        'success',
+        t('common:vue.queue.msgRunCompleted', 'Queue run completed: {{count}} variants ranked.', {
+          count: rows.length,
+        }),
+      );
       return;
     }
     if (activeQueueState.value?.error) {
-      setTopQueueActionStatus("danger", t(activeQueueState.value.error, activeQueueState.value.error));
+      setTopQueueActionStatus('danger', t(activeQueueState.value.error, activeQueueState.value.error));
       return;
     }
-    setTopQueueActionStatus("secondary", t("common:queue.emptyResults", "No queue run results yet."));
+    setTopQueueActionStatus('secondary', t('common:queue.emptyResults', 'No queue run results yet.'));
   } catch (error) {
-    setTopQueueActionStatus("danger", resolveQueueActionErrorMessage(error));
+    setTopQueueActionStatus('danger', resolveQueueActionErrorMessage(error));
   }
 }
 
 function clearQueueFromTopbar() {
   simulator.clearActiveQueue();
-  setTopQueueActionStatus("success", t("common:vue.queue.msgQueueCleared", "Queue cleared."));
+  setTopQueueActionStatus('success', t('common:vue.queue.msgQueueCleared', 'Queue cleared.'));
+}
+
+function runAdvisorFromTopbar() {
+  simulator.requestAdvisorRun();
+}
+
+function stopAdvisorFromTopbar() {
+  simulator.stopAdvisorScan();
 }
 
 function serializeErrorPayload(payload) {
   if (payload instanceof Error) {
     return payload.stack || payload.message || String(payload);
   }
-  if (typeof payload === "string") {
+  if (typeof payload === 'string') {
     return payload;
   }
   try {
@@ -713,31 +2294,58 @@ function serializeErrorPayload(payload) {
 }
 
 function openGlobalError(source, payload) {
-  const details = serializeErrorPayload(payload);
-  globalErrorText.value = `[${source}] ${details || "-"}`;
+  const rawDetails = serializeErrorPayload(payload);
+  // 双模式渲染：i18n key（如 "common:simulation.*"）会被翻译，
+  // 普通运行时错误文本则原样显示。
+  const details = t(rawDetails, rawDetails);
+  globalErrorText.value = `[${source}] ${details || '-'}`;
   globalErrorModalOpen.value = true;
-  errorCopyStatus.value = "";
+  errorCopyStatus.value = '';
 }
 
 async function copyGlobalError() {
-  const text = String(globalErrorText.value || "");
+  const text = String(globalErrorText.value || '');
   if (!text.trim()) {
     return;
   }
   try {
     await navigator.clipboard.writeText(text);
-    errorCopyStatus.value = t("common:vue.app.globalErrorCopied", "Copied.");
+    errorCopyStatus.value = t('common:vue.app.globalErrorCopied', 'Copied.');
   } catch (error) {
-    errorCopyStatus.value = t("common:vue.app.globalErrorCopyFailed", "Copy failed.");
+    errorCopyStatus.value = t('common:vue.app.globalErrorCopyFailed', 'Copy failed.');
+  }
+}
+
+function openFeedbackModal() {
+  feedbackModalOpen.value = true;
+  feedbackCopyStatus.value = '';
+}
+
+function closeFeedbackModal() {
+  feedbackModalOpen.value = false;
+  feedbackCopyStatus.value = '';
+}
+
+async function copyFeedbackContact(value) {
+  const text = String(value || '').trim();
+  if (!text) {
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(text);
+    feedbackCopyStatus.value = t('common:vue.app.globalErrorCopied', 'Copied.');
+  } catch (error) {
+    feedbackCopyStatus.value = t('common:vue.app.globalErrorCopyFailed', 'Copy failed.');
   }
 }
 
 function onWindowError(event) {
-  openGlobalError("window.error", event?.error || event?.message || event);
+  openGlobalError('window.error', event?.error || event?.message || event);
 }
 
 function onUnhandledRejection(event) {
-  openGlobalError("unhandledrejection", event?.reason || event);
+  openGlobalError('unhandledrejection', event?.reason || event);
 }
 
 function closeSimulationCompleteModal() {
@@ -761,9 +2369,27 @@ async function acknowledgeBaselineReminderAndRun() {
 
 async function openBaselineReminderSettings() {
   closeBaselineReminderModal();
-  setTopQueueActionStatus("secondary", "");
-  if (route.name !== "settings") {
-    await router.push({ name: "settings" });
+  setTopQueueActionStatus('secondary', '');
+  if (route.name !== 'settings') {
+    await router.push({ name: 'settings' });
+  }
+}
+
+// 补丁目录异步初始化：加载 → 首次基线（存储无效时把当前全部版本记为已读）→ 刷新未读。
+// 加载失败仅告警：未读徽标保持隐藏，不影响应用其余启动流程。
+async function initializePatchNotesData() {
+  try {
+    await refreshPatchNotesEntries();
+  } catch (error) {
+    console.warn('[patchNotes] catalog load failed:', error);
+    return;
+  }
+  initializePatchNotesState({
+    entries: patchNotesEntries.value,
+  });
+  refreshPatchNoteUnreadEntries();
+  if (route.name === 'patch-notes') {
+    markPatchNotesReadOnPageEntry();
   }
 }
 
@@ -773,52 +2399,97 @@ function refreshPatchNoteUnreadEntries() {
   });
 }
 
-function openPatchNotesModal() {
-  patchNotesModalOpen.value = true;
+function markPatchNotesReadOnPageEntry() {
+  const unreadEntryIds = patchNotesUnreadEntries.value.map((entry) => entry.entryId);
+  if (unreadEntryIds.length === 0) {
+    return;
+  }
+
+  markPatchNoteEntriesAsRead({
+    entryIds: unreadEntryIds,
+  });
+  refreshPatchNoteUnreadEntries();
 }
 
-function closePatchNotesModal() {
-  const unreadEntryIds = patchNotesUnreadEntries.value.map((entry) => entry.entryId);
-  patchNotesModalOpen.value = false;
+function openPatchNotesUnreadModal() {
+  const unread = patchNotesUnreadEntries.value;
+  if (unread.length === 0) {
+    return;
+  }
+  if (route.name === 'patch-notes') {
+    // 已在更新日志页：未读徽标残留说明状态不一致（如语言切换后重新计算），
+    // 直接清除未读，避免“点了没反应”。
+    markPatchNotesReadOnPageEntry();
+    return;
+  }
 
-  if (unreadEntryIds.length > 0) {
-    markPatchNoteEntriesAsRead({
-      entryIds: unreadEntryIds,
-    });
-    refreshPatchNoteUnreadEntries();
+  patchNotesUnreadPreviewEntryIds.value = unread.map((entry) => entry.entryId);
+  patchNotesUnreadModalOpen.value = true;
+}
+
+function closePatchNotesUnreadModal(closeReason = 'programmatic') {
+  // 关闭方式分类（与 BaseModal 的 reason 语义对应）：
+  // - 'programmatic'（默认值，含不传参调用）：显式确认（点击“Close”/“View all”），视为已读。
+  // - 'close-button'：点击右上角 X 按钮，同样视为已读（主动确认关闭）。
+  // - 'escape' / 'backdrop'：Esc / 遮罩，视为“暂不阅读”，保留未读徽标。
+  const isDismissiveClose = closeReason === 'escape' || closeReason === 'backdrop';
+  if (!isDismissiveClose) {
+    const previewEntryIds = patchNotesUnreadPreviewItems.value.map((entry) => entry.entryId);
+    if (previewEntryIds.length > 0) {
+      markPatchNoteEntriesAsRead({
+        entryIds: previewEntryIds,
+      });
+      refreshPatchNoteUnreadEntries();
+    }
+  }
+  patchNotesUnreadModalOpen.value = false;
+  patchNotesUnreadPreviewEntryIds.value = [];
+}
+
+async function viewAllPatchNotes() {
+  closePatchNotesUnreadModal();
+  if (route.name !== 'patch-notes') {
+    await router.push({ name: 'patch-notes' });
   }
 }
 
 async function goToHomeResults() {
   closeSimulationCompleteModal();
-  if (route.name !== "home" || route.query.focus !== "results") {
-    await router.push({ name: "home", query: { focus: "results" } });
+  if (route.name !== 'home' || route.query.focus !== 'results') {
+    await router.push({ name: 'home', query: { focus: 'results' } });
   }
 }
 
 async function goToMultiResults() {
   closeQueueCompleteModal();
-  if (route.name !== "multi-results") {
-    await router.push({ name: "multi-results" });
+  if (route.name !== 'multi-results') {
+    await router.push({ name: 'multi-results' });
   }
 }
 
 watch(
   () => simulator.runtime.error,
   (nextError, prevError) => {
-    const nextText = String(nextError || "").trim();
-    if (nextText && nextText !== String(prevError || "").trim()) {
-      openGlobalError("runtime", nextText);
+    const nextText = String(nextError || '').trim();
+    if (nextText && nextText !== String(prevError || '').trim()) {
+      openGlobalError('runtime', nextText);
     }
   },
 );
 
+// 完成通知弹窗：铁牛模式下抑制——铁牛态主内容区固定渲染占位（页面组件不渲染，见上方
+// main 区模板），弹窗引导按钮（前往首页结果 / 多轮结果）点击后必然落空，只会形成死路。
+// 上方 runtime.error 全局错误弹窗属合理豁免（错误任何时候都必须可见），维持现状。
+// 切换入口无需另做清扫：完成弹窗开启时 BaseModal 遮罩（fixed inset-0 z-50）阻断顶栏（sticky top-0 z-40）
+// 点击，backdrop 点击会先关闭弹窗，标准→铁牛方向的运行中切换又被 gameModeSwitchLocked 单向锁定，
+// UI 路径无法带着残留弹窗切入铁牛；若未来新增程序化切换或深链等模式切换入口，须在该入口
+// 统一关闭完成弹窗与队列完成弹窗（queueCompleteModalOpen）。
 watch(
   () => simulator.runtime.completionNoticeId,
   (nextNoticeId, prevNoticeId) => {
     const nextId = Number(nextNoticeId || 0);
     const prevId = Number(prevNoticeId || 0);
-    if (nextId <= prevId || !hasSimulationResults.value || route.name === "home") {
+    if (nextId <= prevId || !hasSimulationResults.value || route.name === 'home' || isIroncowMode.value) {
       return;
     }
     simulationCompleteModalOpen.value = true;
@@ -837,11 +2508,14 @@ watch(
 watch(
   () => route.name,
   (nextRouteName) => {
-    if (nextRouteName === "home") {
+    if (nextRouteName === 'home') {
       closeSimulationCompleteModal();
     }
-    if (nextRouteName === "multi-results") {
+    if (nextRouteName === 'multi-results') {
       closeQueueCompleteModal();
+    }
+    if (nextRouteName === 'patch-notes') {
+      markPatchNotesReadOnPageEntry();
     }
   },
 );
@@ -849,33 +2523,140 @@ watch(
 watch(
   () => simulator.activePlayerId,
   () => {
-    setTopQueueActionStatus("secondary", "");
+    setTopQueueActionStatus('secondary', '');
+  },
+);
+
+// 资产分（Gear Score）重算触发器：玩家配置（装备/房屋/公会增益/技能/工匠茶等）
+// 或市场行情变化时重算。watch 源为 computed 触发向量（2026-09-01 审计 A4：原 deep
+// watch 每次触发全量 traverse players + pricing（marketItemValues ~872 物品 ×21 档、
+// 全量价格表），名称击键等无关输入也付遍历成本；250ms 防抖只压重算频率、不压遍历）。
+// 玩家侧逐人配置签名 computeAssetScoreConfigSignature——覆盖面与
+// computePlayerAssetScore 的玩家输入严格一致（与 store 快照保留守卫同一承重）；
+// pricing 侧为资产分六个消费字段引用元组（数值 + 物品级/等级级来源标注 + 行情表 +
+// 挂单 + 快照时间）——全部写点均为整体替换引用/原始值赋值
+//（与 assetScoreService 成本缓存指纹同一「引用替换」约定），
+// 浅跟踪即可精确捕获；overrides/mode/marketTimestamp/sourceUrl/isLoading 等资产分
+// 不消费的字段（#5 双拦截）不再触发。250ms 防抖保留；refreshAssetScores 内部有
+// 值相等守卫（忽略 computedAt），且快照写回（player.assetScore）不在本向量依赖内，
+// 不会与写入形成循环。
+let assetScoreRefreshTimer = null;
+const assetScoreRefreshTrigger = computed(() => [
+  // 铁牛态门控：模式是资产分可见性条件（铁牛态主内容区占位、顶栏徽章与导入导出
+  // 下拉均不挂载）——onMounted 初算与防抖回调按 isIroncowMode 提前跳过；把模式纳入
+  // 触发向量，使「铁牛 → 标准」切回时补一次重算，避免切回后徽章滞留空快照。
+  isIroncowMode.value,
+  simulator.players.map((player) => computeAssetScoreConfigSignature(player)),
+  simulator.pricing?.marketItemValues ?? null,
+  simulator.pricing?.marketItemValueSources ?? null,
+  // 等级级来源覆盖（【一般-5】）：混合物品的合成补齐等级标签变化同样需要触发重算，
+  // 否则 tooltip/明细在标注更新后滞留旧标签至下一次无关触发。
+  simulator.pricing?.marketItemValueSourcesByLevel ?? null,
+  simulator.pricing?.basePriceTable ?? simulator.pricing?.priceTable ?? null,
+  simulator.pricing?.enhancementQuotesByItem ?? null,
+  simulator.pricing?.lastFetchedAt ?? 0,
+]);
+watch(assetScoreRefreshTrigger, () => {
+  // 先取消可能已排程的防抖：标准 → 铁牛 时触发向量会重跑，若在提前返回前不清，
+  // 残留定时器仍会执行 refreshAssetScores（全量重算 + 按需加载）。
+  if (assetScoreRefreshTimer != null) {
+    clearTimeout(assetScoreRefreshTimer);
+    assetScoreRefreshTimer = null;
+  }
+  // 铁牛态门控：无行情/资产分消费方——不排新的 250ms 防抖定时器；
+  // 切回标准态由触发向量内的 isIroncowMode 依赖重新拉起。
+  if (isIroncowMode.value) {
+    return;
+  }
+  assetScoreRefreshTimer = setTimeout(() => {
+    assetScoreRefreshTimer = null;
+    // 候选 A（2026-10-03）：刷新链路按需加载（异步）——失败降级 + 控制台告警：
+    // loader 已清缓存、下次触发自动重试；此处仅 console.warn 留痕，不弹全局错误窗、
+    // 不打断本回调。
+    void simulator.refreshAssetScores().catch((error) => {
+      console.warn('[assetScore] refresh failed (debounced trigger):', error);
+    });
+  }, 250);
+});
+
+// 「铁牛 → 标准」切回补偿：启动行情强制拉取只随延迟初始化执行一次（上方
+// runDeferredInitialization），铁牛态启动被门控跳过后本会话不再有自动行情拉取，
+// 顶栏指示器（切回后重新挂载）将滞留「未获取市场数据」或本地缓存旧快照——切回
+// 标准态时在此补一次强制拉取，与资产分触发向量的切回补偿（isIroncowMode 依赖）
+// 语义对齐。watcher 用 gameMode getter 形态以直接比较 GAME_MODE_IRONCOW /
+// GAME_MODE_STANDARD 常量，方向语义自明；方向门只认「铁牛 → 标准」，其余方向提前
+// 返回；补偿前复用 MARKET_PRICE_REFRESH_ATTEMPT_COOLDOWN_MS 同款 60s 尝试冷却
+//（wasMarketPriceRefreshAttemptedRecently，与 ensureQueueMarketPriceSnapshot 同源）
+// ——运行态闸门（gameModeSwitchLocked）只锁「标准 → 铁牛」方向，切回方向不受其约束，
+// 空载往复切换不得把冷却窗内的重复切回变成真实行情请求（本补偿原是该自动通道里
+// 唯一无冷却者）；无 deep / immediate；生命周期同 setup 作用域，随组件卸载自动清理。
+watch(
+  () => simulator.gameMode,
+  (nextMode, prevMode) => {
+    if (prevMode !== GAME_MODE_IRONCOW || nextMode !== GAME_MODE_STANDARD) {
+      return;
+    }
+    if (wasMarketPriceRefreshAttemptedRecently(simulator)) {
+      return;
+    }
+    simulator.ensureMarketPricesLoaded(true);
   },
 );
 
 onMounted(() => {
-  const savedTheme = normalizeTheme(localStorage.getItem(THEME_STORAGE_KEY));
-  applyTheme(savedTheme);
-  initializePatchNotesState({
-    entries: patchNotesEntries.value,
-  });
-  refreshPatchNoteUnreadEntries();
+  void initializePatchNotesData();
   scheduleDeferredInitialization();
-  window.addEventListener("error", onWindowError);
-  window.addEventListener("unhandledrejection", onUnhandledRejection);
+  // 初算同走按需加载 + 降级告警：onMounted 不等待刷新（失败由后续资产分 watch
+  // 触发或导入导出前的刷新重试），仅 console.warn 留痕。
+  // 铁牛态门控：无资产分消费方（顶栏徽章与导入导出下拉均不挂载）——跳过初算；
+  // 切回标准态由触发向量内的 isIroncowMode 依赖拉起一次重算。
+  if (!isIroncowMode.value) {
+    void simulator.refreshAssetScores().catch((error) => {
+      console.warn('[assetScore] refresh failed (onMounted):', error);
+    });
+  }
+  window.addEventListener('error', onWindowError);
+  window.addEventListener('unhandledrejection', onUnhandledRejection);
 });
 
 onUnmounted(() => {
+  if (assetScoreRefreshTimer != null) {
+    clearTimeout(assetScoreRefreshTimer);
+    assetScoreRefreshTimer = null;
+  }
   cancelDeferredInitialization();
-  window.removeEventListener("error", onWindowError);
-  window.removeEventListener("unhandledrejection", onUnhandledRejection);
+  window.removeEventListener('error', onWindowError);
+  window.removeEventListener('unhandledrejection', onUnhandledRejection);
 });
 
 watch(
   () => language.value,
-  () => {
+  async () => {
+    // 语言切换后重解析目录文本（entryId 集合不变）；目录未就绪时等待其加载。
+    try {
+      await refreshPatchNotesEntries();
+    } catch (error) {
+      console.warn('[patchNotes] catalog refresh failed:', error);
+    }
     refreshPatchNoteUnreadEntries();
+    if (patchNotesUnreadModalOpen.value) {
+      patchNotesUnreadPreviewEntryIds.value = patchNotesUnreadEntries.value.map((entry) => entry.entryId);
+    }
   },
 );
 
+async function switchLanguage(nextLanguage) {
+  if (languageSwitchPending.value) {
+    return;
+  }
+  languageSwitchPending.value = true;
+  try {
+    await setLanguage(nextLanguage);
+    simulator.setLanguage(nextLanguage);
+  } catch (error) {
+    openGlobalError('i18n', error);
+  } finally {
+    languageSwitchPending.value = false;
+  }
+}
 </script>

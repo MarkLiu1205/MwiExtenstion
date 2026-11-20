@@ -1,4557 +1,213 @@
-import { defineStore } from "pinia";
+import { defineStore } from 'pinia';
 import {
-    abilityBookInfoByAbilityHrid,
-    abilityDetailIndex,
-    abilityOptions,
-    levelExperienceTable,
-    actionDetailIndex,
-    drinkOptions,
-    dungeonOptions,
-    equipmentOptionsBySlot,
-    foodOptions,
-    getAbilityName as getIndexedAbilityName,
-    getActionName as getIndexedActionName,
-    getHouseRoomName as getIndexedHouseRoomName,
-    getItemName as getIndexedItemName,
-    getMonsterName as getIndexedMonsterName,
-    groupZoneHrids,
-    houseRoomDetailIndex,
-    itemDetailIndex,
-    labyrinthCrateOptions,
-    labyrinthOptions,
-    monsterDetailIndex,
-    soloZoneHrids,
-    zoneOptions,
-} from "../shared/gameDataIndex.js";
-import { createEmptyPlayerConfig, EQUIPMENT_SLOT_KEYS, LEVEL_KEYS } from "../shared/playerConfig.js";
+  abilityOptions,
+  actionDetailIndex,
+  drinkOptions,
+  dungeonOptions,
+  equipmentOptionsBySlot,
+  foodOptions,
+  groupZoneHrids,
+  itemDetailIndex,
+  labyrinthCrateOptions,
+  labyrinthOptions,
+  resolveEquipmentComboboxItems,
+  soloZoneHrids,
+  zoneOptions,
+} from '../shared/gameDataIndex.js';
+import { createEmptyPlayerConfig, ensurePlayerAdvancedState, MAX_ABILITY_LEVEL } from '../shared/playerConfig.js';
+import workerClient from '../services/workerClient.js';
 import {
-    combatGuildBuffDetails,
-    getGuildBuffMaxLevel,
-    getGuildShrineName,
-    guildBuffDetailIndex,
-    normalizeGuildBuffLevels,
-} from "../shared/guildBuffs.js";
-import workerClient, { WorkerClient } from "../services/workerClient.js";
-import { estimateNoRngProfit } from "../services/profitEstimator.js";
+  applyPersistedAchievementsToPlayers,
+  clearPlayerAchievementsFromStorage,
+  clearPlayerDataSnapshotFromStorage,
+  createPlayerDataSnapshotState,
+  createPricingState,
+  getStorageItem,
+  loadAdvisorSettingsFromStorage,
+  loadEquipmentSetsFromStorage,
+  loadGameModeFromStorage,
+  loadPlayerAchievementsFromStorage,
+  loadPlayerDataSnapshotFromStorage,
+  loadQueueRunSettingsByPlayerFromStorage,
+  loadQueueRuntimeSettingsFromStorage,
+  loadSimulationUiSettingsFromStorage,
+  parsePlayerSnapshotSummary,
+  persistEquipmentSetsToStorage,
+  persistGameModeToStorage,
+  persistPlayerAchievementsToStorage,
+  savePlayerDataSnapshotToStorage,
+  upsertPlayerDataSnapshotToStorage,
+} from '../services/simulatorStorage.js';
+// 候选 A（2026-10-03）：资产分轻符号（快照等值守卫 / 玩家配置签名）静态导入轻层
+// 模块（常驻 index chunk）；重计算链（computePlayerAssetScore / pricing 可用性判定，
+// 含 enhancementSimulator 成本法与商店/制作取价）改走下方 loadAssetScoreModule 按需加载。
+import { assetScoreEquals, computeAssetScoreConfigSignature } from '../services/assetScorePresentation.js';
 import {
-    createDefaultPriceTable,
-    fetchMarketPriceTable,
-    normalizePriceMode,
-    PRICE_MODE_ASK,
-    PRICE_MODE_BID,
-    PRICE_MODE_VENDOR,
-} from "../services/marketPriceService.js";
+  ensureTriggerMapEntry,
+  getDefaultTriggerDtosForHrid,
+  sanitizeTriggerList,
+  sanitizeTriggerMap,
+} from '../services/triggerMapper.js';
 import {
-    exportGroupConfig,
-    exportSoloConfig,
-    importGroupConfig as parseGroupImportConfig,
-    importSoloConfig as parseSoloImportConfig,
-} from "../services/importExportMapper.js";
+  RUN_SCOPE_ALL_GROUP_ZONES,
+  RUN_SCOPE_ALL_LABYRINTHS,
+  RUN_SCOPE_ALL_SOLO_ZONES,
+  RUN_SCOPE_SINGLE,
+  LABYRINTH_ROOM_LEVEL_DEFAULT,
+  buildQueueBaselineSettings,
+  normalizeLabyrinthCrates,
+  toPlayerHrid,
+} from '../services/simulationDomain.js';
+import { normalizeLabyrinthShopUpgrades } from '../shared/labyrinthShopUpgrades.js';
+import { createAdvisorState, resolveAdvisorMetricPlayer } from '../services/advisorDomain.js';
 import {
-    applyTriggerStateToTriggerMap,
-    buildTriggerChangeDescriptor,
-    getComparableTriggerTargetHrids,
-    ensureTriggerMapEntry,
-    getDefaultTriggerDtosForHrid,
-    getEffectiveTriggerState,
-    sanitizeTriggerList,
-    sanitizeTriggerMap,
-} from "../services/triggerMapper.js";
+  getDetectedHardwareCoreCount,
+  getParallelWorkerHardMaxForCurrentMachine,
+  getRecommendedParallelWorkerLimit,
+} from '../services/queueScoring.js';
 import {
-    ADVISOR_GOAL_PRESET_BALANCED,
-    ADVISOR_GOAL_PRESET_CUSTOM,
-    buildAdvisorMetricSummary,
-    buildAdvisorTopCards,
-    getAdvisorPresetWeights,
-    normalizeAdvisorGoalPreset,
-    normalizeAdvisorWeights,
-    rankAdvisorRows,
-} from "../services/advisorScoring.js";
-import { resolveQueuePerformanceSubweights } from "../shared/queuePerformanceWeights.js";
-import { normalizeCombatScrollHrids } from "../shared/simulationExtraBuffs.js";
+  buildEquipmentSetQueueChangesFromQueueState,
+  buildQueueItemsFromQueueChangeTemplates,
+  createEquipmentSetSnapshotFromPlayer,
+  normalizeEquipmentSetQueueChanges,
+  queueStateHasUnsupportedEquipmentSetQueueChanges,
+} from '../services/queueVariants.js';
+import { clamp, deepClone, isPlainObject, normalizeAbilitySlotIndex } from '../services/utils.js';
+import {
+  QUEUE_PLAYER_IDS,
+  buildQueuePartyComparisonPlayers,
+  buildQueuePartySignature,
+  createImportedBaselineByPlayer,
+  createImportedProfileByPlayer,
+  createQueueActions,
+  createQueueBaselineRecord,
+  createQueuePlayerState,
+  createQueueStateByPlayer,
+} from './simulatorQueueActions.js';
+import { createPricingActions, ensureQueueMarketPriceSnapshot } from './simulatorPricingActions.js';
+import { createAdvisorActions } from './simulatorAdvisorActions.js';
+import { createSimulationActions } from './simulatorSimulationActions.js';
+import { createCachedModuleLoader } from '../services/cachedModuleLoader.js';
+import { runPlayerConfigMutationExclusive } from '../services/playerConfigMutationQueue.js';
+import { createFoodOptimizerActions, createFoodOptimizerState } from './simulatorFoodOptimizerActions.js';
+import { snapshotFoodOptimizerInput } from '../services/foodOptimizerSnapshot.js';
+import { createFoodOptimizerInputSignature } from '../services/foodOptimizerDomain.js';
+import {
+  createTriggerOptimizerActions,
+  createTriggerOptimizerState,
+  snapshotTriggerOptimizerInput,
+} from './simulatorTriggerOptimizerActions.js';
+import { createTriggerOptimizerInputSignature } from '../services/triggerOptimizerDomain.js';
+import {
+  createBudgetOptimizerActions,
+  createBudgetOptimizerState,
+  snapshotBudgetOptimizerInput,
+} from './simulatorBudgetOptimizerActions.js';
+import { createBudgetOptimizerInputSignature } from '../services/budgetOptimizerDomain.js';
 
-const ONE_SECOND = 1e9;
-const ONE_HOUR = 60 * 60 * ONE_SECOND;
+const ABILITY_BOOK_CATEGORY_HRID = '/item_categories/ability_book';
 
-const RUN_SCOPE_SINGLE = "single";
-const RUN_SCOPE_ALL_GROUP_ZONES = "all_group_zones";
-const RUN_SCOPE_ALL_SOLO_ZONES = "all_solo_zones";
-const RUN_SCOPE_ALL_LABYRINTHS = "all_labyrinths";
-const ABILITY_BOOK_CATEGORY_HRID = "/item_categories/ability_book";
-const LABYRINTH_COFFEE_CRATE_HRIDS = ["/items/basic_coffee_crate", "/items/advanced_coffee_crate", "/items/expert_coffee_crate"];
-const LABYRINTH_FOOD_CRATE_HRIDS = ["/items/basic_food_crate", "/items/advanced_food_crate", "/items/expert_food_crate"];
-const LABYRINTH_TEA_CRATE_HRIDS = ["/items/basic_tea_crate", "/items/advanced_tea_crate", "/items/expert_tea_crate"];
+// 动态导入缓存去重 + 失败可重试（见 cachedModuleLoader 注释）：并发调用共享
+// 同一次导入；一次瞬态失败（弱网抖动）不再让 Home 模拟 / advisor 扫描 /
+// queue 基线三个功能整会话持续失败，下次调用自动重试。
+const loadPlayerMapperModule = createCachedModuleLoader(() => import('../services/playerMapper.js'));
 
-const EQUIPMENT_SET_STORAGE_KEY = "mwi.equipmentSets.v2";
-const EQUIPMENT_SET_QUEUE_CHANGES_VERSION = 1;
-const PRICE_SETTINGS_STORAGE_KEY = "mwi.price.settings.v1";
-const PRICE_MARKET_CACHE_STORAGE_KEY = "mwi.price.marketCache.v1";
-const SIMULATION_UI_STORAGE_KEY = "mwi.simulation.ui.v1";
-const QUEUE_SETTINGS_STORAGE_KEY = "mwi.queue.settings.v1";
-const QUEUE_SETTINGS_STORAGE_VERSION = 1;
-const QUEUE_RUN_SETTINGS_STORAGE_KEY = "mwi.queue.runSettings.v1";
-const QUEUE_RUN_SETTINGS_STORAGE_VERSION = 1;
-const PLAYER_DATA_SNAPSHOT_STORAGE_KEY = "mwi.player.data.snapshot.v1";
-const PLAYER_DATA_SNAPSHOT_STORAGE_VERSION = 1;
-const PLAYER_ACHIEVEMENTS_STORAGE_KEY = "mwi.player.achievements.v1";
-const PLAYER_ACHIEVEMENTS_STORAGE_VERSION = 1;
-const COMBAT_LOADOUT_IMPORTS_STORAGE_KEY = "mwi.combatLoadoutImports.v1";
-const COMBAT_LOADOUT_IMPORTS_STORAGE_VERSION = 1;
-const QUEUE_PLAYER_IDS = ["1", "2", "3", "4", "5"];
-const QUEUE_PARALLEL_WORKER_LIMIT_MIN = 1;
-const QUEUE_PARALLEL_WORKER_LIMIT_MAX = 64;
-const QUEUE_WEIGHT_SUM_EPSILON = 1e-6;
-const QUEUE_MULTI_ROUND_DEFAULT_PARALLEL_WORKERS = 4;
-const QUEUE_MULTI_ROUND_METRIC_KEYS = ["dps", "dailyNoRngProfit", "xpPerHour", "killsPerHour"];
-const QUEUE_BASELINE_METRIC_KEYS = [
-    "encountersPerHour",
-    "deathsPerHour",
-    "totalXpPerHour",
-    "profitPerHour",
-    ...QUEUE_MULTI_ROUND_METRIC_KEYS,
-];
-const QUEUE_MULTI_ROUND_WINSORIZE_PCT = 0.05;
-const QUEUE_MULTI_ROUND_MEDIAN_BLEND_WEIGHT = 0.5;
-const QUEUE_MULTI_ROUND_CONFIDENCE_SIZE_SCALE = 8;
-const QUEUE_MULTI_ROUND_CONFIDENCE_PENALTY_STRENGTH = 0.35;
-const QUEUE_MULTI_ROUND_SCORE_MIN = 5;
-const QUEUE_MULTI_ROUND_SCORE_MAX = 95;
-const QUEUE_MULTI_ROUND_SCORE_TIE = 50;
-const QUEUE_MULTI_ROUND_SCORE_INVALID = 0;
-const QUEUE_MULTI_ROUND_FINAL_WEIGHT_PERFORMANCE = 0.4;
-const QUEUE_MULTI_ROUND_FINAL_WEIGHT_STABILITY = 0.2;
-const QUEUE_MULTI_ROUND_FINAL_WEIGHT_COST = 0.4;
-const QUEUE_COST_SCORE_GOLD_METRIC_STRICT = "strict";
-const QUEUE_COST_SCORE_GOLD_METRIC_COMPOSITE = "composite";
-const QUEUE_COST_SCORE_WEIGHT_UPGRADE = 0.25;
-const QUEUE_COST_SCORE_WEIGHT_PURCHASE_DAYS = 0.35;
-const QUEUE_COST_SCORE_WEIGHT_GOLD_PER_POINT = 0.4;
-const ADVISOR_REFINE_TOP_COUNT_DEFAULT = 8;
-const ADVISOR_REFINE_ROUNDS_DEFAULT = 20;
-const ADVISOR_REFINE_TOP_COUNT_MIN = 1;
-const ADVISOR_REFINE_TOP_COUNT_MAX = 32;
-const ADVISOR_REFINE_ROUNDS_MIN = 1;
-const ADVISOR_REFINE_ROUNDS_MAX = 30;
-const ADVISOR_QUICK_ROUNDS_DEFAULT = 3;
-const ADVISOR_QUICK_ROUNDS_MIN = 1;
-const ADVISOR_QUICK_ROUNDS_MAX = 10;
-const DEDICATED_WORKER_SCOPE_QUEUE = "queue";
-const DEDICATED_WORKER_SCOPE_ADVISOR = "advisor";
-const dedicatedWorkerRuns = new Set();
-let sharedWorkerRunHandle = null;
-let abilityUpgradeReferenceLoadPromise = null;
-let playerMapperModulePromise = null;
+// ③ importExportMapper 动态化（2026-10-03）：导入导出与快照序列化仅为用户触发路径
+//（导入导出模态框 / 主站桥接 / 手动存档），改为按需加载——其实现（含清洗与槽位路由）
+// 不再进入首屏 index chunk；失败自动清缓存、下次调用可重试（语义同 playerMapper）。
+const loadImportExportMapperModule = createCachedModuleLoader(() => import('../services/importExportMapper.js'));
 
-function loadPlayerMapperModule() {
-    if (!playerMapperModulePromise) {
-        playerMapperModulePromise = import("../services/playerMapper.js");
-    }
-    return playerMapperModulePromise;
-}
-
-function createWorkerRunCancellationError(message = "Simulation cancelled.") {
-    const error = new Error(message);
-    error.code = "cancelled";
-    return error;
-}
-
-function isWorkerRunCancelledError(error) {
-    return Boolean(error?.code === "cancelled");
-}
-
-function registerDedicatedWorkerRun(workerRunHandle) {
-    if (workerRunHandle) {
-        dedicatedWorkerRuns.add(workerRunHandle);
-    }
-}
-
-function unregisterDedicatedWorkerRun(workerRunHandle) {
-    if (workerRunHandle) {
-        dedicatedWorkerRuns.delete(workerRunHandle);
-    }
-}
-
-function cancelDedicatedWorkerRuns(predicate = () => true, cancellationError = createWorkerRunCancellationError()) {
-    for (const workerRunHandle of Array.from(dedicatedWorkerRuns)) {
-        if (!predicate(workerRunHandle)) {
-            continue;
-        }
-        try {
-            workerRunHandle.cancel(cancellationError);
-        } catch (error) {
-            // ignore cancel errors while cleaning dedicated workers
-        }
-    }
-}
-
-function stopQueueWorkerClients() {
-    cancelDedicatedWorkerRuns((workerRunHandle) => workerRunHandle.scope === DEDICATED_WORKER_SCOPE_QUEUE);
-}
-
-function stopAdvisorWorkerRuns() {
-    cancelDedicatedWorkerRuns((workerRunHandle) => workerRunHandle.scope === DEDICATED_WORKER_SCOPE_ADVISOR);
-}
-
-function unregisterSharedWorkerRun(workerRunHandle) {
-    if (sharedWorkerRunHandle === workerRunHandle) {
-        sharedWorkerRunHandle = null;
-    }
-}
-
-function cancelSharedWorkerRun(cancellationError = createWorkerRunCancellationError()) {
-    if (!sharedWorkerRunHandle) {
-        return;
-    }
-
-    try {
-        sharedWorkerRunHandle.cancel(cancellationError);
-    } catch (error) {
-        // ignore cancel errors while cleaning shared workers
-    }
-}
-
-function runSingleSimulationPayloadWithDedicatedWorker(payload, onProgress = () => {}, options = {}) {
-    return new Promise((resolve, reject) => {
-        const dedicatedClient = new WorkerClient();
-        const scope = String(options?.scope || DEDICATED_WORKER_SCOPE_QUEUE);
-        let settled = false;
-        let workerRunHandle = null;
-
-        const settle = (callback, value) => {
-            if (settled) {
-                return;
-            }
-
-            settled = true;
-
-            try {
-                dedicatedClient.stopSimulation();
-            } catch (error) {
-                // ignore stop errors while settling dedicated workers
-            }
-
-            unregisterDedicatedWorkerRun(workerRunHandle);
-            callback(value);
-        };
-
-        workerRunHandle = {
-            scope,
-            cancel: (error = createWorkerRunCancellationError()) => {
-                settle(reject, error);
-            },
-        };
-        registerDedicatedWorkerRun(workerRunHandle);
-
-        try {
-            dedicatedClient.startSimulation(payload, {
-                onProgress: (data) => {
-                    if (settled) {
-                        return;
-                    }
-                    try {
-                        onProgress(data);
-                    } catch (error) {
-                        settle(reject, error);
-                    }
-                },
-                onResult: (simResult) => {
-                    settle(resolve, simResult);
-                },
-                onError: (error) => {
-                    settle(reject, error);
-                },
-            });
-        } catch (error) {
-            settle(reject, error);
-        }
-    });
-}
-
-function runMultiSimulationPayloadWithDedicatedWorker(payload, onProgress = () => {}, options = {}) {
-    return new Promise((resolve, reject) => {
-        const dedicatedClient = new WorkerClient();
-        const scope = String(options?.scope || DEDICATED_WORKER_SCOPE_QUEUE);
-        const onItemResult = typeof options?.onItemResult === "function" ? options.onItemResult : () => {};
-        let settled = false;
-        let workerRunHandle = null;
-
-        const settle = (callback, value) => {
-            if (settled) {
-                return;
-            }
-
-            settled = true;
-
-            try {
-                dedicatedClient.stopSimulation();
-            } catch (error) {
-                // ignore stop errors while settling dedicated workers
-            }
-
-            unregisterDedicatedWorkerRun(workerRunHandle);
-            callback(value);
-        };
-
-        workerRunHandle = {
-            scope,
-            cancel: (error = createWorkerRunCancellationError()) => {
-                settle(reject, error);
-            },
-        };
-        registerDedicatedWorkerRun(workerRunHandle);
-
-        try {
-            dedicatedClient.startMultiSimulation(payload, {
-                onProgress: (data) => {
-                    if (settled) {
-                        return;
-                    }
-                    try {
-                        onProgress(data);
-                    } catch (error) {
-                        settle(reject, error);
-                    }
-                },
-                onItemResult: (data) => {
-                    if (settled) {
-                        return;
-                    }
-                    try {
-                        onItemResult(data);
-                    } catch (error) {
-                        settle(reject, error);
-                    }
-                },
-                onBatchResult: (simResults, batchResultType) => {
-                    settle(resolve, {
-                        simResults: Array.isArray(simResults) ? simResults : [],
-                        batchResultType: String(batchResultType || ""),
-                    });
-                },
-                onError: (error) => {
-                    settle(reject, error);
-                },
-            });
-        } catch (error) {
-            settle(reject, error);
-        }
-    });
-}
-
-function runSharedSingleSimulationPayload(payload, onProgress = () => {}) {
-    return new Promise((resolve, reject) => {
-        let settled = false;
-        let workerRunHandle = null;
-
-        const settle = (callback, value, stopWorker = false) => {
-            if (settled) {
-                return;
-            }
-
-            settled = true;
-
-            if (stopWorker) {
-                try {
-                    workerClient.stopSimulation();
-                } catch (error) {
-                    // ignore stop errors while settling shared workers
-                }
-            }
-
-            unregisterSharedWorkerRun(workerRunHandle);
-            callback(value);
-        };
-
-        workerRunHandle = {
-            cancel: (error = createWorkerRunCancellationError()) => {
-                settle(reject, error, true);
-            },
-        };
-        sharedWorkerRunHandle = workerRunHandle;
-
-        try {
-            workerClient.startSimulation(payload, {
-                onProgress: (data) => {
-                    if (settled) {
-                        return;
-                    }
-                    try {
-                        onProgress(data);
-                    } catch (error) {
-                        settle(reject, error, true);
-                    }
-                },
-                onResult: (simResult) => {
-                    settle(resolve, simResult);
-                },
-                onError: (error) => {
-                    settle(reject, error);
-                },
-            });
-        } catch (error) {
-            settle(reject, error, true);
-        }
-    });
-}
+// 候选 A（2026-10-03）：资产分重计算链按需加载——refreshAssetScores 首次调用
+//（首屏初算 / 配置或行情变化 / 导入导出前刷新）时拉取并缓存，不再进入首屏
+// index chunk；失败自动清缓存、下次调用可重试（语义同前两个 loader）。
+// 加载失败由调用方兜底为「本次不刷新」（导入导出入口 .catch 静默继续）。
+const loadAssetScoreModule = createCachedModuleLoader(() => import('../services/assetScoreService.js'));
 
 function sortByNameThenLevel(a, b) {
-    if (a.itemLevel !== b.itemLevel) {
-        return a.itemLevel - b.itemLevel;
-    }
-    return a.name.localeCompare(b.name);
+  if (a.itemLevel !== b.itemLevel) {
+    return a.itemLevel - b.itemLevel;
+  }
+  return a.name.localeCompare(b.name);
 }
 
 function resolveFoodConsumableSortGroup(option) {
-    const itemHrid = String(option?.hrid || "");
-    const item = itemDetailIndex?.[itemHrid];
-    const hitpointRestore = Number(item?.hitpointRestore ?? 0);
-    const manapointRestore = Number(item?.manapointRestore ?? 0);
-    const recoveryDuration = Number(item?.recoveryDuration ?? 0);
+  const itemHrid = String(option?.hrid || '');
+  const item = itemDetailIndex?.[itemHrid];
+  const hitpointRestore = Number(item?.hitpointRestore ?? 0);
+  const manapointRestore = Number(item?.manapointRestore ?? 0);
+  const recoveryDuration = Number(item?.recoveryDuration ?? 0);
 
-    if (hitpointRestore > 0 && manapointRestore <= 0) {
-        return recoveryDuration > 0 ? 1 : 0;
-    }
+  if (hitpointRestore > 0 && manapointRestore <= 0) {
+    return recoveryDuration > 0 ? 1 : 0;
+  }
 
-    if (manapointRestore > 0 && hitpointRestore <= 0) {
-        return recoveryDuration > 0 ? 3 : 2;
-    }
+  if (manapointRestore > 0 && hitpointRestore <= 0) {
+    return recoveryDuration > 0 ? 3 : 2;
+  }
 
-    return 99;
+  return 99;
 }
 
+// 装备下拉口径与饮品一致：过滤发生在选项「出品」层（store 状态）而不是各消费方——
+// 战斗惰性护符（构建期 isCombatInert 标记 = 引擎口径下战斗上读不到贡献，是产出语义而非
+// 「生活技能护符」身份判定；当前这类护符即生活技能护符，只提供生活经验加成）在
+// options.equipmentBySlot 里本就不存在，新消费方直接读该状态也不会漏进生活护符。
+// 唯一读原始索引的地方是 getEquipmentComboboxOptions 的「保留已选中」例外（见其注释）。
 function getEquipmentOptionsBySlot() {
-    return equipmentOptionsBySlot;
+  return Object.fromEntries(
+    Object.entries(equipmentOptionsBySlot).map(([slot, options]) => [slot, resolveEquipmentComboboxItems(options)]),
+  );
 }
 
 function getConsumableOptions(categoryHrid) {
-    if (categoryHrid === "/item_categories/food") {
-        return foodOptions;
-    }
+  if (categoryHrid === '/item_categories/food') {
+    return foodOptions;
+  }
 
-    if (categoryHrid === "/item_categories/drink") {
-        return drinkOptions;
-    }
+  if (categoryHrid === '/item_categories/drink') {
+    // 依据构建期从物品数据 usableInActionTypeMap['/action_types/combat'] 投影出的
+    // combatUsable 语义标记过滤（替代旧的 *_tea 后缀命名启发式），确保未来新增的
+    // 战斗可用饮品（即使以 *_tea 命名）不会被静默误伤。字段缺失时回退为不过滤。
+    return drinkOptions.filter((option) => option?.combatUsable !== false);
+  }
 
-    return [];
+  return [];
 }
 
 function getAbilityOptions() {
-    return abilityOptions;
+  return abilityOptions;
 }
 
 function getZoneOptions() {
-    return { zones: zoneOptions, dungeons: dungeonOptions };
+  return { zones: zoneOptions, dungeons: dungeonOptions };
 }
 
 function getLabyrinthOptions() {
-    return labyrinthOptions;
+  return labyrinthOptions;
 }
 
-function getAllNonDungeonActions() {
-    return Object.values(actionDetailIndex)
-        .filter((action) => action.type === "/action_types/combat")
-        .filter((action) => action.category !== "/action_categories/combat/dungeons")
-        .sort((a, b) => Number(a.sortIndex ?? 0) - Number(b.sortIndex ?? 0));
-}
-
-function getZoneHridsBySpawnCount(targetSpawnCount) {
-    return getAllNonDungeonActions()
-        .filter((action) => {
-            const maxSpawnCount = Number(action?.combatZoneInfo?.fightInfo?.randomSpawnInfo?.maxSpawnCount ?? 0);
-            return targetSpawnCount > 1 ? maxSpawnCount > 1 : maxSpawnCount === 1;
-        })
-        .map((action) => String(action.hrid || ""))
-        .filter(Boolean);
-}
-
-function normalizeZoneSelection(selectedHrids, allHrids) {
-    const allSet = new Set((allHrids || []).map((value) => String(value || "")).filter(Boolean));
-    const selected = Array.isArray(selectedHrids) ? selectedHrids : [];
-    return Array.from(new Set(selected
-        .map((value) => String(value || ""))
-        .filter((value) => allSet.has(value))));
-}
-
-function normalizeLabyrinthCrates(rawCrates) {
-    const source = isPlainObject(rawCrates) ? rawCrates : {};
-    const coffee = String(source.coffee || "");
-    const food = String(source.food || "");
-    const tea = String(source.tea || "");
-    return {
-        coffee: LABYRINTH_COFFEE_CRATE_HRIDS.includes(coffee) ? coffee : "",
-        food: LABYRINTH_FOOD_CRATE_HRIDS.includes(food) ? food : "",
-        tea: LABYRINTH_TEA_CRATE_HRIDS.includes(tea) ? tea : "",
-    };
-}
-
-function buildZoneTargetsByScope(runScope, selectedZoneHrids = []) {
-    let actions = getAllNonDungeonActions();
-
-    if (runScope === RUN_SCOPE_ALL_GROUP_ZONES) {
-        actions = actions.filter((action) => Number(action?.combatZoneInfo?.fightInfo?.randomSpawnInfo?.maxSpawnCount ?? 0) > 1);
-    }
-
-    if (runScope === RUN_SCOPE_ALL_SOLO_ZONES) {
-        actions = actions.filter((action) => Number(action?.combatZoneInfo?.fightInfo?.randomSpawnInfo?.maxSpawnCount ?? 0) === 1);
-    }
-
-    const selectedSet = new Set((selectedZoneHrids || []).map((hrid) => String(hrid || "")).filter(Boolean));
-    if (selectedSet.size > 0) {
-        actions = actions.filter((action) => selectedSet.has(String(action?.hrid || "")));
-    }
-
-    return actions.flatMap((action) => {
-        const maxDifficulty = Number(action.maxDifficulty ?? 0);
-        const zoneHrid = action.hrid;
-        const results = [];
-
-        for (let difficultyTier = 0; difficultyTier <= maxDifficulty; difficultyTier++) {
-            results.push({ zoneHrid, difficultyTier });
-        }
-
-        return results;
-    });
-}
-
-function buildAllLabyrinthTargets(crates = []) {
-    const labyrinthMonsters = Object.values(monsterDetailIndex)
-        .filter((monster) => monster.isLabyrinthMonster === true)
-        .sort((a, b) => Number(a.sortIndex ?? 0) - Number(b.sortIndex ?? 0));
-
-    const normalizedCrates = Array.isArray(crates)
-        ? crates.map((value) => String(value || "")).filter(Boolean)
-        : [];
-
-    return labyrinthMonsters.flatMap((monster) => {
-        const labyrinths = [];
-        for (let roomLevel = 40; roomLevel <= 220; roomLevel += 20) {
-            labyrinths.push({
-                labyrinthHrid: monster.hrid,
-                roomLevel,
-                crates: [...normalizedCrates],
-            });
-        }
-        return labyrinths;
-    });
-}
-
-function clamp(value, min, max) {
-    return Math.max(min, Math.min(max, value));
-}
-
-function toFiniteNumber(value, fallback = 0) {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-function summarizeResult(simResult, selectedPlayers, pricingOptions = {}) {
-    const hours = Math.max(1e-9, Number(simResult?.simulatedTime ?? 0) / ONE_HOUR);
-    const skills = ["stamina", "intelligence", "attack", "magic", "ranged", "melee", "defense"];
-
-    return selectedPlayers.map((player) => {
-        const playerHrid = `player${player.id}`;
-        const experienceMap = simResult?.experienceGained?.[playerHrid] ?? {};
-        const totalExperience = Object.values(experienceMap).reduce((sum, value) => sum + Number(value || 0), 0);
-        const deathsPerHour = Number(simResult?.deaths?.[playerHrid] ?? 0) / hours;
-        const encountersPerHour = Number(simResult?.encounters ?? 0) / hours;
-        const profit = estimateNoRngProfit(simResult, playerHrid, pricingOptions);
-        const skillXpPerHour = {};
-
-        for (const skill of skills) {
-            skillXpPerHour[`${skill}XpPerHour`] = Number(experienceMap?.[skill] || 0) / hours;
-        }
-
-        return {
-            playerHrid,
-            playerName: player.name,
-            encountersPerHour,
-            deathsPerHour,
-            totalXpPerHour: totalExperience / hours,
-            profitPerHour: profit.profit / hours,
-            revenuePerHour: profit.revenue / hours,
-            expensesPerHour: profit.expenses / hours,
-            totalExperience,
-            noRngRevenue: profit.revenue,
-            expenses: profit.expenses,
-            noRngProfit: profit.profit,
-            ...skillXpPerHour,
-        };
-    });
-}
-
-function summarizeBatchResults(simResults, selectedPlayers, pricingOptions = {}) {
-    const actionOrderMap = new Map(getAllNonDungeonActions().map((action, index) => [String(action?.hrid || ""), index]));
-    const labyrinthOrderMap = new Map(
-        Object.values(monsterDetailIndex)
-            .filter((monster) => monster.isLabyrinthMonster === true)
-            .sort((a, b) => Number(a.sortIndex ?? 0) - Number(b.sortIndex ?? 0))
-            .map((monster, index) => [String(monster?.hrid || ""), index])
-    );
-    const playerOrderMap = new Map((selectedPlayers || []).map((player, index) => [`player${player.id}`, index]));
-
-    const orderedResults = (simResults || []).slice().sort((left, right) => {
-        const leftIsLabyrinth = Boolean(left?.isLabyrinth);
-        const rightIsLabyrinth = Boolean(right?.isLabyrinth);
-
-        if (leftIsLabyrinth !== rightIsLabyrinth) {
-            return leftIsLabyrinth ? 1 : -1;
-        }
-
-        if (leftIsLabyrinth && rightIsLabyrinth) {
-            const leftLabyrinthOrder = labyrinthOrderMap.get(String(left?.labyrinthName || "")) ?? Number.MAX_SAFE_INTEGER;
-            const rightLabyrinthOrder = labyrinthOrderMap.get(String(right?.labyrinthName || "")) ?? Number.MAX_SAFE_INTEGER;
-            if (leftLabyrinthOrder !== rightLabyrinthOrder) {
-                return leftLabyrinthOrder - rightLabyrinthOrder;
-            }
-
-            return Number(left?.roomLevel || 0) - Number(right?.roomLevel || 0);
-        }
-
-        const leftZoneOrder = actionOrderMap.get(String(left?.zoneName || "")) ?? Number.MAX_SAFE_INTEGER;
-        const rightZoneOrder = actionOrderMap.get(String(right?.zoneName || "")) ?? Number.MAX_SAFE_INTEGER;
-        if (leftZoneOrder !== rightZoneOrder) {
-            return leftZoneOrder - rightZoneOrder;
-        }
-
-        return Number(left?.difficultyTier || 0) - Number(right?.difficultyTier || 0);
-    });
-
-    const rows = [];
-
-    orderedResults.forEach((simResult, runIndex) => {
-        const zoneName = simResult?.isLabyrinth ? simResult?.labyrinthName : simResult?.zoneName;
-        const difficulty = simResult?.isLabyrinth ? simResult?.roomLevel : simResult?.difficultyTier;
-
-        const playerRows = summarizeResult(simResult, selectedPlayers, pricingOptions);
-        playerRows.sort((left, right) => {
-            const leftOrder = playerOrderMap.get(String(left?.playerHrid || "")) ?? Number.MAX_SAFE_INTEGER;
-            const rightOrder = playerOrderMap.get(String(right?.playerHrid || "")) ?? Number.MAX_SAFE_INTEGER;
-            return leftOrder - rightOrder;
-        });
-        playerRows.forEach((playerRow) => {
-            rows.push({
-                rowId: `${runIndex}-${playerRow.playerHrid}`,
-                runIndex,
-                zoneName: zoneName || "-",
-                zoneOrder: simResult?.isLabyrinth
-                    ? (labyrinthOrderMap.get(String(zoneName || "")) ?? Number.MAX_SAFE_INTEGER)
-                    : (actionOrderMap.get(String(zoneName || "")) ?? Number.MAX_SAFE_INTEGER),
-                difficulty,
-                ...playerRow,
-            });
-        });
-    });
-
-    return rows;
-}
-
-function buildSimulationExtra(simulationSettings) {
-    return {
-        mooPass: Boolean(simulationSettings.mooPass),
-        comExp: simulationSettings.comExpEnabled ? Number(simulationSettings.comExp || 20) : 0,
-        comDrop: simulationSettings.comDropEnabled ? Number(simulationSettings.comDrop || 20) : 0,
-        scrolls: normalizeCombatScrollHrids(simulationSettings.combatScrolls),
-        enableHpMpVisualization: Boolean(simulationSettings.enableHpMpVisualization),
-    };
-}
-
-function buildQueueBaselineSettings(simulationSettings = {}, queueSettings = null) {
-    const useDungeon = Boolean(simulationSettings.useDungeon);
-    const regularZoneHrid = String(simulationSettings.zoneHrid || "");
-    const dungeonHrid = String(simulationSettings.dungeonHrid || "");
-    const selectedZoneHrid = useDungeon ? dungeonHrid : regularZoneHrid;
-    const normalizedQueueSettings = normalizeQueueSettings(queueSettings);
-
-    return {
-        mode: String(simulationSettings.mode || "zone"),
-        runScope: String(simulationSettings.runScope || RUN_SCOPE_SINGLE),
-        simDungeon: useDungeon,
-        zoneHrid: selectedZoneHrid,
-        regularZoneHrid,
-        dungeonHrid,
-        difficultyTier: Math.max(0, Math.floor(toFiniteNumber(simulationSettings.difficultyTier, 0))),
-        simulationTimeHours: Math.max(1, Math.floor(toFiniteNumber(simulationSettings.simulationTimeHours, 24))),
-        baselineRounds: normalizedQueueSettings.baselineRounds,
-        extra: buildSimulationExtra(simulationSettings),
-    };
-}
-
-function deepClone(value) {
-    return JSON.parse(JSON.stringify(value));
-}
-
-function isPlainObject(value) {
-    return value != null && typeof value === "object" && !Array.isArray(value);
-}
-
-function readJsonStorage(storageKey) {
-    try {
-        const raw = localStorage.getItem(storageKey);
-        if (!raw) {
-            return {};
-        }
-        const parsed = JSON.parse(raw);
-        return isPlainObject(parsed) ? parsed : {};
-    } catch (error) {
-        return {};
-    }
-}
-
-function normalizeSimulationUiSettings(rawSettings) {
-    const source = isPlainObject(rawSettings) ? rawSettings : {};
-    return {
-        mooPass: Boolean(source.mooPass),
-        comExpEnabled: Boolean(source.comExpEnabled),
-        comExp: clamp(Math.floor(toFiniteNumber(source.comExp, 20)), 1, 99),
-        comDropEnabled: Boolean(source.comDropEnabled),
-        comDrop: clamp(Math.floor(toFiniteNumber(source.comDrop, 20)), 1, 99),
-        // 開啟中的戰鬥卷軸（個人加成類型 hrid）
-        combatScrolls: normalizeCombatScrollHrids(source.combatScrolls),
-    };
-}
-
-function loadSimulationUiSettingsFromStorage() {
-    const stored = readJsonStorage(SIMULATION_UI_STORAGE_KEY);
-    return normalizeSimulationUiSettings({
-        mooPass: true,
-        comExpEnabled: true,
-        comDropEnabled: true,
-        ...stored,
-    });
-}
-
-function persistSimulationUiSettingsToStorage(settings) {
-    if (typeof localStorage === "undefined") {
-        return;
-    }
-    const normalized = normalizeSimulationUiSettings(settings);
-    localStorage.setItem(SIMULATION_UI_STORAGE_KEY, JSON.stringify(normalized));
-}
-
-function normalizeAchievementFlags(rawAchievements) {
-    const source = isPlainObject(rawAchievements) ? rawAchievements : {};
-    const normalized = {};
-
-    for (const [achievementHrid, unlocked] of Object.entries(source)) {
-        const normalizedHrid = String(achievementHrid || "").trim();
-        if (!normalizedHrid || !Boolean(unlocked)) {
-            continue;
-        }
-        normalized[normalizedHrid] = true;
-    }
-
-    return normalized;
-}
-
-function normalizeStoredPlayerAchievementsMap(rawPlayerAchievements) {
-    const source = isPlainObject(rawPlayerAchievements) ? rawPlayerAchievements : {};
-    const normalized = {};
-
-    for (const playerId of QUEUE_PLAYER_IDS) {
-        const normalizedAchievements = normalizeAchievementFlags(source[playerId]);
-        if (Object.keys(normalizedAchievements).length > 0) {
-            normalized[playerId] = normalizedAchievements;
-        }
-    }
-
-    return normalized;
-}
-
-function collectPlayerAchievementsById(players) {
-    const normalized = {};
-
-    for (const player of players || []) {
-        const playerId = String(player?.id || "").trim();
-        if (!QUEUE_PLAYER_IDS.includes(playerId)) {
-            continue;
-        }
-
-        const achievements = normalizeAchievementFlags(player?.achievements);
-        if (Object.keys(achievements).length > 0) {
-            normalized[playerId] = achievements;
-        }
-    }
-
-    return normalized;
-}
-
-function loadPlayerAchievementsFromStorage() {
-    const payload = readJsonStorage(PLAYER_ACHIEVEMENTS_STORAGE_KEY);
-    if (payload.version != null && Number(payload.version) !== PLAYER_ACHIEVEMENTS_STORAGE_VERSION) {
-        return {};
-    }
-
-    const sourceMap = isPlainObject(payload.achievementsByPlayer)
-        ? payload.achievementsByPlayer
-        : payload;
-
-    return normalizeStoredPlayerAchievementsMap(sourceMap);
-}
-
-function persistPlayerAchievementsToStorage(players) {
-    if (typeof localStorage === "undefined") {
-        return;
-    }
-
-    const achievementsByPlayer = collectPlayerAchievementsById(players);
-    if (Object.keys(achievementsByPlayer).length <= 0) {
-        localStorage.removeItem(PLAYER_ACHIEVEMENTS_STORAGE_KEY);
-        return;
-    }
-
-    localStorage.setItem(PLAYER_ACHIEVEMENTS_STORAGE_KEY, JSON.stringify({
-        version: PLAYER_ACHIEVEMENTS_STORAGE_VERSION,
-        achievementsByPlayer,
-    }));
-}
-
-function clearPlayerAchievementsFromStorage() {
-    if (typeof localStorage === "undefined") {
-        return;
-    }
-
-    localStorage.removeItem(PLAYER_ACHIEVEMENTS_STORAGE_KEY);
-}
-
-function applyPersistedAchievementsToPlayers(players, achievementsByPlayer) {
-    const normalizedAchievementsByPlayer = normalizeStoredPlayerAchievementsMap(achievementsByPlayer);
-    return (players || []).map((player) => {
-        const playerId = String(player?.id || "").trim();
-        return {
-            ...player,
-            achievements: deepClone(normalizedAchievementsByPlayer[playerId] ?? {}),
-        };
-    });
-}
-
-function getVendorPriceByItemHrid(itemHrid) {
-    const hrid = String(itemHrid || "");
-    if (!hrid) {
-        return 0;
-    }
-    return Math.max(0, toFiniteNumber(itemDetailIndex?.[hrid]?.sellPrice, 0));
-}
-
-function normalizePriceOverrideValue(value) {
-    if (value === null || value === undefined || value === "") {
-        return null;
-    }
-
-    const parsed = Number(value);
-    if (!Number.isFinite(parsed) || parsed < 0) {
-        return null;
-    }
-    return parsed;
-}
-
-function normalizePriceOverrideMap(rawOverrides) {
-    const source = isPlainObject(rawOverrides) ? rawOverrides : {};
-    const normalized = {};
-
-    for (const [rawHrid, rawEntry] of Object.entries(source)) {
-        const hrid = String(rawHrid || "");
-        if (!hrid || !isPlainObject(rawEntry)) {
-            continue;
-        }
-
-        const entry = {};
-        const ask = normalizePriceOverrideValue(rawEntry.ask);
-        const bid = normalizePriceOverrideValue(rawEntry.bid);
-
-        if (ask !== null) {
-            entry.ask = ask;
-        }
-        if (bid !== null) {
-            entry.bid = bid;
-        }
-
-        if (Object.keys(entry).length > 0) {
-            normalized[hrid] = entry;
-        }
-    }
-
-    return normalized;
-}
-
-function normalizeEnhancementQuotesByItem(rawQuotes) {
-    const source = isPlainObject(rawQuotes) ? rawQuotes : {};
-    const normalized = {};
-
-    for (const [rawHrid, rawLevelMap] of Object.entries(source)) {
-        const hrid = String(rawHrid || "");
-        if (!hrid || !isPlainObject(rawLevelMap)) {
-            continue;
-        }
-
-        const quoteMap = {};
-        for (const [rawLevel, rawQuote] of Object.entries(rawLevelMap)) {
-            const level = Math.floor(toFiniteNumber(rawLevel, -1));
-            if (!Number.isFinite(level) || level < 0 || !isPlainObject(rawQuote)) {
-                continue;
-            }
-
-            const ask = toFiniteNumber(rawQuote?.ask, -1);
-            const bid = toFiniteNumber(rawQuote?.bid, -1);
-            if (ask < 0 && bid < 0) {
-                continue;
-            }
-
-            quoteMap[String(level)] = {
-                ask,
-                bid,
-            };
-        }
-
-        if (Object.keys(quoteMap).length > 0) {
-            normalized[hrid] = quoteMap;
-        }
-    }
-
-    return normalized;
-}
-
-function normalizeEnhancementLevelsByItem(rawLevels) {
-    const source = isPlainObject(rawLevels) ? rawLevels : {};
-    const normalized = {};
-
-    for (const [rawHrid, rawLevelList] of Object.entries(source)) {
-        const hrid = String(rawHrid || "");
-        if (!hrid || !Array.isArray(rawLevelList)) {
-            continue;
-        }
-
-        const levels = Array.from(new Set(rawLevelList
-            .map((value) => Math.floor(toFiniteNumber(value, -1)))
-            .filter((value) => Number.isFinite(value) && value > 0)))
-            .sort((a, b) => a - b);
-
-        if (levels.length > 0) {
-            normalized[hrid] = levels;
-        }
-    }
-
-    return normalized;
-}
-
-function cloneBasePriceTable(basePriceTable) {
-    const source = isPlainObject(basePriceTable) ? basePriceTable : {};
-    const clone = {};
-
-    for (const [rawHrid, rawEntry] of Object.entries(source)) {
-        const hrid = String(rawHrid || "");
-        if (!hrid) {
-            continue;
-        }
-
-        clone[hrid] = {
-            ask: toFiniteNumber(rawEntry?.ask, -1),
-            bid: toFiniteNumber(rawEntry?.bid, -1),
-            vendor: Math.max(0, toFiniteNumber(rawEntry?.vendor, getVendorPriceByItemHrid(hrid))),
-        };
-    }
-
-    return clone;
-}
-
-function applyPriceOverridesToTable(basePriceTable, overrides) {
-    const table = cloneBasePriceTable(basePriceTable);
-    const normalizedOverrides = normalizePriceOverrideMap(overrides);
-
-    for (const [hrid, overrideEntry] of Object.entries(normalizedOverrides)) {
-        const targetEntry = table[hrid] || {
-            ask: -1,
-            bid: -1,
-            vendor: getVendorPriceByItemHrid(hrid),
-        };
-
-        if (Object.prototype.hasOwnProperty.call(overrideEntry, "ask")) {
-            targetEntry.ask = overrideEntry.ask;
-        }
-        if (Object.prototype.hasOwnProperty.call(overrideEntry, "bid")) {
-            targetEntry.bid = overrideEntry.bid;
-        }
-
-        table[hrid] = targetEntry;
-    }
-
-    return table;
-}
-
-function rehydratePricingTable(pricingState) {
-    const source = pricingState && typeof pricingState === "object" ? pricingState : {};
-    source.priceTable = applyPriceOverridesToTable(source.basePriceTable, source.overrides);
-}
-
-function normalizePricingSettings(raw) {
-    const source = isPlainObject(raw) ? raw : {};
-    return {
-        consumableMode: normalizePriceMode(source.consumableMode, PRICE_MODE_ASK),
-        dropMode: normalizePriceMode(source.dropMode, PRICE_MODE_BID),
-        overrides: normalizePriceOverrideMap(source.overrides),
-    };
-}
-
-function normalizeMarketCachePayload(raw) {
-    const source = isPlainObject(raw) ? raw : {};
-    return {
-        basePriceTable: cloneBasePriceTable(source.basePriceTable),
-        enhancementQuotesByItem: normalizeEnhancementQuotesByItem(source.enhancementQuotesByItem),
-        enhancementLevelsByItem: normalizeEnhancementLevelsByItem(source.enhancementLevelsByItem),
-        lastFetchedAt: Math.max(0, toFiniteNumber(source.lastFetchedAt, 0)),
-        sourceUrl: String(source.sourceUrl || ""),
-    };
-}
-
-function loadMarketCacheFromStorage() {
-    const payload = normalizeMarketCachePayload(readJsonStorage(PRICE_MARKET_CACHE_STORAGE_KEY));
-    if (Object.keys(payload.basePriceTable).length === 0 || payload.lastFetchedAt <= 0) {
-        return null;
-    }
-    return payload;
-}
-
-function persistMarketCacheToStorage(cachePayload) {
-    if (typeof localStorage === "undefined") {
-        return;
-    }
-    const normalized = normalizeMarketCachePayload(cachePayload);
-    localStorage.setItem(PRICE_MARKET_CACHE_STORAGE_KEY, JSON.stringify(normalized));
-}
-
-function clearMarketCacheFromStorage() {
-    if (typeof localStorage === "undefined") {
-        return;
-    }
-    localStorage.removeItem(PRICE_MARKET_CACHE_STORAGE_KEY);
-}
-
-function loadPricingSettingsFromStorage() {
-    const parsed = readJsonStorage(PRICE_SETTINGS_STORAGE_KEY);
-    return normalizePricingSettings(parsed);
-}
-
-function persistPricingSettingsToStorage(settings) {
-    const normalized = normalizePricingSettings(settings);
-    localStorage.setItem(PRICE_SETTINGS_STORAGE_KEY, JSON.stringify(normalized));
-}
-
-function createPricingState() {
-    const settings = loadPricingSettingsFromStorage();
-    const cachedMarket = loadMarketCacheFromStorage();
-    const basePriceTable = cachedMarket?.basePriceTable || createDefaultPriceTable();
-    return {
-        consumableMode: settings.consumableMode,
-        dropMode: settings.dropMode,
-        overrides: settings.overrides,
-        basePriceTable,
-        priceTable: applyPriceOverridesToTable(basePriceTable, settings.overrides),
-        enhancementQuotesByItem: normalizeEnhancementQuotesByItem(cachedMarket?.enhancementQuotesByItem),
-        enhancementLevelsByItem: normalizeEnhancementLevelsByItem(cachedMarket?.enhancementLevelsByItem),
-        lastFetchedAt: Number(cachedMarket?.lastFetchedAt || 0),
-        sourceUrl: String(cachedMarket?.sourceUrl || ""),
-        isLoading: false,
-        error: "",
-    };
-}
-
-function createProfitPricingOptions(pricingState) {
-    return {
-        consumableMode: normalizePriceMode(pricingState?.consumableMode, PRICE_MODE_ASK),
-        dropMode: normalizePriceMode(pricingState?.dropMode, PRICE_MODE_BID),
-        priceTable: pricingState?.priceTable ?? null,
-    };
-}
-
-function getDefaultQueueRuntimeSettings() {
-    return {
-        finalWeights: {
-            performance: QUEUE_MULTI_ROUND_FINAL_WEIGHT_PERFORMANCE,
-            stability: QUEUE_MULTI_ROUND_FINAL_WEIGHT_STABILITY,
-            cost: QUEUE_MULTI_ROUND_FINAL_WEIGHT_COST,
-        },
-        costScoreGoldPerPointMode: QUEUE_COST_SCORE_GOLD_METRIC_STRICT,
-        parallelWorkerLimit: QUEUE_MULTI_ROUND_DEFAULT_PARALLEL_WORKERS,
-    };
-}
-
-function isQueueCostScoreGoldMetricMode(value) {
-    return value === QUEUE_COST_SCORE_GOLD_METRIC_STRICT
-        || value === QUEUE_COST_SCORE_GOLD_METRIC_COMPOSITE;
-}
-
-function normalizeQueueCostScoreGoldMetricMode(value) {
-    return value === QUEUE_COST_SCORE_GOLD_METRIC_COMPOSITE
-        ? QUEUE_COST_SCORE_GOLD_METRIC_COMPOSITE
-        : QUEUE_COST_SCORE_GOLD_METRIC_STRICT;
-}
-
-function normalizeQueueScoreWeights(scoreWeights) {
-    const defaults = getDefaultQueueRuntimeSettings().finalWeights;
-    const performance = Number(scoreWeights?.performance);
-    const stability = Number(scoreWeights?.stability);
-    const cost = Number(scoreWeights?.cost);
-
-    if (
-        !Number.isFinite(performance)
-        || !Number.isFinite(stability)
-        || !Number.isFinite(cost)
-        || performance < 0
-        || stability < 0
-        || cost < 0
-        || performance > 1
-        || stability > 1
-        || cost > 1
-    ) {
-        return {
-            ...defaults,
-        };
-    }
-
-    const weightSum = performance + stability + cost;
-    if (Math.abs(weightSum - 1) > QUEUE_WEIGHT_SUM_EPSILON) {
-        return {
-            ...defaults,
-        };
-    }
-
-    return {
-        performance,
-        stability,
-        cost,
-    };
-}
-
-function haveQueueScoreWeightsChanged(previousWeights, nextWeights) {
-    const normalizedPrevious = normalizeQueueScoreWeights(previousWeights);
-    const normalizedNext = normalizeQueueScoreWeights(nextWeights);
-    return (
-        Math.abs(normalizedPrevious.performance - normalizedNext.performance) > QUEUE_WEIGHT_SUM_EPSILON
-        || Math.abs(normalizedPrevious.stability - normalizedNext.stability) > QUEUE_WEIGHT_SUM_EPSILON
-        || Math.abs(normalizedPrevious.cost - normalizedNext.cost) > QUEUE_WEIGHT_SUM_EPSILON
-    );
-}
-
-function haveQueueRuntimeRankingSettingsChanged(previousSettings, nextSettings) {
-    const normalizedPrevious = normalizeQueueRuntimeSettings(previousSettings);
-    const normalizedNext = normalizeQueueRuntimeSettings(nextSettings);
-    return haveQueueScoreWeightsChanged(normalizedPrevious.finalWeights, normalizedNext.finalWeights)
-        || normalizedPrevious.costScoreGoldPerPointMode !== normalizedNext.costScoreGoldPerPointMode;
-}
-
-function haveQueueRunRankingSettingsChanged(previousSettings, nextSettings) {
-    const normalizedPrevious = normalizeQueueSettings(previousSettings);
-    const normalizedNext = normalizeQueueSettings(nextSettings);
-    return Math.abs(normalizedPrevious.medianBlend - normalizedNext.medianBlend) > QUEUE_WEIGHT_SUM_EPSILON
-        || Math.abs(normalizedPrevious.weightProfit - normalizedNext.weightProfit) > QUEUE_WEIGHT_SUM_EPSILON
-        || Math.abs(normalizedPrevious.weightXp - normalizedNext.weightXp) > QUEUE_WEIGHT_SUM_EPSILON
-        || Math.abs(normalizedPrevious.weightDeathSafety - normalizedNext.weightDeathSafety) > QUEUE_WEIGHT_SUM_EPSILON;
-}
-
-function normalizeParallelWorkerLimit(value, maxLimit = QUEUE_PARALLEL_WORKER_LIMIT_MAX) {
-    const parsed = Math.floor(toFiniteNumber(value, QUEUE_MULTI_ROUND_DEFAULT_PARALLEL_WORKERS));
-    const hardMax = clamp(
-        Math.floor(toFiniteNumber(maxLimit, QUEUE_PARALLEL_WORKER_LIMIT_MAX)),
-        QUEUE_PARALLEL_WORKER_LIMIT_MIN,
-        QUEUE_PARALLEL_WORKER_LIMIT_MAX
-    );
-    return clamp(parsed, QUEUE_PARALLEL_WORKER_LIMIT_MIN, hardMax);
-}
-
-function getDetectedHardwareCoreCount() {
-    const hardwareConcurrency = Number(typeof navigator !== "undefined" ? navigator.hardwareConcurrency : NaN);
-    if (!Number.isFinite(hardwareConcurrency) || hardwareConcurrency <= 0) {
-        return null;
-    }
-    return Math.max(1, Math.floor(hardwareConcurrency));
-}
-
-function getParallelWorkerHardMaxForCurrentMachine() {
-    const detectedCoreCount = getDetectedHardwareCoreCount();
-    if (!Number.isFinite(detectedCoreCount)) {
-        return QUEUE_PARALLEL_WORKER_LIMIT_MAX;
-    }
-    return clamp(detectedCoreCount, QUEUE_PARALLEL_WORKER_LIMIT_MIN, QUEUE_PARALLEL_WORKER_LIMIT_MAX);
-}
-
-function getRecommendedParallelWorkerLimit() {
-    const detectedCoreCount = getDetectedHardwareCoreCount();
-    const upperBound = Number.isFinite(detectedCoreCount)
-        ? Math.min(QUEUE_PARALLEL_WORKER_LIMIT_MAX, detectedCoreCount)
-        : QUEUE_PARALLEL_WORKER_LIMIT_MAX;
-    return clamp(
-        QUEUE_MULTI_ROUND_DEFAULT_PARALLEL_WORKERS,
-        QUEUE_PARALLEL_WORKER_LIMIT_MIN,
-        upperBound
-    );
-}
-
-function normalizeQueueRuntimeSettings(settings) {
-    return {
-        finalWeights: normalizeQueueScoreWeights(settings?.finalWeights),
-        costScoreGoldPerPointMode: normalizeQueueCostScoreGoldMetricMode(settings?.costScoreGoldPerPointMode),
-        parallelWorkerLimit: normalizeParallelWorkerLimit(settings?.parallelWorkerLimit),
-    };
-}
-
-function loadQueueRuntimeSettingsFromStorage() {
-    const defaults = getDefaultQueueRuntimeSettings();
-    if (typeof localStorage === "undefined") {
-        return defaults;
-    }
-
-    try {
-        const rawValue = localStorage.getItem(QUEUE_SETTINGS_STORAGE_KEY);
-        if (!rawValue) {
-            return defaults;
-        }
-
-        const parsed = JSON.parse(rawValue);
-        if (!isPlainObject(parsed) || parsed.version !== QUEUE_SETTINGS_STORAGE_VERSION) {
-            return defaults;
-        }
-
-        return normalizeQueueRuntimeSettings({
-            finalWeights: parsed.finalWeights,
-            costScoreGoldPerPointMode: parsed.costScoreGoldPerPointMode,
-            parallelWorkerLimit: parsed.parallelWorkerLimit,
-        });
-    } catch (error) {
-        return defaults;
-    }
-}
-
-function persistQueueRuntimeSettingsToStorage(settings) {
-    if (typeof localStorage === "undefined") {
-        throw new Error("localStorage unavailable");
-    }
-
-    const normalized = normalizeQueueRuntimeSettings(settings);
-    const payload = {
-        version: QUEUE_SETTINGS_STORAGE_VERSION,
-        savedAt: Date.now(),
-        finalWeights: {
-            ...normalized.finalWeights,
-        },
-        costScoreGoldPerPointMode: normalized.costScoreGoldPerPointMode,
-        parallelWorkerLimit: normalized.parallelWorkerLimit,
-    };
-    localStorage.setItem(QUEUE_SETTINGS_STORAGE_KEY, JSON.stringify(payload));
-    return normalized;
-}
-
-function loadQueueRunSettingsByPlayerFromStorage() {
-    if (typeof localStorage === "undefined") {
-        return {};
-    }
-
-    try {
-        const rawValue = localStorage.getItem(QUEUE_RUN_SETTINGS_STORAGE_KEY);
-        if (!rawValue) {
-            return {};
-        }
-
-        const parsed = JSON.parse(rawValue);
-        if (!isPlainObject(parsed) || parsed.version !== QUEUE_RUN_SETTINGS_STORAGE_VERSION) {
-            return {};
-        }
-
-        const normalized = {};
-        for (const playerId of QUEUE_PLAYER_IDS) {
-            if (!isPlainObject(parsed.byPlayer?.[playerId])) {
-                continue;
-            }
-            normalized[playerId] = normalizeQueueSettings(parsed.byPlayer[playerId]);
-        }
-        return normalized;
-    } catch (error) {
-        return {};
-    }
-}
-
-function persistQueueRunSettingsByPlayerToStorage(queueStateByPlayer = {}) {
-    if (typeof localStorage === "undefined") {
-        throw new Error("localStorage unavailable");
-    }
-
-    const byPlayer = {};
-    for (const playerId of QUEUE_PLAYER_IDS) {
-        byPlayer[playerId] = normalizeQueueSettings(queueStateByPlayer?.[playerId]?.settings);
-    }
-
-    const payload = {
-        version: QUEUE_RUN_SETTINGS_STORAGE_VERSION,
-        savedAt: Date.now(),
-        byPlayer,
-    };
-    localStorage.setItem(QUEUE_RUN_SETTINGS_STORAGE_KEY, JSON.stringify(payload));
-    return byPlayer;
-}
-
-function snapshotPlayerDataMap(rawPlayerDataMap) {
-    const result = {};
-    for (const playerId of QUEUE_PLAYER_IDS) {
-        const sourceValue = rawPlayerDataMap?.[playerId];
-        result[playerId] = typeof sourceValue === "string" ? sourceValue : "";
-    }
-    return result;
-}
-
-function hasAnyTruthyValue(source) {
-    if (!isPlainObject(source)) {
-        return false;
-    }
-    return Object.values(source).some((value) => Boolean(value));
-}
-
-function hasMeaningfulModernPlayerData(player) {
-    if (!isPlainObject(player)) {
-        return false;
-    }
-
-    for (const key of LEVEL_KEYS) {
-        if (toFiniteNumber(player?.levels?.[key], 1) > 1) {
-            return true;
-        }
-    }
-
-    for (const slot of EQUIPMENT_SLOT_KEYS) {
-        const itemHrid = String(player?.equipment?.[slot]?.itemHrid || "");
-        const enhancementLevel = toFiniteNumber(player?.equipment?.[slot]?.enhancementLevel, 0);
-        if (itemHrid || enhancementLevel > 0) {
-            return true;
-        }
-    }
-
-    if ((player.food || []).some((itemHrid) => String(itemHrid || "").trim().length > 0)) {
-        return true;
-    }
-    if ((player.drinks || []).some((itemHrid) => String(itemHrid || "").trim().length > 0)) {
-        return true;
-    }
-    if ((player.abilities || []).some((entry) => String(entry?.abilityHrid || "").trim().length > 0 || toFiniteNumber(entry?.level, 1) > 1)) {
-        return true;
-    }
-
-    if (isPlainObject(player.triggerMap) && Object.keys(player.triggerMap).length > 0) {
-        return true;
-    }
-    if (isPlainObject(player.houseRooms) && Object.values(player.houseRooms).some((value) => toFiniteNumber(value, 0) > 0)) {
-        return true;
-    }
-    if (isPlainObject(player.guildBuffs) && Object.values(player.guildBuffs).some((value) => toFiniteNumber(value, 0) > 0)) {
-        return true;
-    }
-    if (hasAnyTruthyValue(player.achievements)) {
-        return true;
-    }
-
+// 已学技能等级权威表（abilityLevels）的唯一写入口径：只升不降、跳过 1 级。
+// 槽位上的 level 是「当前模拟等级」（可自由调低做 what-if），不是已学等级证据：1 是
+// 「未学过 / 导入归一化回退」的缺省展示值，写进表里没有意义；更低的值只会污染权威表——
+// 套用配装按表解析后再导出/导入，就会把 what-if 值固化成已学等级。批量记住与单条记住共用
+// 本函数，避免两套口径再次分叉（见 store actions 内的权威表注释）。
+function rememberAbilityLevelInto(table, abilityHrid, rawLevel) {
+  const hrid = String(abilityHrid || '').trim();
+  const level = Math.floor(Number(rawLevel));
+  if (!hrid || !Number.isFinite(level)) {
     return false;
-}
-
-function hasMeaningfulPlayerSnapshotData(parsedSnapshot) {
-    if (!isPlainObject(parsedSnapshot)) {
-        return false;
-    }
-
-    // modern player-only payload
-    if (isPlainObject(parsedSnapshot.levels) || isPlainObject(parsedSnapshot.equipment)) {
-        return hasMeaningfulModernPlayerData(parsedSnapshot);
-    }
-
-    if (isPlainObject(parsedSnapshot.player)) {
-        if (isPlainObject(parsedSnapshot.player.levels) || isPlainObject(parsedSnapshot.player.equipment)) {
-            return hasMeaningfulModernPlayerData(parsedSnapshot.player);
-        }
-    }
-
+  }
+  const clamped = clamp(level, 1, MAX_ABILITY_LEVEL);
+  if (clamped <= 1) {
     return false;
-}
-
-function normalizeStoredPlayerDataMap(rawPlayerDataMap, allowPartial = true) {
-    if (!isPlainObject(rawPlayerDataMap)) {
-        return null;
-    }
-
-    const result = {};
-    let savedCount = 0;
-    for (const playerId of QUEUE_PLAYER_IDS) {
-        const playerDataValue = rawPlayerDataMap[playerId];
-        if (playerDataValue == null || playerDataValue === "") {
-            if (allowPartial) {
-                continue;
-            }
-            return null;
-        }
-
-        if (typeof playerDataValue !== "string" || playerDataValue.trim().length === 0) {
-            if (allowPartial) {
-                continue;
-            }
-            return null;
-        }
-
-        try {
-            const parsedSnapshot = JSON.parse(playerDataValue);
-            if (!hasMeaningfulPlayerSnapshotData(parsedSnapshot)) {
-                if (allowPartial) {
-                    continue;
-                }
-                return null;
-            }
-        } catch (error) {
-            return null;
-        }
-
-        result[playerId] = playerDataValue;
-        savedCount += 1;
-    }
-
-    if (!allowPartial && savedCount !== QUEUE_PLAYER_IDS.length) {
-        return null;
-    }
-    if (savedCount === 0) {
-        return null;
-    }
-    return result;
-}
-
-function upsertPlayerDataSnapshotToStorage(normalizedPlayerDataMap) {
-    if (typeof localStorage === "undefined") {
-        throw new Error("localStorage unavailable");
-    }
-
-    const normalized = normalizeStoredPlayerDataMap(normalizedPlayerDataMap, true);
-    if (!normalized) {
-        localStorage.removeItem(PLAYER_DATA_SNAPSHOT_STORAGE_KEY);
-        return 0;
-    }
-
-    const payload = {
-        version: PLAYER_DATA_SNAPSHOT_STORAGE_VERSION,
-        savedAt: Date.now(),
-        playerDataMap: normalized,
-    };
-    localStorage.setItem(PLAYER_DATA_SNAPSHOT_STORAGE_KEY, JSON.stringify(payload));
-    return payload.savedAt;
-}
-
-function clearPlayerDataSnapshotFromStorage() {
-    if (typeof localStorage === "undefined") {
-        throw new Error("localStorage unavailable");
-    }
-    localStorage.removeItem(PLAYER_DATA_SNAPSHOT_STORAGE_KEY);
-}
-
-function sanitizeImportedCombatLoadouts(rawEntries) {
-    if (!Array.isArray(rawEntries)) {
-        return [];
-    }
-    return rawEntries
-        .filter((entry) => entry && typeof entry === "object" && isPlainObject(entry.payload))
-        .map((entry) => ({
-            loadoutId: toFiniteNumber(entry.loadoutId, 0),
-            loadoutName: String(entry.loadoutName || "").trim() || `Loadout ${toFiniteNumber(entry.loadoutId, 0)}`,
-            payload: entry.payload,
-        }));
-}
-
-function loadCombatLoadoutImportsFromStorage() {
-    if (typeof localStorage === "undefined") {
-        return [];
-    }
-    try {
-        const rawValue = localStorage.getItem(COMBAT_LOADOUT_IMPORTS_STORAGE_KEY);
-        if (!rawValue) {
-            return [];
-        }
-        const parsed = JSON.parse(rawValue);
-        if (!isPlainObject(parsed) || parsed.version !== COMBAT_LOADOUT_IMPORTS_STORAGE_VERSION) {
-            return [];
-        }
-        return sanitizeImportedCombatLoadouts(parsed.loadouts);
-    } catch (error) {
-        return [];
-    }
-}
-
-function loadPlayerDataSnapshotFromStorage() {
-    if (typeof localStorage === "undefined") {
-        return { status: "error", savedAt: 0, playerDataMap: {} };
-    }
-
-    const rawValue = localStorage.getItem(PLAYER_DATA_SNAPSHOT_STORAGE_KEY);
-    if (!rawValue) {
-        return { status: "not_found", savedAt: 0, playerDataMap: {} };
-    }
-
-    try {
-        const parsed = JSON.parse(rawValue);
-        if (!isPlainObject(parsed) || parsed.version !== PLAYER_DATA_SNAPSHOT_STORAGE_VERSION) {
-            return { status: "invalid", savedAt: 0, playerDataMap: {} };
-        }
-
-        const normalizedPlayerDataMap = normalizeStoredPlayerDataMap(parsed.playerDataMap, true);
-        if (!normalizedPlayerDataMap) {
-            return { status: "invalid", savedAt: 0, playerDataMap: {} };
-        }
-
-        return {
-            status: "ok",
-            savedAt: toFiniteNumber(parsed.savedAt, 0),
-            playerDataMap: normalizedPlayerDataMap,
-        };
-    } catch (error) {
-        return { status: "invalid", savedAt: 0, playerDataMap: {} };
-    }
-}
-
-function savePlayerDataSnapshotToStorage(rawPlayerDataMap) {
-    if (typeof localStorage === "undefined") {
-        throw new Error("localStorage unavailable");
-    }
-
-    const normalizedPlayerDataMap = normalizeStoredPlayerDataMap(snapshotPlayerDataMap(rawPlayerDataMap), true);
-    if (!normalizedPlayerDataMap || Object.keys(normalizedPlayerDataMap).length === 0) {
-        throw new Error("invalid player data snapshot");
-    }
-    return upsertPlayerDataSnapshotToStorage(normalizedPlayerDataMap);
-}
-
-function createPlayerDataSnapshotState() {
-    const loadResult = loadPlayerDataSnapshotFromStorage();
-    if (loadResult.status !== "ok") {
-        return {
-            savedAt: 0,
-            playerDataMap: {},
-        };
-    }
-
-    return {
-        savedAt: Number(loadResult.savedAt || 0),
-        playerDataMap: loadResult.playerDataMap || {},
-    };
-}
-
-function parsePlayerSnapshotSummary(playerDataJson) {
-    try {
-        const parsed = JSON.parse(playerDataJson);
-        const modernSettings = isPlainObject(parsed?.simulationSettings) ? parsed.simulationSettings : null;
-        const zoneHrid = normalizeActionSnapshotValueToHrid(modernSettings?.zoneHrid);
-        const dungeonHrid = normalizeActionSnapshotValueToHrid(modernSettings?.dungeonHrid);
-        const labyrinthHrid = normalizeMonsterSnapshotValueToHrid(modernSettings?.labyrinthHrid);
-        const difficultyRaw = String(modernSettings?.difficultyTier ?? "");
-        const difficultyDisplay = difficultyRaw
-            ? (difficultyRaw.startsWith("T") ? difficultyRaw : `T${difficultyRaw}`)
-            : "-";
-        const zoneFallback = String(modernSettings?.zoneHrid || zoneHrid || "-");
-        const dungeonFallback = String(modernSettings?.dungeonHrid || dungeonHrid || "-");
-        const labyrinthFallback = String(modernSettings?.labyrinthHrid || labyrinthHrid || "-");
-
-        return {
-            zoneHrid,
-            dungeonHrid,
-            labyrinthHrid,
-            zone: getIndexedActionName(zoneHrid, zoneFallback),
-            dungeon: getIndexedActionName(dungeonHrid, dungeonFallback),
-            difficulty: difficultyDisplay,
-            simulationTime: String(modernSettings?.simulationTimeHours ?? "-"),
-            labyrinth: getIndexedMonsterName(labyrinthHrid, labyrinthFallback),
-            roomLevel: String(modernSettings?.roomLevel ?? "-"),
-        };
-    } catch (error) {
-        return {
-            zoneHrid: "",
-            dungeonHrid: "",
-            labyrinthHrid: "",
-            zone: "-",
-            dungeon: "-",
-            difficulty: "-",
-            simulationTime: "-",
-            labyrinth: "-",
-            roomLevel: "-",
-        };
-    }
-}
-
-function normalizeActionSnapshotValueToHrid(rawValue) {
-    const source = String(rawValue || "").trim();
-    if (!source) {
-        return "";
-    }
-    if (source.startsWith("/actions/")) {
-        return source;
-    }
-
-    const normalized = source.toLowerCase();
-    for (const action of Object.values(actionDetailIndex || {})) {
-        const actionName = String(action?.name || "").trim().toLowerCase();
-        if (actionName && actionName === normalized) {
-            return String(action?.hrid || source);
-        }
-    }
-
-    return source;
-}
-
-function normalizeMonsterSnapshotValueToHrid(rawValue) {
-    const source = String(rawValue || "").trim();
-    if (!source) {
-        return "";
-    }
-    if (source.startsWith("/monsters/")) {
-        return source;
-    }
-
-    const normalized = source.toLowerCase();
-    for (const monster of Object.values(monsterDetailIndex || {})) {
-        const monsterName = String(monster?.name || "").trim().toLowerCase();
-        if (monsterName && monsterName === normalized) {
-            return String(monster?.hrid || source);
-        }
-    }
-
-    return source;
-}
-
-function clampPositiveInteger(value, fallback = 0) {
-    const parsed = Math.floor(Number(value));
-    if (!Number.isFinite(parsed) || parsed < 0) {
-        return fallback;
-    }
-    return parsed;
-}
-
-function createEquipmentSetSnapshotFromPlayer(player) {
-    const source = player && typeof player === "object" ? player : createEmptyPlayerConfig(1);
-
-    return {
-        levels: deepClone(source.levels ?? {}),
-        equipment: deepClone(source.equipment ?? {}),
-        food: deepClone(source.food ?? ["", "", ""]),
-        drinks: deepClone(source.drinks ?? ["", "", ""]),
-        abilities: deepClone(source.abilities ?? [
-            { abilityHrid: "", level: 1 },
-            { abilityHrid: "", level: 1 },
-            { abilityHrid: "", level: 1 },
-            { abilityHrid: "", level: 1 },
-            { abilityHrid: "", level: 1 },
-        ]),
-        triggerMap: sanitizeTriggerMap(source.triggerMap ?? {}),
-        houseRooms: deepClone(source.houseRooms ?? {}),
-        guildBuffs: normalizeGuildBuffLevels(source.guildBuffs),
-        achievements: deepClone(source.achievements ?? {}),
-    };
-}
-
-function normalizeEquipmentSetSnapshot(rawSet, fallbackPlayerId = "1") {
-    const source = isPlainObject(rawSet) ? rawSet : null;
-    if (!source) {
-        return null;
-    }
-
-    const fallback = createEmptyPlayerConfig(String(fallbackPlayerId || "1"));
-    const normalized = deepClone(fallback);
-
-    for (const key of LEVEL_KEYS) {
-        normalized.levels[key] = Math.max(1, clampPositiveInteger(source.levels?.[key], fallback.levels[key] || 1));
-    }
-
-    for (const slot of EQUIPMENT_SLOT_KEYS) {
-        const sourceSlot = source.equipment?.[slot] ?? {};
-        const rawItemHrid = sourceSlot.itemHrid ?? sourceSlot.equipment ?? "";
-        normalized.equipment[slot] = {
-            itemHrid: String(rawItemHrid || ""),
-            enhancementLevel: clampPositiveInteger(sourceSlot.enhancementLevel, 0),
-        };
-    }
-
-    normalized.food = [0, 1, 2].map((index) => {
-        const value = source.food?.[index] ?? source.food?.[String(index)] ?? "";
-        return String(value || "");
-    });
-
-    normalized.drinks = [0, 1, 2].map((index) => {
-        const value = source.drinks?.[index] ?? source.drinks?.[String(index)] ?? "";
-        return String(value || "");
-    });
-
-    normalized.abilities = [0, 1, 2, 3, 4].map((index) => {
-        const sourceAbility = source.abilities?.[index] ?? source.abilities?.[String(index)] ?? {};
-        return {
-            abilityHrid: String(sourceAbility.abilityHrid ?? sourceAbility.ability ?? ""),
-            level: Math.max(1, clampPositiveInteger(sourceAbility.level, 1)),
-        };
-    });
-
-    normalized.triggerMap = sanitizeTriggerMap(source.triggerMap ?? {});
-
-    normalized.houseRooms = isPlainObject(source.houseRooms)
-        ? deepClone(source.houseRooms)
-        : deepClone(fallback.houseRooms);
-
-    normalized.guildBuffs = normalizeGuildBuffLevels(source.guildBuffs, fallback.guildBuffs);
-
-    normalized.achievements = isPlainObject(source.achievements)
-        ? deepClone(source.achievements)
-        : {};
-
-    return normalized;
-}
-
-function normalizeEquipmentSetQueueChangeTarget(rawTarget) {
-    if (!isPlainObject(rawTarget)) {
-        return null;
-    }
-
-    const kind = String(rawTarget.kind || "");
-    if (kind === "level") {
-        const key = String(rawTarget.key || "");
-        if (!LEVEL_KEYS.includes(key)) {
-            return null;
-        }
-        return {
-            kind: "level",
-            key,
-            level: Math.max(1, clampPositiveInteger(rawTarget.level, 1)),
-        };
-    }
-
-    if (kind === "equipment") {
-        const slot = String(rawTarget.slot || "");
-        if (!EQUIPMENT_SLOT_KEYS.includes(slot)) {
-            return null;
-        }
-        return {
-            kind: "equipment",
-            slot,
-            itemHrid: String(rawTarget.itemHrid || ""),
-            enhancementLevel: clampPositiveInteger(rawTarget.enhancementLevel, 0),
-        };
-    }
-
-    if (kind === "food" || kind === "drink") {
-        const index = Math.floor(toFiniteNumber(rawTarget.index, -1));
-        if (!Number.isInteger(index) || index < 0 || index > 2) {
-            return null;
-        }
-        return {
-            kind,
-            index,
-            itemHrid: String(rawTarget.itemHrid || ""),
-        };
-    }
-
-    if (kind === "ability") {
-        const index = Math.floor(toFiniteNumber(rawTarget.index, -1));
-        if (!Number.isInteger(index) || index < 0 || index > 4) {
-            return null;
-        }
-        return {
-            kind: "ability",
-            index,
-            abilityHrid: String(rawTarget.abilityHrid || ""),
-            level: Math.max(1, clampPositiveInteger(rawTarget.level, 1)),
-        };
-    }
-
-    if (kind === "house_room") {
-        const roomHrid = String(rawTarget.roomHrid || "");
-        if (!roomHrid || !Object.prototype.hasOwnProperty.call(houseRoomDetailIndex || {}, roomHrid)) {
-            return null;
-        }
-        return {
-            kind: "house_room",
-            roomHrid,
-            level: clampPositiveInteger(rawTarget.level, 0),
-        };
-    }
-
-    if (kind === "guild_buff") {
-        const guildBuffHrid = String(rawTarget.guildBuffHrid || "");
-        const maxLevel = getGuildBuffMaxLevel(guildBuffHrid);
-        if (!guildBuffHrid || maxLevel <= 0) {
-            return null;
-        }
-        return {
-            kind: "guild_buff",
-            guildBuffHrid,
-            level: Math.min(clampPositiveInteger(rawTarget.level, 0), maxLevel),
-        };
-    }
-
-    return null;
-}
-
-function normalizeEquipmentSetQueueChanges(rawQueueChanges) {
-    const source = isPlainObject(rawQueueChanges) ? rawQueueChanges : {};
-    const rawItems = Array.isArray(source.items) ? source.items : [];
-    const normalizedItems = [];
-
-    for (let i = 0; i < rawItems.length; i++) {
-        const rawItem = isPlainObject(rawItems[i]) ? rawItems[i] : {};
-        const itemName = String(rawItem.name || "").trim();
-        const rawTargets = Array.isArray(rawItem.targets) ? rawItem.targets : [];
-        const targets = rawTargets
-            .map((rawTarget) => normalizeEquipmentSetQueueChangeTarget(rawTarget))
-            .filter((target) => Boolean(target));
-        if (targets.length <= 0) {
-            continue;
-        }
-        normalizedItems.push({
-            name: itemName || `Variant ${normalizedItems.length + 1}`,
-            targets,
-        });
-    }
-
-    return {
-        version: EQUIPMENT_SET_QUEUE_CHANGES_VERSION,
-        items: normalizedItems,
-    };
-}
-
-function serializeQueueChangeToTarget(change) {
-    if (!isPlainObject(change)) {
-        return null;
-    }
-
-    if (change.kind === "level") {
-        return normalizeEquipmentSetQueueChangeTarget({
-            kind: "level",
-            key: String(change.key || ""),
-            level: Number(change.afterLevel),
-        });
-    }
-    if (change.kind === "equipment") {
-        return normalizeEquipmentSetQueueChangeTarget({
-            kind: "equipment",
-            slot: String(change.slot || ""),
-            itemHrid: String(change.afterItemHrid || ""),
-            enhancementLevel: Number(change.afterEnhancementLevel || 0),
-        });
-    }
-    if (change.kind === "food" || change.kind === "drink") {
-        return normalizeEquipmentSetQueueChangeTarget({
-            kind: change.kind,
-            index: Number(change.index),
-            itemHrid: String(change.afterItemHrid || ""),
-        });
-    }
-    if (change.kind === "ability") {
-        return normalizeEquipmentSetQueueChangeTarget({
-            kind: "ability",
-            index: Number(change.index),
-            abilityHrid: String(change.afterAbilityHrid || ""),
-            level: Number(change.afterLevel || 1),
-        });
-    }
-    if (change.kind === "house_room") {
-        return normalizeEquipmentSetQueueChangeTarget({
-            kind: "house_room",
-            roomHrid: String(change.roomHrid || ""),
-            level: Number(change.afterLevel || 0),
-        });
-    }
-    if (change.kind === "guild_buff") {
-        return normalizeEquipmentSetQueueChangeTarget({
-            kind: "guild_buff",
-            guildBuffHrid: String(change.guildBuffHrid || ""),
-            level: Number(change.afterLevel || 0),
-        });
-    }
-    return null;
-}
-
-function queueStateHasUnsupportedEquipmentSetQueueChanges(queueState) {
-    const baselineSnapshot = queueState?.baseline?.snapshot ?? null;
-    const queueItems = Array.isArray(queueState?.items) ? queueState.items : [];
-    if (!baselineSnapshot || queueItems.length <= 0) {
-        return false;
-    }
-
-    return queueItems.some((item) => {
-        const diff = computeQueueChangeSummary(baselineSnapshot, item?.snapshot);
-        return (Array.isArray(diff?.changes) ? diff.changes : []).some((change) => !serializeQueueChangeToTarget(change));
-    });
-}
-
-function buildEquipmentSetQueueChangesFromQueueState(queueState) {
-    const baselineSnapshot = queueState?.baseline?.snapshot ?? null;
-    const queueItems = Array.isArray(queueState?.items) ? queueState.items : [];
-    if (!baselineSnapshot || queueItems.length <= 0) {
-        return {
-            version: EQUIPMENT_SET_QUEUE_CHANGES_VERSION,
-            items: [],
-        };
-    }
-
-    const serializedItems = [];
-    for (let i = 0; i < queueItems.length; i++) {
-        const item = queueItems[i];
-        const diff = computeQueueChangeSummary(baselineSnapshot, item?.snapshot);
-        const targets = (Array.isArray(diff?.changes) ? diff.changes : [])
-            .map((change) => serializeQueueChangeToTarget(change))
-            .filter((target) => Boolean(target));
-        if (targets.length <= 0) {
-            continue;
-        }
-
-        const fallbackName = deriveQueueVariantNameFromLabels(diff?.labels, serializedItems.length + 1);
-        serializedItems.push({
-            name: String(item?.name || "").trim() || fallbackName,
-            targets,
-        });
-    }
-
-    return {
-        version: EQUIPMENT_SET_QUEUE_CHANGES_VERSION,
-        items: serializedItems,
-    };
-}
-
-function applyQueueChangeTargetToSnapshot(snapshot, target) {
-    if (!snapshot || !target) {
-        return false;
-    }
-
-    if (target.kind === "level") {
-        const levelKey = String(target.key || "");
-        if (!LEVEL_KEYS.includes(levelKey)) {
-            return false;
-        }
-        snapshot.levels[levelKey] = Math.max(1, clampPositiveInteger(target.level, 1));
-        return true;
-    }
-
-    if (target.kind === "equipment") {
-        const slot = String(target.slot || "");
-        if (!EQUIPMENT_SLOT_KEYS.includes(slot)) {
-            return false;
-        }
-        snapshot.equipment[slot] = {
-            itemHrid: String(target.itemHrid || ""),
-            enhancementLevel: clampPositiveInteger(target.enhancementLevel, 0),
-        };
-        return true;
-    }
-
-    if (target.kind === "food" || target.kind === "drink") {
-        const index = Math.floor(toFiniteNumber(target.index, -1));
-        if (!Number.isInteger(index) || index < 0 || index > 2) {
-            return false;
-        }
-        snapshot[target.kind][index] = String(target.itemHrid || "");
-        return true;
-    }
-
-    if (target.kind === "ability") {
-        const index = Math.floor(toFiniteNumber(target.index, -1));
-        if (!Number.isInteger(index) || index < 0 || index > 4) {
-            return false;
-        }
-        snapshot.abilities[index] = {
-            abilityHrid: String(target.abilityHrid || ""),
-            level: Math.max(1, clampPositiveInteger(target.level, 1)),
-        };
-        return true;
-    }
-
-    if (target.kind === "house_room") {
-        const roomHrid = String(target.roomHrid || "");
-        if (!roomHrid || !Object.prototype.hasOwnProperty.call(houseRoomDetailIndex || {}, roomHrid)) {
-            return false;
-        }
-        if (!isPlainObject(snapshot.houseRooms)) {
-            snapshot.houseRooms = {};
-        }
-        snapshot.houseRooms[roomHrid] = clampPositiveInteger(target.level, 0);
-        return true;
-    }
-
-    if (target.kind === "guild_buff") {
-        const guildBuffHrid = String(target.guildBuffHrid || "");
-        const maxLevel = getGuildBuffMaxLevel(guildBuffHrid);
-        if (!guildBuffHrid || maxLevel <= 0) {
-            return false;
-        }
-        if (!isPlainObject(snapshot.guildBuffs)) {
-            snapshot.guildBuffs = {};
-        }
-        snapshot.guildBuffs[guildBuffHrid] = Math.min(clampPositiveInteger(target.level, 0), maxLevel);
-        return true;
-    }
-
+  }
+  const known = Number(table[hrid]);
+  const hasKnownLevel = Object.prototype.hasOwnProperty.call(table, hrid);
+  if (hasKnownLevel && Number.isFinite(known) && clamped <= known) {
     return false;
-}
-
-function buildQueueItemsFromQueueChangeTemplates(baseSnapshot, queueChangeItems = []) {
-    if (!baseSnapshot || !Array.isArray(queueChangeItems) || queueChangeItems.length <= 0) {
-        return [];
-    }
-
-    const builtItems = [];
-    for (let index = 0; index < queueChangeItems.length; index++) {
-        const queueChangeItem = isPlainObject(queueChangeItems[index]) ? queueChangeItems[index] : {};
-        const targets = Array.isArray(queueChangeItem.targets) ? queueChangeItem.targets : [];
-        const targetSnapshot = deepClone(baseSnapshot);
-        let appliedCount = 0;
-        for (const target of targets) {
-            if (applyQueueChangeTargetToSnapshot(targetSnapshot, target)) {
-                appliedCount += 1;
-            }
-        }
-        if (appliedCount <= 0) {
-            continue;
-        }
-
-        const summary = computeQueueChangeSummary(baseSnapshot, targetSnapshot);
-        if (summary.count <= 0) {
-            continue;
-        }
-
-        builtItems.push({
-            id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-            name: String(queueChangeItem.name || "").trim() || deriveQueueVariantNameFromLabels(summary.labels, builtItems.length + 1),
-            snapshot: targetSnapshot,
-            changes: Array.isArray(summary.labels) ? summary.labels : [],
-            changeDetails: Array.isArray(summary.changes) ? deepClone(summary.changes) : [],
-            createdAt: Date.now(),
-        });
-    }
-
-    return builtItems;
-}
-
-function loadEquipmentSetsFromStorage() {
-    const modernData = readJsonStorage(EQUIPMENT_SET_STORAGE_KEY);
-    const source = modernData;
-
-    const normalized = {};
-    for (const [rawName, rawEntry] of Object.entries(source)) {
-        const name = String(rawName || "").trim();
-        if (!name) {
-            continue;
-        }
-
-        const entry = isPlainObject(rawEntry) ? rawEntry : {};
-        const hasModernShape = isPlainObject(rawEntry) && Object.prototype.hasOwnProperty.call(rawEntry, "queueChanges");
-        if (!hasModernShape) {
-            continue;
-        }
-
-        normalized[name] = {
-            savedAt: clampPositiveInteger(entry.savedAt, Date.now()),
-            queueChanges: normalizeEquipmentSetQueueChanges(entry.queueChanges),
-        };
-    }
-
-    persistEquipmentSetsToStorage(normalized);
-    return normalized;
-}
-
-function persistEquipmentSetsToStorage(equipmentSets) {
-    if (typeof localStorage === "undefined") {
-        return;
-    }
-    const source = isPlainObject(equipmentSets) ? equipmentSets : {};
-    const normalized = {};
-    for (const [rawName, rawEntry] of Object.entries(source)) {
-        const name = String(rawName || "").trim();
-        if (!name) {
-            continue;
-        }
-        const entry = isPlainObject(rawEntry) ? rawEntry : {};
-        normalized[name] = {
-            savedAt: clampPositiveInteger(entry.savedAt, Date.now()),
-            queueChanges: normalizeEquipmentSetQueueChanges(entry.queueChanges),
-        };
-    }
-    localStorage.setItem(EQUIPMENT_SET_STORAGE_KEY, JSON.stringify(normalized));
-}
-
-function getDefaultQueueRunSettings() {
-    return {
-        rounds: 30,
-        baselineRounds: 1,
-        medianBlend: 0.5,
-        weightProfit: 0.5,
-        weightXp: 0.3,
-        weightDeathSafety: 0.2,
-        executionMode: "parallel",
-    };
-}
-
-function getQueuePerformanceMetricWeights(queueSettings = getDefaultQueueRunSettings()) {
-    return resolveQueuePerformanceSubweights(queueSettings, getDefaultQueueRunSettings()).byMetric;
-}
-
-function createQueuePlayerState(queueSettings = getDefaultQueueRunSettings()) {
-    return {
-        baseline: null,
-        items: [],
-        results: [],
-        rawRuns: [],
-        ranking: [],
-        enhancementUpgradeCosts: {},
-        abilityUpgradeCosts: {},
-        settings: normalizeQueueSettings(queueSettings),
-        isRunning: false,
-        progress: 0,
-        error: "",
-        lastRunAt: 0,
-        lastRunStatus: "idle",
-        runId: 0,
-        cancelRequested: false,
-    };
-}
-
-function buildQueuePartySelectedPlayers(players = [], activePlayerId = "1") {
-    const normalizedActivePlayerId = String(activePlayerId || "1");
-    const safePlayers = Array.isArray(players) ? players : [];
-    const selectedPlayers = [];
-    let activeIncluded = false;
-
-    for (const player of safePlayers) {
-        if (!player) {
-            continue;
-        }
-
-        const clonedPlayer = deepClone(player);
-        const isActivePlayer = String(clonedPlayer.id || "") === normalizedActivePlayerId;
-        if (!isActivePlayer && clonedPlayer.selected !== true) {
-            continue;
-        }
-
-        clonedPlayer.selected = true;
-        selectedPlayers.push(clonedPlayer);
-        activeIncluded = activeIncluded || isActivePlayer;
-    }
-
-    if (!activeIncluded) {
-        const activePlayer = safePlayers.find((player) => String(player?.id || "") === normalizedActivePlayerId);
-        if (activePlayer) {
-            const clonedPlayer = deepClone(activePlayer);
-            clonedPlayer.selected = true;
-            selectedPlayers.unshift(clonedPlayer);
-        }
-    }
-
-    return selectedPlayers;
-}
-
-function buildQueuePartyComparisonPlayers(players = [], activePlayerId = "1") {
-    const normalizedActivePlayerId = String(activePlayerId || "1");
-    return buildQueuePartySelectedPlayers(players, activePlayerId)
-        .filter((player) => String(player?.id || "") !== normalizedActivePlayerId)
-        .map((player) => ({
-            ...deepClone(player),
-            selected: true,
-        }))
-        .sort((left, right) => String(left?.id || "").localeCompare(String(right?.id || "")));
-}
-
-function buildQueuePartySignature(players = [], activePlayerId = "1") {
-    return JSON.stringify(buildQueuePartyComparisonPlayers(players, activePlayerId));
-}
-
-function createQueuePartySnapshot(players = [], activePlayerId = "1") {
-    const selectedPlayers = buildQueuePartySelectedPlayers(players, activePlayerId);
-    return {
-        selectedPlayers,
-        signature: buildQueuePartySignature(selectedPlayers, activePlayerId),
-        createdAt: Date.now(),
-    };
-}
-
-function getAllAdvisorZoneHrids() {
-    return zoneOptions.map((zone) => String(zone?.hrid || "")).filter(Boolean);
-}
-
-function normalizeAdvisorFilters(rawFilters = {}) {
-    const source = isPlainObject(rawFilters) ? rawFilters : {};
-    return {
-        includeGroupZones: source.includeGroupZones !== false,
-        includeSoloZones: Boolean(source.includeSoloZones),
-        // 逐難度勾選（可跳過中間任一難度）；預設全部勾選
-        selectedDifficultyTiers: Array.isArray(source.selectedDifficultyTiers)
-            ? Array.from(new Set(source.selectedDifficultyTiers
-                .map((tier) => Math.floor(toFiniteNumber(tier, Number.NaN)))
-                .filter((tier) => Number.isFinite(tier) && tier >= 0 && tier <= 5)))
-                .sort((left, right) => left - right)
-            : [0, 1, 2, 3, 4, 5],
-        // 預設全部勾選；勾選的區域才會掃描，全部取消勾選＝沒有掃描目標
-        selectedZoneHrids: Array.isArray(source.selectedZoneHrids)
-            ? Array.from(new Set(source.selectedZoneHrids.map((hrid) => String(hrid || "")).filter(Boolean)))
-            : getAllAdvisorZoneHrids(),
-        refineTopEnabled: source.refineTopEnabled !== false,
-        refineTopCount: clamp(
-            Math.floor(toFiniteNumber(source.refineTopCount, ADVISOR_REFINE_TOP_COUNT_DEFAULT)),
-            ADVISOR_REFINE_TOP_COUNT_MIN,
-            ADVISOR_REFINE_TOP_COUNT_MAX
-        ),
-        refineRounds: clamp(
-            Math.floor(toFiniteNumber(source.refineRounds, ADVISOR_REFINE_ROUNDS_DEFAULT)),
-            ADVISOR_REFINE_ROUNDS_MIN,
-            ADVISOR_REFINE_ROUNDS_MAX
-        ),
-        quickRounds: clamp(
-            Math.floor(toFiniteNumber(source.quickRounds, ADVISOR_QUICK_ROUNDS_DEFAULT)),
-            ADVISOR_QUICK_ROUNDS_MIN,
-            ADVISOR_QUICK_ROUNDS_MAX
-        ),
-    };
-}
-
-function createAdvisorState() {
-    return {
-        filters: normalizeAdvisorFilters(),
-        goalPreset: ADVISOR_GOAL_PRESET_BALANCED,
-        customWeights: getAdvisorPresetWeights(ADVISOR_GOAL_PRESET_BALANCED),
-        quickRows: [],
-        refinedRows: [],
-        topCards: [],
-        metricPlayerId: "",
-        metricPlayerName: "",
-        runtime: {
-            isRunning: false,
-            phase: "idle",
-            progress: 0,
-            startedAt: 0,
-            elapsedSeconds: 0,
-            quickCompleted: 0,
-            quickTotal: 0,
-            quickTargetCount: 0,
-            refineCompleted: 0,
-            refineTotal: 0,
-            refineTargetCount: 0,
-            lastRunAt: 0,
-            runId: 0,
-            cancelRequested: false,
-        },
-        error: "",
-    };
-}
-
-function buildAdvisorTargetId(targetType, targetHrid, targetLevel) {
-    return `${String(targetType || "zone")}:${String(targetHrid || "")}#${Math.floor(toFiniteNumber(targetLevel, 0))}`;
-}
-
-function createAdvisorZoneCandidate(zoneTarget, category, order) {
-    const zoneHrid = String(zoneTarget?.zoneHrid || "");
-    const difficultyTier = Math.max(0, Math.floor(toFiniteNumber(zoneTarget?.difficultyTier, 0)));
-    return {
-        id: buildAdvisorTargetId("zone", zoneHrid, difficultyTier),
-        order,
-        targetType: "zone",
-        category,
-        targetHrid: zoneHrid,
-        targetName: getIndexedActionName(zoneHrid, zoneHrid),
-        difficultyTier,
-        roomLevel: null,
-        isRefined: false,
-        refineRounds: 0,
-        successfulRounds: 0,
-    };
-}
-
-function resolveAdvisorMetricPlayer(selectedPlayers = [], preferredPlayerId = "1") {
-    const safePlayers = Array.isArray(selectedPlayers) ? selectedPlayers.filter(Boolean) : [];
-    const normalizedPreferredId = String(preferredPlayerId || "1");
-    const preferredPlayer = safePlayers.find((player) => String(player?.id || "") === normalizedPreferredId);
-    const fallbackPlayer = preferredPlayer || safePlayers[0] || null;
-    const resolvedId = String(fallbackPlayer?.id || normalizedPreferredId || "1");
-    return {
-        id: resolvedId,
-        name: String(fallbackPlayer?.name || `Player ${resolvedId}`),
-    };
-}
-
-function summarizeAdvisorTargetResult(simResult, selectedPlayers, preferredPlayerId, pricingOptions = {}) {
-    const playerRows = summarizeResult(simResult, selectedPlayers, pricingOptions);
-    const hours = Math.max(1e-9, Number(simResult?.simulatedTime ?? 0) / ONE_HOUR);
-    const metricPlayer = resolveAdvisorMetricPlayer(selectedPlayers, preferredPlayerId);
-    const metricPlayerHrid = toPlayerHrid(metricPlayer.id);
-    const metricRow = playerRows.find((row) => row?.playerHrid === metricPlayerHrid) || playerRows[0] || null;
-    return {
-        playerRows,
-        metricPlayerId: metricPlayer.id,
-        metricPlayerName: metricPlayer.name,
-        profitPerHour: toFiniteNumber(metricRow?.profitPerHour, 0),
-        xpPerHour: toFiniteNumber(metricRow?.totalXpPerHour, 0),
-        killsPerHour: playerRows.length > 0
-            ? toFiniteNumber(playerRows[0]?.encountersPerHour, 0)
-            : (toFiniteNumber(simResult?.encounters, 0) / hours),
-        deathsPerHour: toFiniteNumber(metricRow?.deathsPerHour, 0),
-    };
-}
-
-function buildAdvisorBaseRow(candidate, sample) {
-    return {
-        ...candidate,
-        profitPerHour: toFiniteNumber(sample?.profitPerHour, 0),
-        xpPerHour: toFiniteNumber(sample?.xpPerHour, 0),
-        killsPerHour: toFiniteNumber(sample?.killsPerHour, 0),
-        deathsPerHour: toFiniteNumber(sample?.deathsPerHour, 0),
-        reasons: [],
-        normalizedMetrics: {
-            profitPerHour: 0,
-            xpPerHour: 0,
-            killsPerHour: 0,
-            safety: 0,
-        },
-        finalScore: 0,
-        baseFinalScore: 0,
-        confidenceScore: null,
-        confidencePenaltyFactor: 1,
-        stabilityScore: 50,
-        metricSummary: null,
-    };
-}
-
-function buildAdvisorCandidates(filters = {}) {
-    const normalizedFilters = normalizeAdvisorFilters(filters);
-    const candidates = [];
-    let order = 0;
-
-    if (normalizedFilters.selectedZoneHrids.length === 0 || normalizedFilters.selectedDifficultyTiers.length === 0) {
-        return candidates;
-    }
-
-    const allowedTierSet = new Set(normalizedFilters.selectedDifficultyTiers);
-    const isTierAllowed = (zoneTarget) => {
-        const tier = Math.max(0, Math.floor(toFiniteNumber(zoneTarget?.difficultyTier, 0)));
-        return allowedTierSet.has(tier);
-    };
-
-    if (normalizedFilters.includeSoloZones) {
-        const soloTargets = buildZoneTargetsByScope(RUN_SCOPE_ALL_SOLO_ZONES, normalizedFilters.selectedZoneHrids);
-        for (const zoneTarget of soloTargets) {
-            if (!isTierAllowed(zoneTarget)) {
-                continue;
-            }
-            candidates.push(createAdvisorZoneCandidate(zoneTarget, "solo_zone", order));
-            order += 1;
-        }
-    }
-
-    if (normalizedFilters.includeGroupZones) {
-        const groupTargets = buildZoneTargetsByScope(RUN_SCOPE_ALL_GROUP_ZONES, normalizedFilters.selectedZoneHrids);
-        for (const zoneTarget of groupTargets) {
-            if (!isTierAllowed(zoneTarget)) {
-                continue;
-            }
-            candidates.push(createAdvisorZoneCandidate(zoneTarget, "group_zone", order));
-            order += 1;
-        }
-    }
-
-    return candidates;
-}
-
-function createAdvisorSimulationPayload(candidate, players, simulationTimeLimit, extra) {
-    return {
-        type: "start_simulation",
-        workerId: Math.floor(Math.random() * 1e9).toString(),
-        players,
-        zone: {
-            zoneHrid: candidate.targetHrid,
-            difficultyTier: Math.max(0, Math.floor(toFiniteNumber(candidate.difficultyTier, 0))),
-        },
-        labyrinth: null,
-        simulationTimeLimit,
-        extra,
-    };
-}
-
-function buildAdvisorRowFromRoundMetrics(candidate, roundMetrics = [], options = {}) {
-    const safeRounds = Array.isArray(roundMetrics) ? roundMetrics.filter(Boolean) : [];
-    const metricSummary = buildAdvisorMetricSummary(safeRounds);
-    const fallbackSample = safeRounds[safeRounds.length - 1] || {};
-    const profitSummary = metricSummary?.profitPerHour || {};
-    const xpSummary = metricSummary?.xpPerHour || {};
-    const killsSummary = metricSummary?.killsPerHour || {};
-    const deathsSummary = metricSummary?.deathsPerHour || {};
-    const sample = {
-        profitPerHour: Number.isFinite(profitSummary.robustMean) ? profitSummary.robustMean : fallbackSample?.profitPerHour,
-        xpPerHour: Number.isFinite(xpSummary.robustMean) ? xpSummary.robustMean : fallbackSample?.xpPerHour,
-        killsPerHour: Number.isFinite(killsSummary.robustMean) ? killsSummary.robustMean : fallbackSample?.killsPerHour,
-        deathsPerHour: Number.isFinite(deathsSummary.robustMean) ? deathsSummary.robustMean : fallbackSample?.deathsPerHour,
-    };
-
-    return {
-        ...buildAdvisorBaseRow(candidate, sample),
-        isRefined: options.isRefined === true,
-        refineRounds: Math.max(0, Math.floor(toFiniteNumber(options.refineRounds, candidate?.refineRounds ?? 0))),
-        successfulRounds: safeRounds.length,
-        metricSummary,
-    };
-}
-
-function buildAdvisorPartialErrorText(stageLabel, failedCandidates = []) {
-    const safeStageLabel = String(stageLabel || "scan");
-    const failedCount = Array.isArray(failedCandidates) ? failedCandidates.length : 0;
-    if (failedCount <= 0) {
-        return "";
-    }
-    return `${failedCount} target(s) failed during ${safeStageLabel}. Showing successful results only.`;
-}
-
-function createQueueStateByPlayer(playerList, settingsByPlayer = {}) {
-    const stateByPlayer = {};
-    for (const player of playerList) {
-        const playerId = String(player.id);
-        stateByPlayer[playerId] = createQueuePlayerState(settingsByPlayer?.[playerId]);
-    }
-    return stateByPlayer;
-}
-
-function createImportedProfileByPlayer() {
-    const importedByPlayer = {};
-    for (const playerId of QUEUE_PLAYER_IDS) {
-        importedByPlayer[playerId] = false;
-    }
-    return importedByPlayer;
-}
-
-function createImportedBaselineByPlayer() {
-    const baselineByPlayer = {};
-    for (const playerId of QUEUE_PLAYER_IDS) {
-        baselineByPlayer[playerId] = null;
-    }
-    return baselineByPlayer;
-}
-
-function getEquipmentTransitionCostKey(slotKey, beforeItemHrid, beforeLevel, afterItemHrid, afterLevel) {
-    return `${slotKey}|${beforeItemHrid}|${beforeLevel}|${afterItemHrid}|${afterLevel}`;
-}
-
-function readEquipmentTransitionCostFromMap(costMap, slotKey, beforeItemHrid, beforeLevel, afterItemHrid, afterLevel) {
-    const transitionCostKey = getEquipmentTransitionCostKey(slotKey, beforeItemHrid, beforeLevel, afterItemHrid, afterLevel);
-
-    if (Object.prototype.hasOwnProperty.call(costMap, transitionCostKey)) {
-        return {
-            value: costMap[transitionCostKey],
-            transitionCostKey,
-        };
-    }
-
-    return {
-        value: null,
-        transitionCostKey,
-    };
-}
-
-function writeEquipmentTransitionCostToMap(costMap, slotKey, beforeItemHrid, beforeLevel, afterItemHrid, afterLevel, value) {
-    const transitionCostKey = getEquipmentTransitionCostKey(slotKey, beforeItemHrid, beforeLevel, afterItemHrid, afterLevel);
-    costMap[transitionCostKey] = value;
-
-    return transitionCostKey;
-}
-
-function getAbilityUpgradeCostKey(abilitySlot, abilityHrid, fromLevel, toLevel) {
-    return `${abilitySlot}|${abilityHrid}|${fromLevel}|${toLevel}`;
-}
-
-function formatQueueSkillNameFromKey(skillKey) {
-    const normalized = String(skillKey || "").trim().toLowerCase();
-    if (!normalized) {
-        return "";
-    }
-    const map = {
-        stamina: "Stamina",
-        intelligence: "Intelligence",
-        attack: "Attack",
-        melee: "Melee",
-        defense: "Defense",
-        ranged: "Ranged",
-        magic: "Magic",
-    };
-    if (map[normalized]) {
-        return map[normalized];
-    }
-    return normalized.charAt(0).toUpperCase() + normalized.slice(1);
-}
-
-function formatQueueItemNameFromHrid(itemHrid) {
-    const hrid = String(itemHrid || "");
-    if (!hrid) {
-        return "None";
-    }
-    return getIndexedItemName(hrid, hrid);
-}
-
-function formatQueueAbilityNameFromHrid(abilityHrid) {
-    const hrid = String(abilityHrid || "");
-    if (!hrid) {
-        return "None";
-    }
-    return getIndexedAbilityName(hrid, hrid);
-}
-
-function formatQueueTriggerTargetNameFromHrid(targetHrid) {
-    const hrid = String(targetHrid || "");
-    if (!hrid) {
-        return "Unknown";
-    }
-    if (Object.prototype.hasOwnProperty.call(itemDetailIndex || {}, hrid)) {
-        return formatQueueItemNameFromHrid(hrid);
-    }
-    if (Object.prototype.hasOwnProperty.call(abilityDetailIndex || {}, hrid)) {
-        return formatQueueAbilityNameFromHrid(hrid);
-    }
-    return hrid;
-}
-
-function formatQueueTriggerStateLabel(state) {
-    const normalized = String(state || "default").trim().toLowerCase();
-    if (normalized === "custom") {
-        return "Custom";
-    }
-    if (normalized === "disabled") {
-        return "Disabled";
-    }
-    return "Default";
-}
-
-function formatQueueEquipmentSlotName(slotKey) {
-    const normalized = String(slotKey || "").trim().toLowerCase();
-    const map = {
-        head: "Head",
-        body: "Body",
-        legs: "Legs",
-        feet: "Feet",
-        hands: "Hands",
-        weapon: "Weapon",
-        off_hand: "Off Hand",
-        pouch: "Pouch",
-        neck: "Neck",
-        earrings: "Earrings",
-        ring: "Ring",
-        back: "Back",
-        charm: "Charm",
-        trinket: "Trinket",
-    };
-    if (map[normalized]) {
-        return map[normalized];
-    }
-    return normalized || "Equipment";
-}
-
-function formatQueueHouseRoomNameFromHrid(roomHrid) {
-    const hrid = String(roomHrid || "");
-    if (!hrid) {
-        return "House Room";
-    }
-    return getIndexedHouseRoomName(hrid, hrid);
-}
-
-function formatQueueGuildBuffNameFromHrid(guildBuffHrid) {
-    const detail = guildBuffDetailIndex?.[String(guildBuffHrid || "")];
-    return getGuildShrineName(detail?.shrineHrid, String(guildBuffHrid || "Guild Shrine"));
-}
-
-function computeQueueChangeSummary(baselinePlayer, candidatePlayer) {
-    const baseline = baselinePlayer || {};
-    const candidate = candidatePlayer || {};
-    const labels = [];
-    const changes = [];
-
-    const pushChange = (label, change) => {
-        labels.push(label);
-        changes.push(change);
-    };
-
-    for (const key of LEVEL_KEYS) {
-        const before = Number(baseline?.levels?.[key] ?? 1);
-        const after = Number(candidate?.levels?.[key] ?? 1);
-        if (before !== after) {
-            pushChange(`${formatQueueSkillNameFromKey(key)} Level: ${before} -> ${after}`, {
-                kind: "level",
-                key,
-                beforeLevel: before,
-                afterLevel: after,
-            });
-        }
-    }
-
-    for (const slot of EQUIPMENT_SLOT_KEYS) {
-        const beforeSlot = baseline?.equipment?.[slot] ?? { itemHrid: "", enhancementLevel: 0 };
-        const afterSlot = candidate?.equipment?.[slot] ?? { itemHrid: "", enhancementLevel: 0 };
-        const beforeItem = String(beforeSlot.itemHrid || "");
-        const afterItem = String(afterSlot.itemHrid || "");
-        const beforeEnh = Number(beforeSlot.enhancementLevel || 0);
-        const afterEnh = Number(afterSlot.enhancementLevel || 0);
-
-        if (beforeItem !== afterItem || beforeEnh !== afterEnh) {
-            pushChange(
-                `${formatQueueEquipmentSlotName(slot)}: ${formatQueueItemNameFromHrid(beforeItem)}(+${beforeEnh}) -> ${formatQueueItemNameFromHrid(afterItem)}(+${afterEnh})`,
-                {
-                kind: "equipment",
-                slot,
-                beforeItemHrid: beforeItem,
-                afterItemHrid: afterItem,
-                beforeEnhancementLevel: beforeEnh,
-                afterEnhancementLevel: afterEnh,
-                }
-            );
-        }
-    }
-
-    for (let i = 0; i < 3; i++) {
-        const beforeFood = String(baseline?.food?.[i] || "");
-        const afterFood = String(candidate?.food?.[i] || "");
-        if (beforeFood !== afterFood) {
-            pushChange(`Food ${i + 1}: ${formatQueueItemNameFromHrid(beforeFood)} -> ${formatQueueItemNameFromHrid(afterFood)}`, {
-                kind: "food",
-                index: i,
-                beforeItemHrid: beforeFood,
-                afterItemHrid: afterFood,
-            });
-        }
-
-        const beforeDrink = String(baseline?.drinks?.[i] || "");
-        const afterDrink = String(candidate?.drinks?.[i] || "");
-        if (beforeDrink !== afterDrink) {
-            pushChange(`Drink ${i + 1}: ${formatQueueItemNameFromHrid(beforeDrink)} -> ${formatQueueItemNameFromHrid(afterDrink)}`, {
-                kind: "drink",
-                index: i,
-                beforeItemHrid: beforeDrink,
-                afterItemHrid: afterDrink,
-            });
-        }
-    }
-
-    for (let i = 0; i < 5; i++) {
-        const beforeAbility = baseline?.abilities?.[i] ?? { abilityHrid: "", level: 1 };
-        const afterAbility = candidate?.abilities?.[i] ?? { abilityHrid: "", level: 1 };
-        const beforeHrid = String(beforeAbility.abilityHrid || "");
-        const afterHrid = String(afterAbility.abilityHrid || "");
-        const beforeLevel = Number(beforeAbility.level || 1);
-        const afterLevel = Number(afterAbility.level || 1);
-
-        if (beforeHrid !== afterHrid || beforeLevel !== afterLevel) {
-            pushChange(
-                `Ability ${i + 1}: ${formatQueueAbilityNameFromHrid(beforeHrid)}(Lv${beforeLevel}) -> ${formatQueueAbilityNameFromHrid(afterHrid)}(Lv${afterLevel})`,
-                {
-                kind: "ability",
-                index: i,
-                beforeAbilityHrid: beforeHrid,
-                afterAbilityHrid: afterHrid,
-                beforeLevel,
-                afterLevel,
-                }
-            );
-        }
-    }
-
-    for (const targetHrid of getComparableTriggerTargetHrids(baseline, candidate)) {
-        const normalizedTargetHrid = String(targetHrid || "");
-        if (!normalizedTargetHrid) {
-            continue;
-        }
-
-        const triggerChange = buildTriggerChangeDescriptor(
-            baseline?.triggerMap,
-            candidate?.triggerMap,
-            normalizedTargetHrid
-        );
-        if (!triggerChange) {
-            continue;
-        }
-
-        pushChange(
-            `Trigger ${formatQueueTriggerTargetNameFromHrid(normalizedTargetHrid)}: ${formatQueueTriggerStateLabel(triggerChange.beforeState)} -> ${formatQueueTriggerStateLabel(triggerChange.afterState)}`,
-            {
-                kind: "trigger",
-                targetHrid: normalizedTargetHrid,
-                beforeState: triggerChange.beforeState,
-                afterState: triggerChange.afterState,
-                beforeTriggers: deepClone(triggerChange.beforeTriggers),
-                afterTriggers: deepClone(triggerChange.afterTriggers),
-            }
-        );
-    }
-
-    for (const room of Object.values(houseRoomDetailIndex || {})) {
-        const roomHrid = String(room?.hrid || "");
-        if (!roomHrid) {
-            continue;
-        }
-
-        const beforeLevel = Math.max(0, Math.floor(toFiniteNumber(baseline?.houseRooms?.[roomHrid], 0)));
-        const afterLevel = Math.max(0, Math.floor(toFiniteNumber(candidate?.houseRooms?.[roomHrid], 0)));
-        if (beforeLevel !== afterLevel) {
-            pushChange(
-                `${formatQueueHouseRoomNameFromHrid(roomHrid)}: Lv${beforeLevel} -> Lv${afterLevel}`,
-                {
-                    kind: "house_room",
-                    roomHrid,
-                    beforeLevel,
-                    afterLevel,
-                }
-            );
-        }
-    }
-
-    for (const detail of combatGuildBuffDetails) {
-        const guildBuffHrid = String(detail?.hrid || "");
-        const beforeLevel = Math.max(0, Math.floor(toFiniteNumber(baseline?.guildBuffs?.[guildBuffHrid], 0)));
-        const afterLevel = Math.max(0, Math.floor(toFiniteNumber(candidate?.guildBuffs?.[guildBuffHrid], 0)));
-        if (beforeLevel !== afterLevel) {
-            pushChange(
-                `${formatQueueGuildBuffNameFromHrid(guildBuffHrid)}: Lv${beforeLevel} -> Lv${afterLevel}`,
-                {
-                    kind: "guild_buff",
-                    guildBuffHrid,
-                    beforeLevel,
-                    afterLevel,
-                }
-            );
-        }
-    }
-
-    return {
-        count: labels.length,
-        labels,
-        changes,
-    };
-}
-
-function deriveQueueVariantNameFromLabels(labels, fallbackIndex = 1) {
-    const safeLabels = (Array.isArray(labels) ? labels : [])
-        .map((value) => String(value || "").trim())
-        .filter(Boolean);
-
-    if (safeLabels.length === 1) {
-        return safeLabels[0];
-    }
-    if (safeLabels.length > 1) {
-        return `${safeLabels[0]} (+${safeLabels.length - 1})`;
-    }
-    return `Variant ${Math.max(1, Math.floor(toFiniteNumber(fallbackIndex, 1)))}`;
-}
-
-function syncTriggerStateFromSnapshot(snapshot, targetSnapshot, targetHrid) {
-    const hrid = String(targetHrid || "");
-    if (!hrid) {
-        return;
-    }
-
-    if (!isPlainObject(snapshot.triggerMap)) {
-        snapshot.triggerMap = {};
-    }
-
-    const effectiveState = getEffectiveTriggerState(targetSnapshot?.triggerMap, hrid);
-    applyTriggerStateToTriggerMap(
-        snapshot.triggerMap,
-        hrid,
-        effectiveState.state,
-        effectiveState.triggers
-    );
-}
-
-function applySingleQueueChange(snapshot, targetSnapshot, change) {
-    if (!snapshot || !targetSnapshot || !change) {
-        return false;
-    }
-
-    if (change.kind === "level") {
-        const levelKey = String(change.key || "");
-        if (!LEVEL_KEYS.includes(levelKey)) {
-            return false;
-        }
-        snapshot.levels[levelKey] = Number(targetSnapshot?.levels?.[levelKey] ?? snapshot.levels[levelKey] ?? 1);
-        return true;
-    }
-
-    if (change.kind === "equipment") {
-        const slot = String(change.slot || "");
-        if (!EQUIPMENT_SLOT_KEYS.includes(slot)) {
-            return false;
-        }
-        snapshot.equipment[slot] = deepClone(targetSnapshot?.equipment?.[slot] ?? snapshot.equipment?.[slot] ?? {
-            itemHrid: "",
-            enhancementLevel: 0,
-        });
-        return true;
-    }
-
-    if (change.kind === "food") {
-        const index = Number(change.index);
-        if (!Number.isInteger(index) || index < 0 || index > 2) {
-            return false;
-        }
-        const targetHrid = String(targetSnapshot?.food?.[index] || "");
-        snapshot.food[index] = targetHrid;
-        syncTriggerStateFromSnapshot(snapshot, targetSnapshot, targetHrid);
-        return true;
-    }
-
-    if (change.kind === "drink") {
-        const index = Number(change.index);
-        if (!Number.isInteger(index) || index < 0 || index > 2) {
-            return false;
-        }
-        const targetHrid = String(targetSnapshot?.drinks?.[index] || "");
-        snapshot.drinks[index] = targetHrid;
-        syncTriggerStateFromSnapshot(snapshot, targetSnapshot, targetHrid);
-        return true;
-    }
-
-    if (change.kind === "ability") {
-        const index = Number(change.index);
-        if (!Number.isInteger(index) || index < 0 || index > 4) {
-            return false;
-        }
-        const targetAbility = deepClone(targetSnapshot?.abilities?.[index] ?? snapshot.abilities?.[index] ?? {
-            abilityHrid: "",
-            level: 1,
-        });
-        snapshot.abilities[index] = targetAbility;
-        syncTriggerStateFromSnapshot(snapshot, targetSnapshot, targetAbility?.abilityHrid);
-        return true;
-    }
-
-    if (change.kind === "trigger") {
-        const targetHrid = String(change.targetHrid || "");
-        if (!targetHrid) {
-            return false;
-        }
-        if (!isPlainObject(snapshot.triggerMap)) {
-            snapshot.triggerMap = {};
-        }
-        applyTriggerStateToTriggerMap(
-            snapshot.triggerMap,
-            targetHrid,
-            String(change.afterState || "default"),
-            Array.isArray(change.afterTriggers) ? change.afterTriggers : []
-        );
-        return true;
-    }
-
-    if (change.kind === "house_room") {
-        const roomHrid = String(change.roomHrid || "");
-        if (!roomHrid || !Object.prototype.hasOwnProperty.call(houseRoomDetailIndex || {}, roomHrid)) {
-            return false;
-        }
-        if (!isPlainObject(snapshot.houseRooms)) {
-            snapshot.houseRooms = {};
-        }
-        snapshot.houseRooms[roomHrid] = clampPositiveInteger(targetSnapshot?.houseRooms?.[roomHrid], 0);
-        return true;
-    }
-
-    if (change.kind === "guild_buff") {
-        const guildBuffHrid = String(change.guildBuffHrid || "");
-        const maxLevel = getGuildBuffMaxLevel(guildBuffHrid);
-        if (!guildBuffHrid || maxLevel <= 0) {
-            return false;
-        }
-        if (!isPlainObject(snapshot.guildBuffs)) {
-            snapshot.guildBuffs = {};
-        }
-        snapshot.guildBuffs[guildBuffHrid] = Math.min(
-            clampPositiveInteger(targetSnapshot?.guildBuffs?.[guildBuffHrid], 0),
-            maxLevel
-        );
-        return true;
-    }
-
-    return false;
-}
-
-function buildQueueVariantSnapshotsFromChanges(baselineSnapshot, targetSnapshot, changeSummary) {
-    const safeSummary = changeSummary && typeof changeSummary === "object" ? changeSummary : { count: 0, changes: [] };
-    if (!baselineSnapshot || !targetSnapshot || safeSummary.count <= 0) {
-        return [];
-    }
-
-    const changes = Array.isArray(safeSummary.changes) ? safeSummary.changes : [];
-    if (changes.length <= 1) {
-        const labels = Array.isArray(safeSummary.labels) ? safeSummary.labels : [];
-        const changeDetails = Array.isArray(safeSummary.changes) ? deepClone(safeSummary.changes) : [];
-        return [{
-            snapshot: deepClone(targetSnapshot),
-            labels,
-            name: deriveQueueVariantNameFromLabels(labels, 1),
-            changeDetails,
-        }];
-    }
-
-    const variants = [];
-    const seenSignatures = new Set();
-
-    for (const change of changes) {
-        const variantSnapshot = deepClone(baselineSnapshot);
-        if (!applySingleQueueChange(variantSnapshot, targetSnapshot, change)) {
-            continue;
-        }
-
-        const variantDiff = computeQueueChangeSummary(baselineSnapshot, variantSnapshot);
-        if (variantDiff.count <= 0) {
-            continue;
-        }
-
-        const signature = JSON.stringify(variantDiff.labels);
-        if (seenSignatures.has(signature)) {
-            continue;
-        }
-        seenSignatures.add(signature);
-        const labels = Array.isArray(variantDiff.labels) ? variantDiff.labels : [];
-        const changeDetails = Array.isArray(variantDiff.changes) ? deepClone(variantDiff.changes) : [];
-        variants.push({
-            snapshot: variantSnapshot,
-            labels,
-            name: deriveQueueVariantNameFromLabels(labels, variants.length + 1),
-            changeDetails,
-        });
-    }
-
-    if (variants.length === 0) {
-        const labels = Array.isArray(safeSummary.labels) ? safeSummary.labels : [];
-        const changeDetails = Array.isArray(safeSummary.changes) ? deepClone(safeSummary.changes) : [];
-        return [{
-            snapshot: deepClone(targetSnapshot),
-            labels,
-            name: deriveQueueVariantNameFromLabels(labels, 1),
-            changeDetails,
-        }];
-    }
-
-    return variants;
-}
-
-function summarizeQueueBaselineMetrics(summaryRow = null) {
-    const encountersPerHour = Number(summaryRow?.encountersPerHour || 0);
-    const totalXpPerHour = Number(summaryRow?.totalXpPerHour || 0);
-    const profitPerHour = Number(summaryRow?.profitPerHour || 0);
-
-    return {
-        encountersPerHour,
-        deathsPerHour: Number(summaryRow?.deathsPerHour || 0),
-        totalXpPerHour,
-        profitPerHour,
-        dps: 0,
-        killsPerHour: encountersPerHour,
-        xpPerHour: totalXpPerHour,
-        dailyProfit: profitPerHour * 24,
-        dailyNoRngProfit: profitPerHour * 24,
-    };
-}
-
-function createQueueBaselineRecord(snapshot, partySnapshot, settings, overrides = {}) {
-    return {
-        snapshot: deepClone(snapshot),
-        partySnapshot: partySnapshot ? deepClone(partySnapshot) : null,
-        settings: deepClone(settings),
-        metrics: null,
-        simResult: null,
-        completedRounds: 0,
-        metricSummary: null,
-        sampleMetadata: [],
-        createdAt: Date.now(),
-        ...overrides,
-    };
-}
-
-function getMean(values) {
-    if (!values.length) {
-        return 0;
-    }
-    return values.reduce((sum, value) => sum + Number(value || 0), 0) / values.length;
-}
-
-function getMedian(values) {
-    if (!values.length) {
-        return 0;
-    }
-    const sorted = [...values].map((value) => Number(value || 0)).sort((a, b) => a - b);
-    const mid = Math.floor(sorted.length / 2);
-    if (sorted.length % 2 === 0) {
-        return (sorted[mid - 1] + sorted[mid]) / 2;
-    }
-    return sorted[mid];
-}
-
-function getStdDev(values, meanValue) {
-    if (!values.length) {
-        return 0;
-    }
-    const variance = values.reduce((sum, value) => {
-        const delta = Number(value || 0) - meanValue;
-        return sum + delta * delta;
-    }, 0) / values.length;
-    return Math.sqrt(variance);
-}
-
-function resolveSimResultPlayerHrid(simResult, preferredPlayerId = "1") {
-    const preferredPlayerHrid = toPlayerHrid(preferredPlayerId);
-    const candidateMaps = [
-        simResult?.experienceGained,
-        simResult?.deaths,
-        simResult?.attacks,
-        simResult?.consumablesUsed,
-    ];
-
-    for (const sourceMap of candidateMaps) {
-        if (sourceMap && Object.prototype.hasOwnProperty.call(sourceMap, preferredPlayerHrid)) {
-            return preferredPlayerHrid;
-        }
-    }
-
-    for (const sourceMap of candidateMaps) {
-        if (!sourceMap || typeof sourceMap !== "object") {
-            continue;
-        }
-        const firstKey = Object.keys(sourceMap).find((key) => String(key || "").startsWith("player"));
-        if (firstKey) {
-            return firstKey;
-        }
-    }
-
-    return preferredPlayerHrid;
-}
-
-function toPlayerHrid(playerId = "1") {
-    const normalizedPlayerId = String(playerId || "1").replace(/^player/i, "") || "1";
-    return `player${normalizedPlayerId}`;
-}
-
-function computeQueueMetrics(simResult, preferredPlayerId, pricingOptions = {}) {
-    const playerHrid = resolveSimResultPlayerHrid(simResult, preferredPlayerId);
-    const simulatedHours = Math.max(1e-9, toFiniteNumber(simResult?.simulatedTime, 0) / ONE_HOUR);
-    const simulatedSeconds = Math.max(1e-9, toFiniteNumber(simResult?.simulatedTime, 0) / ONE_SECOND);
-
-    let totalDamage = 0;
-    const playerAttacks = simResult?.attacks?.[playerHrid] ?? {};
-    for (const attackSources of Object.values(playerAttacks)) {
-        const sourceCasts = attackSources && typeof attackSources === "object" ? attackSources : {};
-        for (const castMap of Object.values(sourceCasts)) {
-            const castCounts = castMap && typeof castMap === "object" ? castMap : {};
-            for (const [damageText, count] of Object.entries(castCounts)) {
-                if (damageText === "miss") {
-                    continue;
-                }
-                totalDamage += toFiniteNumber(damageText, 0) * toFiniteNumber(count, 0);
-            }
-        }
-    }
-
-    const totalExperience = Object.values(simResult?.experienceGained?.[playerHrid] ?? {})
-        .reduce((sum, value) => sum + toFiniteNumber(value, 0), 0);
-
-    const profit = estimateNoRngProfit(simResult, playerHrid, pricingOptions);
-    const killsPerHour = toFiniteNumber(simResult?.encounters, 0) / simulatedHours;
-    const dailyNoRngProfit = toFiniteNumber(profit?.profit, 0) / simulatedHours * 24;
-
-    return {
-        dps: toFiniteNumber(totalDamage / simulatedSeconds, 0),
-        killsPerHour: toFiniteNumber(killsPerHour, 0),
-        xpPerHour: toFiniteNumber(totalExperience / simulatedHours, 0),
-        dailyProfit: toFiniteNumber(dailyNoRngProfit, 0),
-        dailyNoRngProfit: toFiniteNumber(dailyNoRngProfit, 0),
-    };
-}
-
-function computeQueueMetricDeltas(metrics = {}, baselineMetrics = {}) {
-    const deltas = {};
-    const metricKeys = Object.keys(metrics);
-    for (const key of metricKeys) {
-        const baselineValue = toFiniteNumber(baselineMetrics?.[key], 0);
-        const currentValue = toFiniteNumber(metrics?.[key], 0);
-        const deltaAbs = currentValue - baselineValue;
-        const deltaPct = Math.abs(baselineValue) <= 1e-9 ? null : (deltaAbs / baselineValue) * 100;
-        deltas[key] = {
-            abs: toFiniteNumber(deltaAbs, 0),
-            pct: Number.isFinite(deltaPct) ? deltaPct : null,
-        };
-    }
-    return deltas;
-}
-
-function syncQueueRawRunDeltas(rawRuns = [], baselineMetrics = {}) {
-    if (!Array.isArray(rawRuns)) {
-        return rawRuns;
-    }
-
-    for (const rawRun of rawRuns) {
-        if (!isPlainObject(rawRun)) {
-            continue;
-        }
-        rawRun.deltas = computeQueueMetricDeltas(rawRun.metrics, baselineMetrics);
-    }
-
-    return rawRuns;
-}
-
-function resolveItemPriceFromPricingState(pricingState, itemHrid, side = "ask") {
-    const hrid = String(itemHrid || "");
-    if (!hrid) {
-        return 0;
-    }
-
-    const entry = pricingState?.priceTable?.[hrid] ?? {
-        ask: -1,
-        bid: -1,
-        vendor: getVendorPriceByItemHrid(hrid),
-    };
-    const ask = toFiniteNumber(entry?.ask, -1);
-    const bid = toFiniteNumber(entry?.bid, -1);
-    const vendor = Math.max(0, toFiniteNumber(entry?.vendor, getVendorPriceByItemHrid(hrid)));
-
-    if (side === "bid") {
-        if (bid > 0) {
-            return bid;
-        }
-        if (vendor > 0) {
-            return vendor;
-        }
-        return ask > 0 ? ask : 0;
-    }
-
-    if (ask > 0) {
-        return ask;
-    }
-    if (vendor > 0) {
-        return vendor;
-    }
-    return bid > 0 ? bid : 0;
-}
-
-function computeEnhancementUpgradeCost(itemHrid, fromLevel, toLevel, pricingState) {
-    const hrid = String(itemHrid || "");
-    const safeFromLevel = Math.max(0, Math.floor(toFiniteNumber(fromLevel, 0)));
-    const safeToLevel = Math.max(0, Math.floor(toFiniteNumber(toLevel, 0)));
-    if (!hrid || safeToLevel <= safeFromLevel) {
-        return 0;
-    }
-
-    const enhancementCosts = itemDetailIndex?.[hrid]?.enhancementCosts;
-    if (!Array.isArray(enhancementCosts) || enhancementCosts.length === 0) {
-        return 0;
-    }
-
-    const perLevelCost = enhancementCosts.reduce((sum, costEntry) => {
-        const count = Math.max(0, toFiniteNumber(costEntry?.count, 0));
-        const materialHrid = String(costEntry?.itemHrid || "");
-        if (!materialHrid || count <= 0) {
-            return sum;
-        }
-        const unitPrice = materialHrid === "/items/coin"
-            ? 1
-            : resolveItemPriceFromPricingState(pricingState, materialHrid, "ask");
-        return sum + count * Math.max(0, unitPrice);
-    }, 0);
-
-    if (perLevelCost <= 0) {
-        return 0;
-    }
-    return perLevelCost * (safeToLevel - safeFromLevel);
-}
-
-function resolveEnhancementLevelPriceFromPricingState(itemHrid, level, pricingState, preferredSide = "ask") {
-    const hrid = String(itemHrid || "");
-    const normalizedLevel = Math.max(0, Math.floor(toFiniteNumber(level, 0)));
-    if (!hrid) {
-        return -1;
-    }
-
-    const quoteMap = pricingState?.enhancementQuotesByItem?.[hrid];
-    if (isPlainObject(quoteMap)) {
-        const tryQuote = (targetLevel) => {
-            const quote = quoteMap[String(targetLevel)];
-            if (!isPlainObject(quote)) {
-                return -1;
-            }
-            const ask = toFiniteNumber(quote.ask, -1);
-            const bid = toFiniteNumber(quote.bid, -1);
-            if (preferredSide === "bid") {
-                return bid >= 0 ? bid : ask;
-            }
-            return ask >= 0 ? ask : bid;
-        };
-
-        const directPrice = tryQuote(normalizedLevel);
-        if (directPrice >= 0) {
-            return directPrice;
-        }
-
-        const candidateLevels = Object.keys(quoteMap)
-            .map((value) => Math.floor(toFiniteNumber(value, -1)))
-            .filter((value) => Number.isFinite(value) && value >= 0)
-            .sort((a, b) => Math.abs(a - normalizedLevel) - Math.abs(b - normalizedLevel) || a - b);
-
-        for (const candidateLevel of candidateLevels) {
-            const candidatePrice = tryQuote(candidateLevel);
-            if (candidatePrice >= 0) {
-                return candidatePrice;
-            }
-        }
-    }
-
-    const basePrice = resolveItemPriceFromPricingState(
-        pricingState,
-        hrid,
-        preferredSide === "bid" ? "bid" : "ask"
-    );
-    if (normalizedLevel <= 0) {
-        return basePrice >= 0 ? basePrice : -1;
-    }
-
-    // Fallback for items without per-level market quotes.
-    const enhancementCost = computeEnhancementUpgradeCost(hrid, 0, normalizedLevel, pricingState);
-    const approximated = Math.max(0, basePrice + enhancementCost);
-    return Number.isFinite(approximated) ? approximated : -1;
-}
-
-function computeDefaultEquipmentTransitionCost(beforeItemHrid, beforeLevel, afterItemHrid, afterLevel, pricingState) {
-    const targetItemHrid = String(afterItemHrid || "");
-    if (!targetItemHrid) {
-        return 0;
-    }
-
-    const safeBeforeLevel = Math.max(0, Math.floor(toFiniteNumber(beforeLevel, 0)));
-    const safeAfterLevel = Math.max(0, Math.floor(toFiniteNumber(afterLevel, 0)));
-    let buyCost = resolveEnhancementLevelPriceFromPricingState(targetItemHrid, safeAfterLevel, pricingState, "ask");
-    if (buyCost < 0) {
-        buyCost = resolveItemPriceFromPricingState(pricingState, targetItemHrid, "ask")
-            + computeEnhancementUpgradeCost(targetItemHrid, 0, safeAfterLevel, pricingState);
-    }
-
-    const sourceItemHrid = String(beforeItemHrid || "");
-    let sellValue = 0;
-    if (sourceItemHrid) {
-        sellValue = resolveEnhancementLevelPriceFromPricingState(sourceItemHrid, safeBeforeLevel, pricingState, "bid");
-        if (sellValue < 0) {
-            sellValue = resolveItemPriceFromPricingState(pricingState, sourceItemHrid, "bid")
-                + computeEnhancementUpgradeCost(sourceItemHrid, 0, safeBeforeLevel, pricingState);
-        }
-    }
-
-    return Math.max(0, buyCost - sellValue);
-}
-
-function ensureAbilityUpgradeReferenceGlobals() {
-    const target = typeof window !== "undefined" ? window : globalThis;
-    if (!Array.isArray(target.jigsLevelExperienceTable)) {
-        target.jigsLevelExperienceTable = [];
-    }
-    if (!target.jigsSpellBookXpByName || typeof target.jigsSpellBookXpByName !== "object" || Array.isArray(target.jigsSpellBookXpByName)) {
-        target.jigsSpellBookXpByName = {};
-    }
-    return target;
-}
-
-function hasAbilityUpgradeReferenceDataLoaded() {
-    const globalRef = ensureAbilityUpgradeReferenceGlobals();
-    return Array.isArray(globalRef.jigsLevelExperienceTable) && globalRef.jigsLevelExperienceTable.length > 1;
-}
-
-function getAbilityXpForLevel(level) {
-    const table = ensureAbilityUpgradeReferenceGlobals().jigsLevelExperienceTable;
-    if (!Array.isArray(table)) {
-        return null;
-    }
-
-    const normalizedLevel = Math.floor(toFiniteNumber(level, -1));
-    if (!Number.isInteger(normalizedLevel) || normalizedLevel < 0 || normalizedLevel >= table.length) {
-        return null;
-    }
-
-    const xpValue = Number(table[normalizedLevel]);
-    return Number.isFinite(xpValue) ? xpValue : null;
-}
-
-function getSpellBookXpForAbility(abilityHrid) {
-    const normalizedAbilityHrid = String(abilityHrid || "");
-    if (!normalizedAbilityHrid) {
-        return 0;
-    }
-
-    const directBookInfo = abilityBookInfoByAbilityHrid[normalizedAbilityHrid];
-    if (directBookInfo?.xpPerBook > 0) {
-        return directBookInfo.xpPerBook;
-    }
-
-    const abilityName = getIndexedAbilityName(normalizedAbilityHrid, "");
-    if (!abilityName) {
-        return 0;
-    }
-
-    const spellBookXpMap = ensureAbilityUpgradeReferenceGlobals().jigsSpellBookXpByName;
-    if (!spellBookXpMap || typeof spellBookXpMap !== "object") {
-        return 0;
-    }
-
-    const lowerAbilityName = abilityName.toLowerCase();
-    const matchedKey = Object.keys(spellBookXpMap).find((key) => String(key || "").toLowerCase() === lowerAbilityName);
-    const xpPerBook = matchedKey ? Number(spellBookXpMap[matchedKey]) : 0;
-    return Number.isFinite(xpPerBook) && xpPerBook > 0 ? xpPerBook : 0;
-}
-
-function resolveAbilityBookPriceFromPricingState(pricingState, abilityHrid) {
-    const normalizedAbilityHrid = String(abilityHrid || "");
-    const bookItemHrid = String(abilityBookInfoByAbilityHrid?.[normalizedAbilityHrid]?.itemHrid || "");
-    if (!bookItemHrid) {
-        return null;
-    }
-
-    const dropMode = normalizePriceMode(pricingState?.dropMode, PRICE_MODE_BID);
-    if (dropMode === PRICE_MODE_VENDOR) {
-        const vendorFallback = toFiniteNumber(itemDetailIndex?.[bookItemHrid]?.sellPrice, 0);
-        const vendorPrice = Math.max(0, toFiniteNumber(pricingState?.priceTable?.[bookItemHrid]?.vendor, vendorFallback));
-        return Number.isFinite(vendorPrice) ? vendorPrice : null;
-    }
-
-    const side = dropMode === PRICE_MODE_ASK ? "ask" : "bid";
-    const marketPrice = resolveItemPriceFromPricingState(pricingState, bookItemHrid, side);
-    return Number.isFinite(marketPrice) ? Math.max(0, marketPrice) : null;
-}
-
-function computeDefaultAbilityUpgradeCost(baseAbility, toLevel, pricingState) {
-    const abilityHrid = String(baseAbility?.abilityHrid || "");
-    const fromLevel = Math.max(1, Math.floor(toFiniteNumber(baseAbility?.level, 1)));
-    const targetLevel = Math.max(1, Math.floor(toFiniteNumber(toLevel, 1)));
-    if (!abilityHrid || targetLevel <= fromLevel) {
-        return 0;
-    }
-
-    const startXp = getAbilityXpForLevel(fromLevel);
-    const endXp = getAbilityXpForLevel(targetLevel);
-    if (startXp == null || endXp == null) {
-        return null;
-    }
-
-    const xpNeeded = endXp - startXp;
-    if (xpNeeded <= 0) {
-        return 0;
-    }
-
-    const xpPerBook = getSpellBookXpForAbility(abilityHrid);
-    if (!Number.isFinite(xpPerBook) || xpPerBook <= 0) {
-        return null;
-    }
-
-    const booksNeeded = Math.ceil(xpNeeded / xpPerBook);
-    if (!Number.isFinite(booksNeeded) || booksNeeded <= 0) {
-        return 0;
-    }
-
-    const pricePerBook = resolveAbilityBookPriceFromPricingState(pricingState, abilityHrid);
-    if (!Number.isFinite(pricePerBook) || pricePerBook < 0) {
-        return null;
-    }
-
-    const totalCost = booksNeeded * pricePerBook;
-    return totalCost > 0 ? totalCost : 0;
-}
-
-function normalizeHouseRoomLevelMap(source) {
-    const normalizedSource = isPlainObject(source) ? source : {};
-    const normalized = {};
-
-    for (const room of Object.values(houseRoomDetailIndex || {})) {
-        const roomHrid = String(room?.hrid || "");
-        if (!roomHrid) {
-            continue;
-        }
-        normalized[roomHrid] = clampPositiveInteger(normalizedSource[roomHrid], 0);
-    }
-
-    return normalized;
-}
-
-function resolveHouseRoomMaterialPricing(itemHrid, pricingState) {
-    const normalizedItemHrid = String(itemHrid || "");
-    if (!normalizedItemHrid) {
-        return {
-            unitPrice: 0,
-            priced: false,
-        };
-    }
-
-    if (normalizedItemHrid === "/items/coin") {
-        return {
-            unitPrice: 1,
-            priced: true,
-        };
-    }
-
-    const resolvedPrice = Math.max(0, toFiniteNumber(
-        resolveItemPriceFromPricingState(pricingState, normalizedItemHrid, "ask"),
-        0
-    ));
-
-    return {
-        unitPrice: resolvedPrice,
-        priced: resolvedPrice > 0,
-    };
-}
-
-function buildHouseRoomUpgradeCostPreview(baseHouseRooms, targetHouseRooms, pricingState) {
-    const normalizedBase = normalizeHouseRoomLevelMap(baseHouseRooms);
-    const normalizedTarget = normalizeHouseRoomLevelMap(targetHouseRooms);
-    const roomDetails = Object.values(houseRoomDetailIndex || {})
-        .slice()
-        .sort((left, right) => (
-            Number(left?.sortIndex ?? 0) - Number(right?.sortIndex ?? 0)
-            || String(left?.name || "").localeCompare(String(right?.name || ""))
-        ));
-    const roomRows = [];
-    const materialCountMap = {};
-
-    for (const room of roomDetails) {
-        const roomHrid = String(room?.hrid || "");
-        if (!roomHrid) {
-            continue;
-        }
-
-        const fromLevel = clampPositiveInteger(normalizedBase[roomHrid], 0);
-        const toLevel = clampPositiveInteger(normalizedTarget[roomHrid], 0);
-        if (toLevel <= fromLevel) {
-            continue;
-        }
-
-        const roomMaterialCountMap = {};
-        const upgradeCostsMap = isPlainObject(room?.upgradeCostsMap) ? room.upgradeCostsMap : {};
-
-        for (let level = fromLevel + 1; level <= toLevel; level++) {
-            const levelCosts = Array.isArray(upgradeCostsMap[String(level)]) ? upgradeCostsMap[String(level)] : [];
-            for (const costEntry of levelCosts) {
-                const itemHrid = String(costEntry?.itemHrid || "");
-                const count = Math.max(0, toFiniteNumber(costEntry?.count, 0));
-                if (!itemHrid || count <= 0) {
-                    continue;
-                }
-
-                roomMaterialCountMap[itemHrid] = toFiniteNumber(roomMaterialCountMap[itemHrid], 0) + count;
-                materialCountMap[itemHrid] = toFiniteNumber(materialCountMap[itemHrid], 0) + count;
-            }
-        }
-
-        const subtotal = Object.entries(roomMaterialCountMap).reduce((sum, [itemHrid, count]) => {
-            const safeCount = Math.max(0, toFiniteNumber(count, 0));
-            if (safeCount <= 0) {
-                return sum;
-            }
-            const pricing = resolveHouseRoomMaterialPricing(itemHrid, pricingState);
-            return sum + (pricing.priced ? safeCount * pricing.unitPrice : 0);
-        }, 0);
-
-        roomRows.push({
-            roomHrid,
-            fromLevel,
-            toLevel,
-            subtotal: toFiniteNumber(subtotal, 0),
-        });
-    }
-
-    const materials = Object.entries(materialCountMap)
-        .map(([itemHrid, count]) => {
-            const safeCount = Math.max(0, toFiniteNumber(count, 0));
-            const pricing = resolveHouseRoomMaterialPricing(itemHrid, pricingState);
-            const subtotal = pricing.priced ? safeCount * pricing.unitPrice : 0;
-            return {
-                itemHrid,
-                count: safeCount,
-                unitPrice: pricing.unitPrice,
-                subtotal: toFiniteNumber(subtotal, 0),
-                priced: pricing.priced,
-            };
-        })
-        .filter((entry) => entry.count > 0)
-        .sort((left, right) => {
-            if (left.itemHrid === "/items/coin" && right.itemHrid !== "/items/coin") {
-                return -1;
-            }
-            if (right.itemHrid === "/items/coin" && left.itemHrid !== "/items/coin") {
-                return 1;
-            }
-            return Number(right.subtotal || 0) - Number(left.subtotal || 0)
-                || getIndexedItemName(left.itemHrid, left.itemHrid).localeCompare(
-                    getIndexedItemName(right.itemHrid, right.itemHrid)
-                );
-        });
-
-    const coinCost = materials.reduce((sum, entry) => (
-        entry.itemHrid === "/items/coin" ? sum + entry.subtotal : sum
-    ), 0);
-    const materialValue = materials.reduce((sum, entry) => (
-        entry.itemHrid !== "/items/coin" && entry.priced ? sum + entry.subtotal : sum
-    ), 0);
-
-    return {
-        rooms: roomRows,
-        materials,
-        totals: {
-            coinCost: toFiniteNumber(coinCost, 0),
-            materialValue: toFiniteNumber(materialValue, 0),
-            totalCost: toFiniteNumber(coinCost + materialValue, 0),
-        },
-    };
-}
-
-function computeQueueItemUpgradeCost(baselineSnapshot, targetSnapshot, pricingState, options = {}) {
-    if (!baselineSnapshot || !targetSnapshot) {
-        return 0;
-    }
-
-    const enhancementCostMap = isPlainObject(options?.enhancementCostMap) ? options.enhancementCostMap : {};
-    const abilityCostMap = isPlainObject(options?.abilityCostMap) ? options.abilityCostMap : {};
-    let totalCost = 0;
-    let hasUnknownAbilityUpgradeCost = false;
-
-    for (const slotKey of EQUIPMENT_SLOT_KEYS) {
-        const beforeEquipment = baselineSnapshot?.equipment?.[slotKey] ?? { itemHrid: "", enhancementLevel: 0 };
-        const afterEquipment = targetSnapshot?.equipment?.[slotKey] ?? { itemHrid: "", enhancementLevel: 0 };
-        const beforeItemHrid = String(beforeEquipment?.itemHrid || "");
-        const afterItemHrid = String(afterEquipment?.itemHrid || "");
-        const beforeLevel = Math.max(0, Math.floor(toFiniteNumber(beforeEquipment?.enhancementLevel, 0)));
-        const afterLevel = Math.max(0, Math.floor(toFiniteNumber(afterEquipment?.enhancementLevel, 0)));
-
-        if (beforeItemHrid === afterItemHrid && beforeLevel === afterLevel) {
-            continue;
-        }
-
-        const savedCostResult = readEquipmentTransitionCostFromMap(
-            enhancementCostMap,
-            slotKey,
-            beforeItemHrid,
-            beforeLevel,
-            afterItemHrid,
-            afterLevel
-        );
-        const estimatedCost = savedCostResult.value != null
-            ? toFiniteNumber(savedCostResult.value, 0)
-            : computeDefaultEquipmentTransitionCost(
-                beforeItemHrid,
-                beforeLevel,
-                afterItemHrid,
-                afterLevel,
-                pricingState
-            );
-
-        totalCost += Math.max(0, estimatedCost);
-    }
-
-    for (let i = 0; i < 5; i++) {
-        const beforeAbility = baselineSnapshot?.abilities?.[i] ?? { abilityHrid: "", level: 1 };
-        const afterAbility = targetSnapshot?.abilities?.[i] ?? { abilityHrid: "", level: 1 };
-        const beforeHrid = String(beforeAbility?.abilityHrid || "");
-        const afterHrid = String(afterAbility?.abilityHrid || "");
-        const beforeLevel = Math.max(1, Math.floor(toFiniteNumber(beforeAbility?.level, 1)));
-        const afterLevel = Math.max(1, Math.floor(toFiniteNumber(afterAbility?.level, 1)));
-
-        if (!afterHrid) {
-            continue;
-        }
-
-        const fromLevel = beforeHrid && beforeHrid === afterHrid ? beforeLevel : 1;
-        if (afterLevel <= fromLevel) {
-            continue;
-        }
-
-        const costKey = getAbilityUpgradeCostKey(i, afterHrid, fromLevel, afterLevel);
-        const defaultCost = computeDefaultAbilityUpgradeCost({
-            abilityHrid: afterHrid,
-            level: fromLevel,
-        }, afterLevel, pricingState);
-        let estimatedCost = null;
-        if (Object.prototype.hasOwnProperty.call(abilityCostMap, costKey)) {
-            estimatedCost = toFiniteNumber(abilityCostMap[costKey], 0);
-        } else if (defaultCost == null) {
-            hasUnknownAbilityUpgradeCost = true;
-        } else {
-            estimatedCost = toFiniteNumber(defaultCost, 0);
-        }
-
-        if (estimatedCost == null) {
-            continue;
-        }
-        totalCost += Math.max(0, estimatedCost);
-    }
-
-    const houseRoomUpgradePreview = buildHouseRoomUpgradeCostPreview(
-        baselineSnapshot?.houseRooms,
-        targetSnapshot?.houseRooms,
-        pricingState
-    );
-    totalCost += Math.max(0, toFiniteNumber(houseRoomUpgradePreview?.totals?.totalCost, 0));
-
-    if (hasUnknownAbilityUpgradeCost) {
-        return null;
-    }
-
-    return toFiniteNumber(totalCost, 0);
-}
-
-function computePurchaseDaysByBaselineProfit(upgradeCost, baselineDailyNoRngProfit) {
-    const safeCost = toFiniteNumber(upgradeCost, 0);
-    const safeBaselineProfit = toFiniteNumber(baselineDailyNoRngProfit, 0);
-    if (safeCost <= 0 || safeBaselineProfit <= 0) {
-        return null;
-    }
-    return safeCost / safeBaselineProfit;
-}
-
-function computeGoldPerPoint01Pct(upgradeCost, deltaInfo) {
-    const safeCost = toFiniteNumber(upgradeCost, 0);
-    if (safeCost <= 0 || deltaInfo?.pct == null) {
-        return null;
-    }
-    const pctValue = Number(deltaInfo.pct);
-    if (!Number.isFinite(pctValue) || pctValue <= 0) {
-        return null;
-    }
-    return safeCost / (pctValue * 100);
-}
-
-function computePercentileFromSorted(sortedValues, percentile) {
-    if (!Array.isArray(sortedValues) || sortedValues.length === 0) {
-        return 0;
-    }
-    if (sortedValues.length === 1) {
-        return sortedValues[0];
-    }
-
-    const clampedPercentile = clamp(toFiniteNumber(percentile, 0), 0, 1);
-    const rawIndex = (sortedValues.length - 1) * clampedPercentile;
-    const lowerIndex = Math.floor(rawIndex);
-    const upperIndex = Math.ceil(rawIndex);
-    if (lowerIndex === upperIndex) {
-        return sortedValues[lowerIndex];
-    }
-
-    const interpolation = rawIndex - lowerIndex;
-    return sortedValues[lowerIndex] + (sortedValues[upperIndex] - sortedValues[lowerIndex]) * interpolation;
-}
-
-function computeArithmeticMean(values, fallback = 0) {
-    if (!Array.isArray(values) || values.length === 0) {
-        return fallback;
-    }
-    return values.reduce((sum, value) => sum + toFiniteNumber(value, 0), 0) / values.length;
-}
-
-function winsorizeValues(values, winsorizePct = 0) {
-    const numericValues = (values ?? []).map((value) => Number(value)).filter((value) => Number.isFinite(value));
-    if (numericValues.length === 0) {
-        return [];
-    }
-
-    const safePct = clamp(toFiniteNumber(winsorizePct, 0), 0, 0.49);
-    if (safePct <= 0 || numericValues.length < 3) {
-        return [...numericValues];
-    }
-
-    const sorted = [...numericValues].sort((a, b) => a - b);
-    const lower = computePercentileFromSorted(sorted, safePct);
-    const upper = computePercentileFromSorted(sorted, 1 - safePct);
-    return numericValues.map((value) => clamp(value, lower, upper));
-}
-
-function computeConfidenceFromValues(values, centerValue) {
-    const numericValues = (values ?? []).map((value) => Number(value)).filter((value) => Number.isFinite(value));
-    const sampleCount = numericValues.length;
-    if (sampleCount <= 1) {
-        return 0;
-    }
-
-    const mean = computeArithmeticMean(numericValues, 0);
-    const variance = numericValues.reduce((sum, value) => sum + ((value - mean) ** 2), 0) / sampleCount;
-    const std = Math.sqrt(Math.max(0, variance));
-    const ciHalfWidth95 = 1.96 * std / Math.sqrt(sampleCount);
-    const scaleBase = Math.max(Math.abs(toFiniteNumber(centerValue, 0)), std, 1e-6);
-    const intervalConfidence = 1 / (1 + ciHalfWidth95 / scaleBase);
-
-    const sizeScale = Math.max(1, toFiniteNumber(QUEUE_MULTI_ROUND_CONFIDENCE_SIZE_SCALE, 8));
-    const sizeConfidence = 1 - Math.exp(-1 * (sampleCount - 1) / sizeScale);
-    return clamp(intervalConfidence * sizeConfidence, 0, 1);
-}
-
-function summarizeMetric(values, deltaPctValues, medianBlend = QUEUE_MULTI_ROUND_MEDIAN_BLEND_WEIGHT) {
-    const safeValues = (values ?? []).map((value) => toFiniteNumber(value, 0));
-    const blendWeight = clamp(toFiniteNumber(medianBlend, QUEUE_MULTI_ROUND_MEDIAN_BLEND_WEIGHT), 0, 1);
-    const meanWeight = 1 - blendWeight;
-    if (safeValues.length === 0) {
-        return {
-            mean: 0,
-            winsorizedMean: 0,
-            robustMean: 0,
-            min: 0,
-            max: 0,
-            std: 0,
-            p50: 0,
-            p90: 0,
-            cv: 1,
-            robustCv: 1,
-            meanDeltaPct: 0,
-            rawMeanDeltaPct: 0,
-            winsorizedMeanDeltaPct: 0,
-            medianDeltaPct: 0,
-            robustMeanDeltaPct: 0,
-            confidence: 0,
-            confidenceDeltaPct: 0,
-            sampleCount: 0,
-            deltaSampleCount: 0,
-        };
-    }
-
-    const rawMean = computeArithmeticMean(safeValues, 0);
-    const winsorizedValues = winsorizeValues(safeValues, QUEUE_MULTI_ROUND_WINSORIZE_PCT);
-    const winsorizedMean = computeArithmeticMean(winsorizedValues, rawMean);
-    const sortedValues = [...winsorizedValues].sort((a, b) => a - b);
-    const p50 = computePercentileFromSorted(sortedValues, 0.5);
-    const p90 = computePercentileFromSorted(sortedValues, 0.9);
-    const robustMean = meanWeight * winsorizedMean + blendWeight * p50;
-
-    const min = Math.min(...winsorizedValues);
-    const max = Math.max(...winsorizedValues);
-    const variance = winsorizedValues.reduce((sum, value) => sum + ((value - robustMean) ** 2), 0) / winsorizedValues.length;
-    const std = Math.sqrt(Math.max(0, variance));
-    const robustCv = Math.abs(robustMean) > 1e-9 ? Math.abs(std / robustMean) : 1;
-    const confidence = computeConfidenceFromValues(winsorizedValues, robustMean);
-
-    const safeDeltaPctValues = (deltaPctValues ?? []).map((value) => Number(value)).filter((value) => Number.isFinite(value));
-    const rawMeanDeltaPct = computeArithmeticMean(safeDeltaPctValues, 0);
-    const winsorizedDeltaPctValues = winsorizeValues(safeDeltaPctValues, QUEUE_MULTI_ROUND_WINSORIZE_PCT);
-    const winsorizedMeanDeltaPct = computeArithmeticMean(winsorizedDeltaPctValues, rawMeanDeltaPct);
-    const sortedDeltaValues = [...winsorizedDeltaPctValues].sort((a, b) => a - b);
-    const medianDeltaPct = sortedDeltaValues.length > 0 ? computePercentileFromSorted(sortedDeltaValues, 0.5) : rawMeanDeltaPct;
-    const robustMeanDeltaPct = meanWeight * winsorizedMeanDeltaPct + blendWeight * medianDeltaPct;
-    const confidenceDeltaPct = computeConfidenceFromValues(winsorizedDeltaPctValues, robustMeanDeltaPct);
-
-    return {
-        mean: toFiniteNumber(rawMean, 0),
-        winsorizedMean: toFiniteNumber(winsorizedMean, 0),
-        robustMean: toFiniteNumber(robustMean, 0),
-        min: toFiniteNumber(min, 0),
-        max: toFiniteNumber(max, 0),
-        std: toFiniteNumber(std, 0),
-        p50: toFiniteNumber(p50, 0),
-        p90: toFiniteNumber(p90, 0),
-        cv: toFiniteNumber(robustCv, 1),
-        robustCv: toFiniteNumber(robustCv, 1),
-        meanDeltaPct: toFiniteNumber(robustMeanDeltaPct, 0),
-        rawMeanDeltaPct: toFiniteNumber(rawMeanDeltaPct, 0),
-        winsorizedMeanDeltaPct: toFiniteNumber(winsorizedMeanDeltaPct, 0),
-        medianDeltaPct: toFiniteNumber(medianDeltaPct, 0),
-        robustMeanDeltaPct: toFiniteNumber(robustMeanDeltaPct, 0),
-        confidence: toFiniteNumber(confidence, 0),
-        confidenceDeltaPct: toFiniteNumber(confidenceDeltaPct, 0),
-        sampleCount: safeValues.length,
-        deltaSampleCount: safeDeltaPctValues.length,
-    };
-}
-
-function buildMetricSummaryForKeys(
-    roundResults = [],
-    metricKeys = QUEUE_MULTI_ROUND_METRIC_KEYS,
-    includeDeltaPct = true,
-    medianBlend = QUEUE_MULTI_ROUND_MEDIAN_BLEND_WEIGHT
-) {
-    const metricSummary = {};
-    for (const metricKey of metricKeys) {
-        const metricValues = roundResults.map((result) => toFiniteNumber(result?.metrics?.[metricKey], 0));
-        const deltaPctValues = includeDeltaPct
-            ? roundResults.map((result) => Number(result?.deltas?.[metricKey]?.pct))
-            : [];
-        metricSummary[metricKey] = summarizeMetric(metricValues, deltaPctValues, medianBlend);
-    }
-    return metricSummary;
-}
-
-function buildQueueItemMetricSummary(roundResults = [], medianBlend = QUEUE_MULTI_ROUND_MEDIAN_BLEND_WEIGHT) {
-    return buildMetricSummaryForKeys(roundResults, QUEUE_MULTI_ROUND_METRIC_KEYS, true, medianBlend);
-}
-
-function buildQueueBaselineMetricSummary(roundResults = [], medianBlend = QUEUE_MULTI_ROUND_MEDIAN_BLEND_WEIGHT) {
-    return buildMetricSummaryForKeys(roundResults, QUEUE_BASELINE_METRIC_KEYS, false, medianBlend);
-}
-
-function resolveMetricSummaryAggregateValue(metricSummaryEntry, medianBlend = null) {
-    if (medianBlend != null) {
-        const blendWeight = clamp(toFiniteNumber(medianBlend, QUEUE_MULTI_ROUND_MEDIAN_BLEND_WEIGHT), 0, 1);
-        const meanWeight = 1 - blendWeight;
-        const winsorizedMean = Number(metricSummaryEntry?.winsorizedMean);
-        const p50 = Number(metricSummaryEntry?.p50);
-        if (Number.isFinite(winsorizedMean) && Number.isFinite(p50)) {
-            return meanWeight * winsorizedMean + blendWeight * p50;
-        }
-    }
-
-    const robustMean = Number(metricSummaryEntry?.robustMean);
-    if (Number.isFinite(robustMean)) {
-        return robustMean;
-    }
-
-    const meanValue = Number(metricSummaryEntry?.mean);
-    if (Number.isFinite(meanValue)) {
-        return meanValue;
-    }
-
-    return 0;
-}
-
-function buildAggregatedMetricsFromMetricSummary(metricSummary = {}, metricKeys = [], medianBlend = null) {
-    const metrics = {};
-    for (const metricKey of metricKeys) {
-        metrics[metricKey] = toFiniteNumber(resolveMetricSummaryAggregateValue(metricSummary?.[metricKey], medianBlend), 0);
-    }
-    return metrics;
-}
-
-function buildQueueBaselineAggregate(roundResults = [], medianBlend = QUEUE_MULTI_ROUND_MEDIAN_BLEND_WEIGHT) {
-    const metricSummary = buildQueueBaselineMetricSummary(roundResults, medianBlend);
-    return {
-        metricSummary,
-        metrics: buildAggregatedMetricsFromMetricSummary(metricSummary, QUEUE_BASELINE_METRIC_KEYS, medianBlend),
-    };
-}
-
-function resolveQueueBaselineMetricsForSettings(baseline = null, queueSettings = getDefaultQueueRunSettings()) {
-    if (!isPlainObject(baseline)) {
-        return null;
-    }
-
-    if (isPlainObject(baseline.metricSummary)) {
-        const normalizedQueueSettings = normalizeQueueSettings(queueSettings);
-        return buildAggregatedMetricsFromMetricSummary(
-            baseline.metricSummary,
-            QUEUE_BASELINE_METRIC_KEYS,
-            normalizedQueueSettings.medianBlend
-        );
-    }
-
-    return isPlainObject(baseline.metrics) ? baseline.metrics : null;
-}
-
-function hasAggregatedQueueBaselineMetrics(baseline = null) {
-    if (!isPlainObject(baseline)) {
-        return false;
-    }
-
-    if (!isPlainObject(baseline.metricSummary)) {
-        return false;
-    }
-
-    const completedRounds = Math.max(0, Math.floor(toFiniteNumber(baseline.completedRounds, 0)));
-    if (completedRounds <= 0) {
-        return false;
-    }
-
-    return QUEUE_MULTI_ROUND_METRIC_KEYS.every((metricKey) => Number.isFinite(Number(baseline?.metrics?.[metricKey])));
-}
-
-function rankScoreList(rawValues, options = {}) {
-    const higherIsBetter = options.higherIsBetter !== false;
-    const logScale = Boolean(options.logScale);
-    const invalidScore = toFiniteNumber(options.invalidScore, QUEUE_MULTI_ROUND_SCORE_INVALID);
-    const tieScore = toFiniteNumber(options.tieScore, QUEUE_MULTI_ROUND_SCORE_TIE);
-    const minScore = toFiniteNumber(options.minScore, QUEUE_MULTI_ROUND_SCORE_MIN);
-    const maxScore = toFiniteNumber(options.maxScore, QUEUE_MULTI_ROUND_SCORE_MAX);
-    const clampedMinScore = Math.min(minScore, maxScore);
-    const clampedMaxScore = Math.max(minScore, maxScore);
-
-    const preparedValues = rawValues.map((value) => {
-        if (value == null) {
-            return null;
-        }
-        const numeric = Number(value);
-        if (!Number.isFinite(numeric)) {
-            return null;
-        }
-        if (logScale) {
-            return Math.log1p(Math.max(0, numeric));
-        }
-        return numeric;
-    });
-
-    const invalidFlags = preparedValues.map((value) => value == null);
-    const validEntries = preparedValues
-        .map((value, index) => ({ value, index }))
-        .filter((entry) => Number.isFinite(entry.value));
-
-    if (validEntries.length === 0) {
-        return {
-            scores: rawValues.map(() => invalidScore),
-            invalidFlags,
-        };
-    }
-    if (validEntries.length === 1) {
-        return {
-            scores: preparedValues.map((value) => (value == null ? invalidScore : tieScore)),
-            invalidFlags,
-        };
-    }
-
-    validEntries.sort((a, b) => a.value - b.value);
-    const rankByIndex = new Map();
-    const tieEpsilon = 1e-12;
-    let cursor = 0;
-    while (cursor < validEntries.length) {
-        let nextCursor = cursor;
-        while (
-            nextCursor + 1 < validEntries.length
-            && Math.abs(validEntries[nextCursor + 1].value - validEntries[cursor].value) <= tieEpsilon
-        ) {
-            nextCursor += 1;
-        }
-
-        const averageRank = (cursor + nextCursor) / 2;
-        for (let rankIndex = cursor; rankIndex <= nextCursor; rankIndex++) {
-            rankByIndex.set(validEntries[rankIndex].index, averageRank);
-        }
-        cursor = nextCursor + 1;
-    }
-
-    const denominator = Math.max(1, validEntries.length - 1);
-    const scoreRange = clampedMaxScore - clampedMinScore;
-    const scores = preparedValues.map((value, index) => {
-        if (value == null) {
-            return invalidScore;
-        }
-        const rankValue = toFiniteNumber(rankByIndex.get(index), 0);
-        const percentile = higherIsBetter ? rankValue / denominator : 1 - rankValue / denominator;
-        const rankedScore = clampedMinScore + percentile * scoreRange;
-        return clamp(rankedScore, clampedMinScore, clampedMaxScore);
-    });
-
-    return {
-        scores,
-        invalidFlags,
-    };
-}
-
-function createEmptyQueueCostInsights() {
-    return {
-        totalUpgradeCost: null,
-        purchaseDays: null,
-        goldPerPoint01Pct: {},
-        goldPerPoint01PctAvg: null,
-        compositeDeltaPct: null,
-        compositeGoldPerPoint01Pct: null,
-    };
-}
-
-function resolveQueueMetricSummaryDeltaPct(metricSummary = {}, metricKey = "") {
-    const robustDeltaPct = Number(metricSummary?.[metricKey]?.robustMeanDeltaPct);
-    if (Number.isFinite(robustDeltaPct)) {
-        return robustDeltaPct;
-    }
-
-    const fallbackDeltaPct = Number(metricSummary?.[metricKey]?.meanDeltaPct);
-    if (Number.isFinite(fallbackDeltaPct)) {
-        return fallbackDeltaPct;
-    }
-
-    return null;
-}
-
-function computeWeightedQueueMetricAverage(metricValues = {}, metricWeights = {}) {
-    let weightedSum = 0;
-    let totalWeight = 0;
-
-    for (const metricKey of QUEUE_MULTI_ROUND_METRIC_KEYS) {
-        const weight = Math.max(0, toFiniteNumber(metricWeights?.[metricKey], 0));
-        if (weight <= 0) {
-            continue;
-        }
-
-        const value = Number(metricValues?.[metricKey]);
-        if (!Number.isFinite(value)) {
-            return null;
-        }
-
-        weightedSum += value * weight;
-        totalWeight += weight;
-    }
-
-    if (totalWeight <= 0) {
-        return null;
-    }
-
-    return weightedSum / totalWeight;
-}
-
-function buildQueueItemCostInsights(queueState, queueItemSnapshot, metricSummary, pricingState, queueSettings) {
-    const baselineSnapshot = queueState?.baseline?.snapshot ?? null;
-    const totalUpgradeCostRaw = computeQueueItemUpgradeCost(
-        baselineSnapshot,
-        queueItemSnapshot,
-        pricingState,
-        {
-            enhancementCostMap: queueState?.enhancementUpgradeCosts,
-            abilityCostMap: queueState?.abilityUpgradeCosts,
-        }
-    );
-    const totalUpgradeCost = totalUpgradeCostRaw != null && Number.isFinite(Number(totalUpgradeCostRaw))
-        ? Math.max(0, toFiniteNumber(totalUpgradeCostRaw, 0))
-        : null;
-    const purchaseDays = computePurchaseDaysByBaselineProfit(totalUpgradeCost, queueState?.baseline?.metrics?.dailyNoRngProfit);
-
-    const goldPerPoint01Pct = {};
-    for (const metricKey of QUEUE_MULTI_ROUND_METRIC_KEYS) {
-        const meanDeltaPct = resolveQueueMetricSummaryDeltaPct(metricSummary, metricKey);
-        goldPerPoint01Pct[metricKey] = computeGoldPerPoint01Pct(totalUpgradeCost, { pct: meanDeltaPct });
-    }
-
-    const goldValues = QUEUE_MULTI_ROUND_METRIC_KEYS.map((metricKey) => goldPerPoint01Pct[metricKey]);
-    const goldPerPoint01PctAvg = goldValues.length === QUEUE_MULTI_ROUND_METRIC_KEYS.length
-        && goldValues.every((value) => Number.isFinite(value) && value > 0)
-        ? goldValues.reduce((sum, value) => sum + value, 0) / goldValues.length
-        : null;
-    const compositeDeltaByMetric = Object.fromEntries(
-        QUEUE_MULTI_ROUND_METRIC_KEYS.map((metricKey) => [metricKey, resolveQueueMetricSummaryDeltaPct(metricSummary, metricKey)])
-    );
-    const compositeDeltaPct = computeWeightedQueueMetricAverage(
-        compositeDeltaByMetric,
-        getQueuePerformanceMetricWeights(queueSettings)
-    );
-    const compositeGoldPerPoint01Pct = computeGoldPerPoint01Pct(totalUpgradeCost, { pct: compositeDeltaPct });
-
-    return {
-        totalUpgradeCost,
-        purchaseDays,
-        goldPerPoint01Pct,
-        goldPerPoint01PctAvg,
-        compositeDeltaPct,
-        compositeGoldPerPoint01Pct,
-    };
-}
-
-function buildMultiRoundRanking(
-    metricSummaryByQueueItem,
-    queueRuntimeSettings = getDefaultQueueRuntimeSettings(),
-    queueSettings = getDefaultQueueRunSettings()
-) {
-    const normalizedQueueRuntimeSettings = normalizeQueueRuntimeSettings(
-        isPlainObject(queueRuntimeSettings) && isPlainObject(queueRuntimeSettings.finalWeights)
-            ? queueRuntimeSettings
-            : { finalWeights: queueRuntimeSettings }
-    );
-    const normalizedScoreWeights = normalizedQueueRuntimeSettings.finalWeights;
-    const costScoreGoldPerPointMode = normalizedQueueRuntimeSettings.costScoreGoldPerPointMode;
-    const performanceMetricWeights = getQueuePerformanceMetricWeights(queueSettings);
-    const normalizedScoresByMetric = {};
-    const invalidFlagsByMetric = {};
-
-    for (const metricKey of QUEUE_MULTI_ROUND_METRIC_KEYS) {
-        const scoreValues = metricSummaryByQueueItem.map((entry) => {
-            const robustDeltaPct = Number(entry.metricSummary?.[metricKey]?.robustMeanDeltaPct);
-            const fallbackDeltaPct = Number(entry.metricSummary?.[metricKey]?.meanDeltaPct);
-            if (Number.isFinite(robustDeltaPct)) {
-                return robustDeltaPct;
-            }
-            if (Number.isFinite(fallbackDeltaPct)) {
-                return fallbackDeltaPct;
-            }
-            return null;
-        });
-
-        const rankedMetricScores = rankScoreList(scoreValues, {
-            higherIsBetter: true,
-            tieScore: QUEUE_MULTI_ROUND_SCORE_TIE,
-            invalidScore: QUEUE_MULTI_ROUND_SCORE_INVALID,
-            minScore: QUEUE_MULTI_ROUND_SCORE_MIN,
-            maxScore: QUEUE_MULTI_ROUND_SCORE_MAX,
-        });
-        normalizedScoresByMetric[metricKey] = rankedMetricScores.scores;
-        invalidFlagsByMetric[metricKey] = rankedMetricScores.invalidFlags;
-    }
-
-    const stabilityRawValues = metricSummaryByQueueItem.map((entry) => {
-        const cvValues = QUEUE_MULTI_ROUND_METRIC_KEYS
-            .map((metricKey) => {
-                const robustCv = Number(entry.metricSummary?.[metricKey]?.robustCv);
-                const fallbackCv = Number(entry.metricSummary?.[metricKey]?.cv);
-                if (Number.isFinite(robustCv)) {
-                    return robustCv;
-                }
-                if (Number.isFinite(fallbackCv)) {
-                    return fallbackCv;
-                }
-                return null;
-            })
-            .filter((value) => Number.isFinite(value));
-        if (cvValues.length === 0) {
-            return null;
-        }
-        return cvValues.reduce((sum, value) => sum + value, 0) / cvValues.length;
-    });
-    const stabilityScores = rankScoreList(stabilityRawValues, {
-        higherIsBetter: false,
-        tieScore: QUEUE_MULTI_ROUND_SCORE_TIE,
-        invalidScore: QUEUE_MULTI_ROUND_SCORE_INVALID,
-        minScore: QUEUE_MULTI_ROUND_SCORE_MIN,
-        maxScore: QUEUE_MULTI_ROUND_SCORE_MAX,
-    });
-
-    const upgradeCostScores = rankScoreList(
-        metricSummaryByQueueItem.map((entry) => entry.costInsights?.totalUpgradeCost),
-        {
-            higherIsBetter: false,
-            logScale: true,
-            tieScore: QUEUE_MULTI_ROUND_SCORE_TIE,
-            invalidScore: QUEUE_MULTI_ROUND_SCORE_INVALID,
-            minScore: QUEUE_MULTI_ROUND_SCORE_MIN,
-            maxScore: QUEUE_MULTI_ROUND_SCORE_MAX,
-        }
-    );
-    const purchaseDaysScores = rankScoreList(
-        metricSummaryByQueueItem.map((entry) => entry.costInsights?.purchaseDays),
-        {
-            higherIsBetter: false,
-            logScale: true,
-            tieScore: QUEUE_MULTI_ROUND_SCORE_TIE,
-            invalidScore: QUEUE_MULTI_ROUND_SCORE_INVALID,
-            minScore: QUEUE_MULTI_ROUND_SCORE_MIN,
-            maxScore: QUEUE_MULTI_ROUND_SCORE_MAX,
-        }
-    );
-    const strictGoldScores = rankScoreList(
-        metricSummaryByQueueItem.map((entry) => entry.costInsights?.goldPerPoint01PctAvg),
-        {
-            higherIsBetter: false,
-            logScale: true,
-            tieScore: QUEUE_MULTI_ROUND_SCORE_TIE,
-            invalidScore: QUEUE_MULTI_ROUND_SCORE_INVALID,
-            minScore: QUEUE_MULTI_ROUND_SCORE_MIN,
-            maxScore: QUEUE_MULTI_ROUND_SCORE_MAX,
-        }
-    );
-    const compositeGoldScores = rankScoreList(
-        metricSummaryByQueueItem.map((entry) => entry.costInsights?.compositeGoldPerPoint01Pct),
-        {
-            higherIsBetter: false,
-            logScale: true,
-            tieScore: QUEUE_MULTI_ROUND_SCORE_TIE,
-            invalidScore: QUEUE_MULTI_ROUND_SCORE_INVALID,
-            minScore: QUEUE_MULTI_ROUND_SCORE_MIN,
-            maxScore: QUEUE_MULTI_ROUND_SCORE_MAX,
-        }
-    );
-
-    const ranked = metricSummaryByQueueItem.map((entry, index) => {
-        const performanceScoresByMetric = Object.fromEntries(
-            QUEUE_MULTI_ROUND_METRIC_KEYS.map((metricKey) => [
-                metricKey,
-                toFiniteNumber(normalizedScoresByMetric?.[metricKey]?.[index], QUEUE_MULTI_ROUND_SCORE_INVALID),
-            ])
-        );
-        const performanceScore = toFiniteNumber(
-            computeWeightedQueueMetricAverage(performanceScoresByMetric, performanceMetricWeights),
-            QUEUE_MULTI_ROUND_SCORE_INVALID
-        );
-
-        const performanceInvalidMetricKeys = QUEUE_MULTI_ROUND_METRIC_KEYS
-            .filter((metricKey) => performanceMetricWeights[metricKey] > 0 && Boolean(invalidFlagsByMetric?.[metricKey]?.[index]));
-        const performanceInvalid = performanceInvalidMetricKeys.length > 0;
-        const stabilityScore = toFiniteNumber(stabilityScores?.scores?.[index], QUEUE_MULTI_ROUND_SCORE_INVALID);
-        const stabilityInvalid = Boolean(stabilityScores?.invalidFlags?.[index]);
-
-        const confidenceByMetric = Object.fromEntries(
-            QUEUE_MULTI_ROUND_METRIC_KEYS.map((metricKey) => {
-                const confidenceDeltaPct = Number(entry.metricSummary?.[metricKey]?.confidenceDeltaPct);
-                const fallbackConfidence = Number(entry.metricSummary?.[metricKey]?.confidence);
-                const confidenceValue = clamp(
-                    toFiniteNumber(Number.isFinite(confidenceDeltaPct) ? confidenceDeltaPct : fallbackConfidence, 0),
-                    0,
-                    1
-                );
-                return [metricKey, confidenceValue];
-            })
-        );
-        const avgConfidence = toFiniteNumber(
-            computeWeightedQueueMetricAverage(confidenceByMetric, performanceMetricWeights),
-            0
-        );
-
-        const upgradeCostScore = toFiniteNumber(upgradeCostScores?.scores?.[index], QUEUE_MULTI_ROUND_SCORE_INVALID);
-        const purchaseDaysScore = toFiniteNumber(purchaseDaysScores?.scores?.[index], QUEUE_MULTI_ROUND_SCORE_INVALID);
-        const strictGoldScore = toFiniteNumber(strictGoldScores?.scores?.[index], QUEUE_MULTI_ROUND_SCORE_INVALID);
-        const compositeGoldScore = toFiniteNumber(compositeGoldScores?.scores?.[index], QUEUE_MULTI_ROUND_SCORE_INVALID);
-        const selectedGoldScore = costScoreGoldPerPointMode === QUEUE_COST_SCORE_GOLD_METRIC_COMPOSITE
-            ? compositeGoldScore
-            : strictGoldScore;
-        const selectedGoldInvalid = costScoreGoldPerPointMode === QUEUE_COST_SCORE_GOLD_METRIC_COMPOSITE
-            ? Boolean(compositeGoldScores?.invalidFlags?.[index])
-            : Boolean(strictGoldScores?.invalidFlags?.[index]);
-        const costScore = (
-            QUEUE_COST_SCORE_WEIGHT_UPGRADE * upgradeCostScore
-            + QUEUE_COST_SCORE_WEIGHT_PURCHASE_DAYS * purchaseDaysScore
-            + QUEUE_COST_SCORE_WEIGHT_GOLD_PER_POINT * selectedGoldScore
-        );
-        const costInvalid = Boolean(upgradeCostScores?.invalidFlags?.[index])
-            || Boolean(purchaseDaysScores?.invalidFlags?.[index])
-            || selectedGoldInvalid;
-
-        const invalidReasons = [];
-        for (const metricKey of performanceInvalidMetricKeys) {
-            invalidReasons.push(`performance.${metricKey}.invalidDeltaPct`);
-        }
-        if (stabilityInvalid) {
-            invalidReasons.push("stability.invalidAvgCv");
-        }
-        if (upgradeCostScores?.invalidFlags?.[index]) {
-            invalidReasons.push("cost.invalidUpgradeCost");
-        }
-        if (purchaseDaysScores?.invalidFlags?.[index]) {
-            invalidReasons.push("cost.invalidPurchaseDays");
-        }
-        if (selectedGoldInvalid) {
-            invalidReasons.push(
-                costScoreGoldPerPointMode === QUEUE_COST_SCORE_GOLD_METRIC_COMPOSITE
-                    ? "cost.invalidCompositeGoldPerPoint01Pct"
-                    : "cost.invalidGoldPerPoint01PctAvg"
-            );
-        }
-
-        const baseFinalScore = (
-            normalizedScoreWeights.performance * performanceScore
-            + normalizedScoreWeights.stability * stabilityScore
-            + normalizedScoreWeights.cost * costScore
-        );
-        const confidencePenaltyStrength = clamp(toFiniteNumber(QUEUE_MULTI_ROUND_CONFIDENCE_PENALTY_STRENGTH, 0.35), 0, 1);
-        const confidencePenaltyFactor = clamp(
-            (1 - confidencePenaltyStrength) + confidencePenaltyStrength * avgConfidence,
-            0,
-            1
-        );
-        const finalScore = baseFinalScore * confidencePenaltyFactor;
-
-        return {
-            queueItemId: entry.queueItemId,
-            displayName: entry.displayName,
-            order: entry.order,
-            finalScore: toFiniteNumber(finalScore, 0),
-            baseFinalScore: toFiniteNumber(baseFinalScore, 0),
-            performanceScore: toFiniteNumber(performanceScore, 0),
-            stabilityScore: toFiniteNumber(stabilityScore, 0),
-            costScore: toFiniteNumber(costScore, 0),
-            confidenceScore: toFiniteNumber(avgConfidence * 100, 0),
-            confidencePenaltyFactor: toFiniteNumber(confidencePenaltyFactor, 1),
-            scoreFlags: {
-                performanceInvalid,
-                stabilityInvalid,
-                costInvalid,
-                invalidReasons,
-            },
-            rawComponentScores: {
-                performanceByMetric: performanceScoresByMetric,
-                performanceWeights: {
-                    ...performanceMetricWeights,
-                },
-                stabilityAvgCv: stabilityRawValues[index],
-                costByMetric: {
-                    upgradeCost: upgradeCostScore,
-                    purchaseDays: purchaseDaysScore,
-                    avgGoldPerPoint01Pct: strictGoldScore,
-                    compositeGoldPerPoint01Pct: compositeGoldScore,
-                    selectedGoldPerPoint01PctScore: selectedGoldScore,
-                    selectedGoldPerPointMode: costScoreGoldPerPointMode,
-                },
-            },
-            metricSummary: entry.metricSummary,
-            costInsights: entry.costInsights,
-        };
-    });
-
-    ranked.sort((a, b) => {
-        if (b.finalScore !== a.finalScore) {
-            return b.finalScore - a.finalScore;
-        }
-
-        const bProfit = toFiniteNumber(b.metricSummary?.dailyNoRngProfit?.mean, 0);
-        const aProfit = toFiniteNumber(a.metricSummary?.dailyNoRngProfit?.mean, 0);
-        if (bProfit !== aProfit) {
-            return bProfit - aProfit;
-        }
-
-        const bDps = toFiniteNumber(b.metricSummary?.dps?.mean, 0);
-        const aDps = toFiniteNumber(a.metricSummary?.dps?.mean, 0);
-        if (bDps !== aDps) {
-            return bDps - aDps;
-        }
-
-        return a.order - b.order;
-    });
-
-    ranked.forEach((entry, index) => {
-        entry.rank = index + 1;
-    });
-
-    return ranked;
-}
-
-function normalizeQueueSettings(settings) {
-    const defaults = getDefaultQueueRunSettings();
-    const rounds = clamp(Math.floor(toFiniteNumber(settings?.rounds, defaults.rounds)), 1, 200);
-    const baselineRounds = clamp(Math.floor(toFiniteNumber(settings?.baselineRounds, defaults.baselineRounds)), 1, 200);
-    const medianBlend = clamp(toFiniteNumber(settings?.medianBlend, defaults.medianBlend), 0, 1);
-    const normalizedPerformanceWeights = resolveQueuePerformanceSubweights(settings, defaults);
-    const executionModeRaw = settings?.executionMode;
-    const executionMode = executionModeRaw == null
-        ? defaults.executionMode
-        : (executionModeRaw === "parallel" ? "parallel" : "serial");
-
-    return {
-        rounds,
-        baselineRounds,
-        medianBlend,
-        weightProfit: normalizedPerformanceWeights.weightProfit,
-        weightXp: normalizedPerformanceWeights.weightXp,
-        weightDeathSafety: normalizedPerformanceWeights.weightDeathSafety,
-        executionMode,
-    };
-}
-
-function resolveQueueRowRoundCount(row = {}) {
-    const samples = QUEUE_MULTI_ROUND_METRIC_KEYS.map((metricKey) => toFiniteNumber(row?.metricSummary?.[metricKey]?.sampleCount, 0));
-    return Math.max(0, ...samples);
-}
-
-function buildQueueEntriesFromState(queueState) {
-    const baselineSnapshot = queueState?.baseline?.snapshot ?? null;
-    if (!baselineSnapshot) {
-        return [];
-    }
-
-    return (Array.isArray(queueState?.items) ? queueState.items : []).map((item, index) => {
-        const summary = computeQueueChangeSummary(baselineSnapshot, item?.snapshot);
-        const fallbackLabels = Array.isArray(summary?.labels) ? summary.labels : [];
-        const fallbackChangeDetails = Array.isArray(summary?.changes) ? summary.changes : [];
-        const changes = Array.isArray(item?.changes) && item.changes.length > 0
-            ? item.changes
-            : fallbackLabels;
-        const changeDetails = Array.isArray(item?.changeDetails) && item.changeDetails.length > 0
-            ? deepClone(item.changeDetails)
-            : deepClone(fallbackChangeDetails);
-        const itemName = String(item?.name || "").trim();
-        const label = itemName || deriveQueueVariantNameFromLabels(changes, index + 1);
-
-        return {
-            id: item?.id,
-            label,
-            snapshot: deepClone(item?.snapshot),
-            changes,
-            changeDetails,
-        };
-    }).filter((entry) => Boolean(entry.id));
-}
-
-function sortQueueRawRuns(rows = [], entrySortIndexById = new Map()) {
-    return (Array.isArray(rows) ? rows.slice() : []).sort((a, b) => {
-        const roundDiff = Number(a?.round || 0) - Number(b?.round || 0);
-        if (roundDiff !== 0) {
-            return roundDiff;
-        }
-        return (entrySortIndexById.get(a?.id) ?? 999) - (entrySortIndexById.get(b?.id) ?? 999);
-    });
-}
-
-function queueChangeNeedsAbilityUpgradeReference(change) {
-    if (String(change?.kind || "") !== "ability") {
-        return false;
-    }
-
-    const afterHrid = String(change?.afterAbilityHrid || "");
-    if (!afterHrid) {
-        return false;
-    }
-
-    const beforeHrid = String(change?.beforeAbilityHrid || "");
-    const beforeLevel = Math.max(1, Math.floor(toFiniteNumber(change?.beforeLevel, 1)));
-    const afterLevel = Math.max(1, Math.floor(toFiniteNumber(change?.afterLevel, 1)));
-    const fromLevel = beforeHrid && beforeHrid === afterHrid ? beforeLevel : 1;
-    return afterLevel > fromLevel;
-}
-
-function queueEntriesNeedAbilityUpgradeReference(entries = []) {
-    return (entries ?? []).some((entry) => (
-        Array.isArray(entry?.changeDetails)
-        && entry.changeDetails.some((change) => queueChangeNeedsAbilityUpgradeReference(change))
-    ));
-}
-
-function buildQueueRankedRowsFromSampleState({
-    entries = [],
-    rawRuns = [],
-    queueSettings,
-    queueState,
-    baselineMetrics,
-    pricingState,
-    queueRuntimeSettings,
-    includeEmptyEntries = false,
-}) {
-    const safeEntries = Array.isArray(entries) ? entries : [];
-    if (safeEntries.length === 0) {
-        return [];
-    }
-
-    const entrySortIndexById = new Map(safeEntries.map((entry, index) => [entry.id, index]));
-    const variantSamplesById = new Map(safeEntries.map((entry) => [entry.id, []]));
-    for (const rawRun of Array.isArray(rawRuns) ? rawRuns : []) {
-        const entryId = String(rawRun?.id || "");
-        if (!variantSamplesById.has(entryId)) {
-            continue;
-        }
-        variantSamplesById.get(entryId).push(rawRun);
-    }
-
-    const sourceEntries = includeEmptyEntries
-        ? safeEntries
-        : safeEntries.filter((entry) => (variantSamplesById.get(entry.id) || []).length > 0);
-
-    if (sourceEntries.length === 0) {
-        return [];
-    }
-
-    const safeQueueSettings = normalizeQueueSettings(queueSettings);
-    const variantAggregates = sourceEntries.map((entry) => {
-        const variantSamples = (variantSamplesById.get(entry.id) || [])
-            .slice()
-            .sort((a, b) => Number(a?.round || 0) - Number(b?.round || 0));
-        const profits = variantSamples.map((sample) => sample.profitPerHour);
-        const xps = variantSamples.map((sample) => sample.totalXpPerHour);
-        const deaths = variantSamples.map((sample) => sample.deathsPerHour);
-        const meanProfit = getMean(profits);
-        const medianProfit = getMedian(profits);
-        const meanXp = getMean(xps);
-        const meanDeaths = getMean(deaths);
-        const stdProfit = getStdDev(profits, meanProfit);
-        const coefficientOfVariation = Math.abs(meanProfit) > 1e-9 ? (stdProfit / Math.abs(meanProfit)) : stdProfit;
-        const stability = 1 / (1 + coefficientOfVariation);
-        const scoringProfitPerHour = meanProfit * (1 - safeQueueSettings.medianBlend) + medianProfit * safeQueueSettings.medianBlend;
-
-        return {
-            id: entry.id,
-            label: entry.label,
-            changeCount: entry.changes.length,
-            changes: entry.changes,
-            changeDetails: Array.isArray(entry.changeDetails) ? deepClone(entry.changeDetails) : [],
-            rounds: variantSamples.length,
-            meanProfitPerHour: meanProfit,
-            medianProfitPerHour: medianProfit,
-            stdProfitPerHour: stdProfit,
-            scoringProfitPerHour,
-            meanXpPerHour: meanXp,
-            meanDeathsPerHour: meanDeaths,
-            stability,
-            sampleResults: variantSamples,
-        };
-    });
-    const variantAggregateById = new Map(variantAggregates.map((entry) => [entry.id, entry]));
-    const metricSummaryByQueueItem = sourceEntries.map((entry) => {
-        const roundResults = (variantSamplesById.get(entry.id) || [])
-            .map((sample) => ({
-                metrics: sample.metrics,
-                deltas: sample.deltas,
-            }));
-        const metricSummary = buildQueueItemMetricSummary(roundResults, safeQueueSettings.medianBlend);
-        return {
-            queueItemId: entry.id,
-            displayName: entry.label,
-            order: entrySortIndexById.get(entry.id) ?? 0,
-            metricSummary,
-            costInsights: buildQueueItemCostInsights(queueState, entry.snapshot, metricSummary, pricingState, safeQueueSettings),
-        };
-    });
-    const multiRoundRanking = buildMultiRoundRanking(metricSummaryByQueueItem, queueRuntimeSettings, safeQueueSettings);
-    const baselineDailyNoRngProfitPerDay = toFiniteNumber(
-        baselineMetrics?.dailyNoRngProfit,
-        0
-    );
-    const baselineScoringProfit = baselineDailyNoRngProfitPerDay / 24;
-    const baselineDps = toFiniteNumber(
-        baselineMetrics?.dps,
-        0
-    );
-    const baselineXpPerHour = toFiniteNumber(
-        baselineMetrics?.xpPerHour,
-        0
-    );
-    const baselineKillsPerHour = toFiniteNumber(
-        baselineMetrics?.killsPerHour,
-        0
-    );
-
-    return multiRoundRanking.map((entry) => {
-        const aggregate = variantAggregateById.get(entry.queueItemId) || {
-            id: entry.queueItemId,
-            label: entry.displayName,
-            changeCount: 0,
-            changes: [],
-            rounds: 0,
-            meanProfitPerHour: toFiniteNumber(entry.metricSummary?.dailyNoRngProfit?.mean, 0) / 24,
-            medianProfitPerHour: toFiniteNumber(entry.metricSummary?.dailyNoRngProfit?.p50, 0) / 24,
-            stdProfitPerHour: toFiniteNumber(entry.metricSummary?.dailyNoRngProfit?.std, 0) / 24,
-            scoringProfitPerHour: toFiniteNumber(entry.metricSummary?.dailyNoRngProfit?.robustMean, 0) / 24,
-            meanXpPerHour: toFiniteNumber(entry.metricSummary?.xpPerHour?.mean, 0),
-            meanDeathsPerHour: 0,
-            stability: 0,
-        };
-
-        const scoringProfitPerHour = toFiniteNumber(aggregate.scoringProfitPerHour, 0);
-        const deltaProfitPerHour = scoringProfitPerHour - baselineScoringProfit;
-        const deltaProfitPct = Math.abs(baselineScoringProfit) > 1e-9
-            ? (deltaProfitPerHour / baselineScoringProfit) * 100
-            : 0;
-
-        const metricSummary = entry.metricSummary ?? {};
-        const dailyNoRngProfitPerDay = toFiniteNumber(metricSummary?.dailyNoRngProfit?.mean, 0);
-        const dps = toFiniteNumber(metricSummary?.dps?.mean, 0);
-        const xpPerHour = toFiniteNumber(metricSummary?.xpPerHour?.mean, 0);
-        const killsPerHour = toFiniteNumber(metricSummary?.killsPerHour?.mean, 0);
-
-        return {
-            id: entry.queueItemId,
-            label: entry.displayName,
-            rank: entry.rank,
-            order: entry.order,
-            score: toFiniteNumber(entry.finalScore, 0) / 100,
-            finalScore: toFiniteNumber(entry.finalScore, 0),
-            baseFinalScore: toFiniteNumber(entry.baseFinalScore, 0),
-            performanceScore: toFiniteNumber(entry.performanceScore, 0),
-            stabilityScore: toFiniteNumber(entry.stabilityScore, 0),
-            costScore: toFiniteNumber(entry.costScore, 0),
-            confidenceScore: toFiniteNumber(entry.confidenceScore, 0),
-            confidencePenaltyFactor: toFiniteNumber(entry.confidencePenaltyFactor, 1),
-            scoreFlags: entry.scoreFlags ?? {
-                performanceInvalid: false,
-                stabilityInvalid: false,
-                costInvalid: false,
-                invalidReasons: [],
-            },
-            rawComponentScores: entry.rawComponentScores ?? {},
-            changeCount: aggregate.changeCount,
-            changes: aggregate.changes,
-            changeDetails: Array.isArray(aggregate.changeDetails) ? deepClone(aggregate.changeDetails) : [],
-            rounds: aggregate.rounds || resolveQueueRowRoundCount(entry),
-            meanProfitPerHour: toFiniteNumber(aggregate.meanProfitPerHour, 0),
-            medianProfitPerHour: toFiniteNumber(aggregate.medianProfitPerHour, 0),
-            stdProfitPerHour: toFiniteNumber(aggregate.stdProfitPerHour, 0),
-            scoringProfitPerHour,
-            meanXpPerHour: toFiniteNumber(aggregate.meanXpPerHour, xpPerHour),
-            meanDeathsPerHour: toFiniteNumber(aggregate.meanDeathsPerHour, 0),
-            stability: toFiniteNumber(aggregate.stability, 0),
-            deltaProfitPerHour: toFiniteNumber(deltaProfitPerHour, 0),
-            deltaProfitPct: toFiniteNumber(deltaProfitPct, 0),
-            dailyNoRngProfitPerDay,
-            deltaDailyNoRngProfitPerDay: dailyNoRngProfitPerDay - baselineDailyNoRngProfitPerDay,
-            deltaDailyNoRngProfitPct: toFiniteNumber(metricSummary?.dailyNoRngProfit?.meanDeltaPct, 0),
-            dps,
-            deltaDpsPerSecond: dps - baselineDps,
-            deltaDpsPct: toFiniteNumber(metricSummary?.dps?.meanDeltaPct, 0),
-            xpPerHour,
-            deltaXpPerHour: xpPerHour - baselineXpPerHour,
-            deltaXpPct: toFiniteNumber(metricSummary?.xpPerHour?.meanDeltaPct, 0),
-            killsPerHour,
-            deltaKillsPerHour: killsPerHour - baselineKillsPerHour,
-            deltaKillsPct: toFiniteNumber(metricSummary?.killsPerHour?.meanDeltaPct, 0),
-            metricSummary,
-            costInsights: entry.costInsights ?? createEmptyQueueCostInsights(),
-        };
-    });
+  }
+  table[hrid] = clamped;
+  return true;
 }
 
 /**
@@ -4560,2938 +216,1174 @@ function buildQueueRankedRowsFromSampleState({
  * @property {string} activePlayerId
  * @property {Object} simulationSettings
  * @property {{ isRunning: boolean, progress: number, error: string, startedAt: number, elapsedSeconds: number, workerMode: "single" | "multi" }} runtime
- * @property {{ simResult: any, simResults: Array<any>, summaryRows: Array<any>, batchRows: Array<any>, batchResultType: string, activeResultPlayerHrid: string, timeSeriesData: any }} results
+ * @property {{ simResult: any, simResults: Array<any>, summaryRows: Array<any>, batchRows: Array<any>, batchResultType: string, activeResultPlayerHrid: string, timeSeriesData: any, multiRound: any }} results
+ * @property {any} results.multiRound 首页多轮模拟的聚合与逐轮数据，运行后由多轮执行链路填充（未运行时为 null）
  */
+export const useSimulatorStore = defineStore('simulator', {
+  state: () => {
+    const playerAchievementsById = loadPlayerAchievementsFromStorage();
+    const playerList = applyPersistedAchievementsToPlayers(
+      [1, 2, 3, 4, 5].map((id) => createEmptyPlayerConfig(id)),
+      playerAchievementsById,
+    );
+    playerList.forEach((player) => ensurePlayerAdvancedState(player));
+    const persistedQueueRunSettingsByPlayer = loadQueueRunSettingsByPlayerFromStorage();
+    const simulationUiSettings = loadSimulationUiSettingsFromStorage();
+    const { zones, dungeons } = getZoneOptions();
+    const labyrinths = getLabyrinthOptions();
+    const initialGroupZoneHrids = groupZoneHrids;
+    const initialSoloZoneHrids = soloZoneHrids;
 
-export const useSimulatorStore = defineStore("simulator", {
-    state: () => {
-        const playerAchievementsById = loadPlayerAchievementsFromStorage();
-        const playerList = applyPersistedAchievementsToPlayers(
-            [1, 2, 3, 4, 5].map((id) => createEmptyPlayerConfig(id)),
-            playerAchievementsById,
-        );
-        const persistedQueueRunSettingsByPlayer = loadQueueRunSettingsByPlayerFromStorage();
-        const simulationUiSettings = loadSimulationUiSettingsFromStorage();
-        const { zones, dungeons } = getZoneOptions();
-        const labyrinths = getLabyrinthOptions();
-        const initialGroupZoneHrids = groupZoneHrids;
-        const initialSoloZoneHrids = soloZoneHrids;
+    return {
+      players: playerList,
+      activePlayerId: '1',
+      // 全局游戏模式（标准 / 铁牛）：账号级状态，切换即持久化（mwi.gameMode.v1）；
+      // 铁牛模式的计算差异（市场价口径、收益估值等）由后续功能逐步接入。
+      gameMode: loadGameModeFromStorage(),
+      options: {
+        equipmentBySlot: getEquipmentOptionsBySlot(),
+        food: getConsumableOptions('/item_categories/food'),
+        drinks: getConsumableOptions('/item_categories/drink'),
+        abilities: getAbilityOptions(),
+        zones,
+        dungeons,
+        labyrinths,
+        labyrinthCrates: {
+          coffee: labyrinthCrateOptions.coffee,
+          food: labyrinthCrateOptions.food,
+          tea: labyrinthCrateOptions.tea,
+        },
+      },
+      simulationSettings: {
+        mode: 'zone',
+        runScope: RUN_SCOPE_SINGLE,
+        useDungeon: false,
+        zoneHrid: zones[0]?.hrid ?? '',
+        dungeonHrid: dungeons[0]?.hrid ?? '',
+        difficultyTier: 0,
+        labyrinthHrid: labyrinths[0]?.hrid ?? '',
+        roomLevel: LABYRINTH_ROOM_LEVEL_DEFAULT,
+        simulationTimeHours: 24,
+        // 首页多轮模拟的重复次数（默认 1，有效范围 [1,100] 整数）：随 UI 设置持久化
+        // （mwi.simulation.ui.v1 白名单字段，刷新后保留上次选择；归一化走
+        // homeMultiRoundSimulation.clampSimulationRounds）；store 不做 clamp，
+        // 非法值由读取端（多轮执行链路）兜底。
+        simulationRounds: simulationUiSettings.simulationRounds,
+        mooPass: simulationUiSettings.mooPass,
+        combatScrollsEnabled: simulationUiSettings.combatScrollsEnabled,
+        comExpEnabled: simulationUiSettings.comExpEnabled,
+        comExp: simulationUiSettings.comExp,
+        comDropEnabled: simulationUiSettings.comDropEnabled,
+        comDrop: simulationUiSettings.comDrop,
+        enableHpMpVisualization: simulationUiSettings.enableHpMpVisualization,
+        selectedGroupZoneHrids: initialGroupZoneHrids,
+        selectedSoloZoneHrids: initialSoloZoneHrids,
+        labyrinthCrates: normalizeLabyrinthCrates({}),
+        labyrinthUpgrades: normalizeLabyrinthShopUpgrades(simulationUiSettings.labyrinthUpgrades),
+      },
+      runtime: {
+        isRunning: false,
+        // 启动准备窗口（loadPlayerMapperModule 动态导入期间）：isRunning 尚未置位，
+        // 仅供顶栏模式闸门判忙，不并入统一忙碌判定——两个启动动作在 await 后仍会用
+        // isSimulationBusy 自查，并入会把自己拦下（并破坏既有抢占语义）。
+        preparing: false,
+        progress: 0,
+        error: '',
+        startedAt: 0,
+        elapsedSeconds: 0,
+        workerMode: 'single',
+        completionNoticeId: 0,
+        // 备忘录 0364491149911703552：导出前资产分刷新失败标记（会话内瞬态，不落盘；
+        // exportGroupConfig / exportSoloConfig 每次导出开始时重置，刷新失败时置位）。
+        assetScoreRefreshFailedOnExport: false,
+      },
+      results: {
+        simResult: null,
+        simResults: [],
+        summaryRows: [],
+        batchRows: [],
+        batchResultType: '',
+        activeResultPlayerHrid: 'player1',
+        timeSeriesData: null,
+        // 首页多轮模拟的聚合与逐轮数据：运行后由多轮执行链路填充，未运行时为 null。
+        multiRound: null,
+      },
+      // advisor 仅恢复持久化配置（goalPreset/customWeights/ironcowWeights/filters），
+      // 不恢复结果行（quickRows/refinedRows/topCards）与扫描运行时状态（scanned*/
+      // dropDataStale 等会话内字段随 createAdvisorState 重置）。
+      advisor: {
+        ...createAdvisorState(),
+        ...loadAdvisorSettingsFromStorage(),
+      },
+      foodOptimizer: createFoodOptimizerState(),
+      triggerOptimizer: createTriggerOptimizerState(),
+      budgetOptimizer: createBudgetOptimizerState(),
+      queue: {
+        byPlayer: createQueueStateByPlayer(playerList, persistedQueueRunSettingsByPlayer),
+        importedProfileByPlayer: createImportedProfileByPlayer(),
+        importedBaselineByPlayer: createImportedBaselineByPlayer(),
+      },
+      queueRuntime: loadQueueRuntimeSettingsFromStorage({
+        parallelWorkerLimit: getRecommendedParallelWorkerLimit(),
+      }),
+      playerDataSnapshot: createPlayerDataSnapshotState(),
+      equipmentSets: loadEquipmentSetsFromStorage(),
+      pricing: createPricingState(),
+      abilityUpgradeReferenceVersion: 0,
+      ui: {
+        language: getStorageItem('i18nextLng', { fallback: 'zh' }),
+      },
+    };
+  },
+  getters: {
+    foodOptimizerInputSignature() {
+      return createFoodOptimizerInputSignature(snapshotFoodOptimizerInput(this));
+    },
+    foodOptimizerReportStale(state) {
+      const report = state.foodOptimizer.report;
+      return Boolean(
+        report &&
+        (report.stale || this.foodOptimizerInputSignature !== (report.appliedInputSignature || report.inputSignature)),
+      );
+    },
+    triggerOptimizerInputSignature() {
+      return createTriggerOptimizerInputSignature(snapshotTriggerOptimizerInput(this));
+    },
+    triggerOptimizerReportStale(state) {
+      const results = state.triggerOptimizer.results;
+      return Boolean(
+        results?.createdAt &&
+        (results.stale ||
+          this.triggerOptimizerInputSignature !== (results.appliedInputSignature || results.inputSignature)),
+      );
+    },
+    budgetOptimizerInputSignature() {
+      return createBudgetOptimizerInputSignature(snapshotBudgetOptimizerInput(this));
+    },
+    budgetOptimizerReportStale(state) {
+      const results = state.budgetOptimizer.results;
+      return Boolean(
+        results?.createdAt &&
+        (results.stale ||
+          this.budgetOptimizerInputSignature !== (results.appliedInputSignature || results.inputSignature)),
+      );
+    },
+    activePlayer(state) {
+      return state.players.find((player) => player.id === state.activePlayerId) ?? state.players[0];
+    },
+    selectedPlayers(state) {
+      return state.players.filter((player) => player.selected);
+    },
+    resolvedAdvisorMetricPlayer(state) {
+      const selectedPlayers = state.players
+        .filter((player) => player.selected)
+        .map((player) => ({ id: player.id, name: player.name }));
+      return resolveAdvisorMetricPlayer(selectedPlayers, state.activePlayerId);
+    },
+    currentActionOptions(state) {
+      if (state.simulationSettings.mode === 'labyrinth') {
+        return state.options.labyrinths;
+      }
+      return state.simulationSettings.useDungeon ? state.options.dungeons : state.options.zones;
+    },
+    groupZoneOptions(state) {
+      return (state.options.zones || []).filter(
+        (zone) => Number(actionDetailIndex?.[zone?.hrid]?.maxSpawnCount ?? 0) > 1,
+      );
+    },
+    soloZoneOptions(state) {
+      return (state.options.zones || []).filter(
+        (zone) => Number(actionDetailIndex?.[zone?.hrid]?.maxSpawnCount ?? 0) === 1,
+      );
+    },
+    currentMaxDifficulty(state) {
+      if (state.simulationSettings.mode === 'labyrinth') {
+        return 0;
+      }
 
+      const targetHrid = state.simulationSettings.useDungeon
+        ? state.simulationSettings.dungeonHrid
+        : state.simulationSettings.zoneHrid;
+      const source = state.simulationSettings.useDungeon ? state.options.dungeons : state.options.zones;
+      const action = source.find((entry) => entry.hrid === targetHrid);
+      return Number(action?.maxDifficulty ?? 0);
+    },
+    availableRunScopes(state) {
+      if (state.simulationSettings.mode === 'labyrinth') {
+        return [
+          { value: RUN_SCOPE_SINGLE, label: 'Single labyrinth' },
+          { value: RUN_SCOPE_ALL_LABYRINTHS, label: 'All labyrinths' },
+        ];
+      }
+
+      return [
+        { value: RUN_SCOPE_SINGLE, label: 'Single target' },
+        { value: RUN_SCOPE_ALL_GROUP_ZONES, label: 'All group zones' },
+        { value: RUN_SCOPE_ALL_SOLO_ZONES, label: 'All solo zones' },
+      ];
+    },
+    activeResultRow(state) {
+      return state.results.summaryRows.find((row) => row.playerHrid === state.results.activeResultPlayerHrid) ?? null;
+    },
+    activeQueueState(state) {
+      return state.queue.byPlayer[state.activePlayerId] ?? createQueuePlayerState();
+    },
+    activeQueuePartyStatus(state) {
+      const queueState = state.queue.byPlayer[state.activePlayerId] ?? createQueuePlayerState();
+      const hasBaselineSnapshot = Boolean(queueState?.baseline?.snapshot);
+      if (!hasBaselineSnapshot) {
         return {
-            players: playerList,
-            activePlayerId: "1",
-            importedCombatLoadouts: loadCombatLoadoutImportsFromStorage(),
-            options: {
-                equipmentBySlot: getEquipmentOptionsBySlot(),
-                food: getConsumableOptions("/item_categories/food"),
-                drinks: getConsumableOptions("/item_categories/drink"),
-                abilities: getAbilityOptions(),
-                zones,
-                dungeons,
-                labyrinths,
-                labyrinthCrates: {
-                    coffee: labyrinthCrateOptions.coffee,
-                    food: labyrinthCrateOptions.food,
-                    tea: labyrinthCrateOptions.tea,
-                },
-            },
-            simulationSettings: {
-                mode: "zone",
-                runScope: RUN_SCOPE_SINGLE,
-                useDungeon: false,
-                zoneHrid: zones[0]?.hrid ?? "",
-                dungeonHrid: dungeons[0]?.hrid ?? "",
-                difficultyTier: 0,
-                labyrinthHrid: labyrinths[0]?.hrid ?? "",
-                roomLevel: 100,
-                simulationTimeHours: 24,
-                mooPass: simulationUiSettings.mooPass,
-                comExpEnabled: simulationUiSettings.comExpEnabled,
-                comExp: simulationUiSettings.comExp,
-                comDropEnabled: simulationUiSettings.comDropEnabled,
-                comDrop: simulationUiSettings.comDrop,
-                combatScrolls: simulationUiSettings.combatScrolls,
-                enableHpMpVisualization: true,
-                selectedGroupZoneHrids: initialGroupZoneHrids,
-                selectedSoloZoneHrids: initialSoloZoneHrids,
-                labyrinthCrates: normalizeLabyrinthCrates({}),
-            },
-            runtime: {
-                isRunning: false,
-                progress: 0,
-                error: "",
-                startedAt: 0,
-                elapsedSeconds: 0,
-                workerMode: "single",
-                completionNoticeId: 0,
-            },
-            results: {
-                simResult: null,
-                simResults: [],
-                summaryRows: [],
-                batchRows: [],
-                batchResultType: "",
-                activeResultPlayerHrid: "player1",
-                timeSeriesData: null,
-            },
-            advisor: createAdvisorState(),
-            queue: {
-                byPlayer: createQueueStateByPlayer(playerList, persistedQueueRunSettingsByPlayer),
-                importedProfileByPlayer: createImportedProfileByPlayer(),
-                importedBaselineByPlayer: createImportedBaselineByPlayer(),
-            },
-            queueRuntime: loadQueueRuntimeSettingsFromStorage(),
-            playerDataSnapshot: createPlayerDataSnapshotState(),
-            equipmentSets: loadEquipmentSetsFromStorage(),
-            pricing: createPricingState(),
-            abilityUpgradeReferenceVersion: 0,
-            ui: {
-                language: "zh",
-            },
+          hasMismatch: false,
+          messageKey: '',
+          memberNames: [],
         };
+      }
+      const baselinePartyPlayers = Array.isArray(queueState?.baseline?.partySnapshot?.selectedPlayers)
+        ? queueState.baseline.partySnapshot.selectedPlayers
+        : [];
+      const memberNames = baselinePartyPlayers
+        .map((player) => String(player?.name || `Player ${player?.id || ''}`).trim())
+        .filter(Boolean);
+      const selectedTeammateCount = buildQueuePartyComparisonPlayers(state.players, state.activePlayerId).length;
+      if (baselinePartyPlayers.length <= 0) {
+        return {
+          hasMismatch: selectedTeammateCount > 0,
+          messageKey: selectedTeammateCount > 0 ? 'common:queue.partyChangedSinceBaseline' : '',
+          memberNames: [],
+        };
+      }
+
+      const baselineSignature = String(
+        queueState?.baseline?.partySnapshot?.signature ||
+          buildQueuePartySignature(baselinePartyPlayers, state.activePlayerId),
+      );
+      const currentSignature = buildQueuePartySignature(state.players, state.activePlayerId);
+      const hasMismatch = baselineSignature !== currentSignature;
+      return {
+        hasMismatch,
+        messageKey: hasMismatch ? 'common:queue.partyChangedSinceBaseline' : '',
+        memberNames,
+      };
     },
-    getters: {
-        activePlayer(state) {
-            return state.players.find((player) => player.id === state.activePlayerId) ?? state.players[0];
-        },
-        selectedPlayers(state) {
-            return state.players.filter((player) => player.selected);
-        },
-        resolvedAdvisorMetricPlayer(state) {
-            const selectedPlayers = state.players
-                .filter((player) => player.selected)
-                .map((player) => ({ id: player.id, name: player.name }));
-            return resolveAdvisorMetricPlayer(selectedPlayers, state.activePlayerId);
-        },
-        currentActionOptions(state) {
-            if (state.simulationSettings.mode === "labyrinth") {
-                return state.options.labyrinths;
-            }
-            return state.simulationSettings.useDungeon ? state.options.dungeons : state.options.zones;
-        },
-        groupZoneOptions(state) {
-            return (state.options.zones || []).filter((zone) => (
-                Number(actionDetailIndex?.[zone?.hrid]?.maxSpawnCount ?? 0) > 1
-            ));
-        },
-        soloZoneOptions(state) {
-            return (state.options.zones || []).filter((zone) => (
-                Number(actionDetailIndex?.[zone?.hrid]?.maxSpawnCount ?? 0) === 1
-            ));
-        },
-        currentMaxDifficulty(state) {
-            if (state.simulationSettings.mode === "labyrinth") {
-                return 0;
-            }
-
-            const targetHrid = state.simulationSettings.useDungeon ? state.simulationSettings.dungeonHrid : state.simulationSettings.zoneHrid;
-            const source = state.simulationSettings.useDungeon ? state.options.dungeons : state.options.zones;
-            const action = source.find((entry) => entry.hrid === targetHrid);
-            return Number(action?.maxDifficulty ?? 0);
-        },
-        availableRunScopes(state) {
-            if (state.simulationSettings.mode === "labyrinth") {
-                return [
-                    { value: RUN_SCOPE_SINGLE, label: "Single labyrinth" },
-                    { value: RUN_SCOPE_ALL_LABYRINTHS, label: "All labyrinths" },
-                ];
-            }
-
-            return [
-                { value: RUN_SCOPE_SINGLE, label: "Single target" },
-                { value: RUN_SCOPE_ALL_GROUP_ZONES, label: "All group zones" },
-                { value: RUN_SCOPE_ALL_SOLO_ZONES, label: "All solo zones" },
-            ];
-        },
-        activeResultRow(state) {
-            return state.results.summaryRows.find((row) => row.playerHrid === state.results.activeResultPlayerHrid) ?? null;
-        },
-        activeQueueState(state) {
-            return state.queue.byPlayer[state.activePlayerId] ?? createQueuePlayerState();
-        },
-        activeQueuePartyStatus(state) {
-            const queueState = state.queue.byPlayer[state.activePlayerId] ?? createQueuePlayerState();
-            const hasBaselineSnapshot = Boolean(queueState?.baseline?.snapshot);
-            if (!hasBaselineSnapshot) {
-                return {
-                    hasMismatch: false,
-                    messageKey: "",
-                    memberNames: [],
-                };
-            }
-            const baselinePartyPlayers = Array.isArray(queueState?.baseline?.partySnapshot?.selectedPlayers)
-                ? queueState.baseline.partySnapshot.selectedPlayers
-                : [];
-            const memberNames = baselinePartyPlayers
-                .map((player) => String(player?.name || `Player ${player?.id || ""}`).trim())
-                .filter(Boolean);
-            const selectedTeammateCount = buildQueuePartyComparisonPlayers(state.players, state.activePlayerId).length;
-            if (baselinePartyPlayers.length <= 0) {
-                return {
-                    hasMismatch: selectedTeammateCount > 0,
-                    messageKey: selectedTeammateCount > 0 ? "common:queue.partyChangedSinceBaseline" : "",
-                    memberNames: [],
-                };
-            }
-
-            const baselineSignature = String(
-                queueState?.baseline?.partySnapshot?.signature
-                || buildQueuePartySignature(baselinePartyPlayers, state.activePlayerId)
-            );
-            const currentSignature = buildQueuePartySignature(state.players, state.activePlayerId);
-            const hasMismatch = baselineSignature !== currentSignature;
-            return {
-                hasMismatch,
-                messageKey: hasMismatch ? "common:queue.partyChangedSinceBaseline" : "",
-                memberNames,
-            };
-        },
-        activeImportedBaselineSnapshot(state) {
-            return state.queue.importedBaselineByPlayer?.[state.activePlayerId] ?? null;
-        },
-        isAnyQueueRunning(state) {
-            return Object.values(state.queue.byPlayer).some((queueState) => Boolean(queueState?.isRunning));
-        },
-        detectedHardwareCoreCount() {
-            return getDetectedHardwareCoreCount();
-        },
-        queueParallelWorkerHardMax() {
-            return getParallelWorkerHardMaxForCurrentMachine();
-        },
-        queueParallelWorkerRecommended() {
-            return getRecommendedParallelWorkerLimit();
-        },
-        equipmentSetEntries(state) {
-            return Object.entries(state.equipmentSets || {})
-                .map(([name, entry]) => ({
-                    name,
-                    savedAt: Number(entry?.savedAt ?? 0),
-                    queueChangeCount: Array.isArray(entry?.queueChanges?.items)
-                        ? entry.queueChanges.items.length
-                        : 0,
-                }))
-                .sort((a, b) => b.savedAt - a.savedAt || a.name.localeCompare(b.name));
-        },
-        playerDataSnapshotRows(state) {
-            const sourceMap = state.playerDataSnapshot?.playerDataMap || {};
-            return QUEUE_PLAYER_IDS.map((playerId) => {
-                const rawText = sourceMap[playerId];
-                const hasSnapshot = typeof rawText === "string" && rawText.trim().length > 0;
-                const summary = hasSnapshot ? parsePlayerSnapshotSummary(rawText) : null;
-                return {
-                    playerId,
-                    hasSnapshot,
-                    zoneHrid: summary?.zoneHrid || "",
-                    dungeonHrid: summary?.dungeonHrid || "",
-                    labyrinthHrid: summary?.labyrinthHrid || "",
-                    zone: summary?.zone || "-",
-                    dungeon: summary?.dungeon || "-",
-                    difficulty: summary?.difficulty || "-",
-                    simulationTime: summary?.simulationTime || "-",
-                    labyrinth: summary?.labyrinth || "-",
-                    roomLevel: summary?.roomLevel || "-",
-                };
-            });
-        },
+    activeImportedBaselineSnapshot(state) {
+      return state.queue.importedBaselineByPlayer?.[state.activePlayerId] ?? null;
     },
-    actions: {
-        ensureQueueState(playerId = this.activePlayerId) {
-            const normalizedId = String(playerId || this.activePlayerId);
-            if (!this.queue.byPlayer[normalizedId]) {
-                this.queue.byPlayer[normalizedId] = createQueuePlayerState(
-                    loadQueueRunSettingsByPlayerFromStorage()?.[normalizedId]
-                );
-            }
-            return this.queue.byPlayer[normalizedId];
-        },
-        syncActiveResultPlayerToActivePlayer(playerId = this.activePlayerId) {
-            const targetPlayerHrid = toPlayerHrid(playerId);
-            const summaryRow = Array.isArray(this.results.summaryRows)
-                ? this.results.summaryRows.find((row) => String(row?.playerHrid || "") === targetPlayerHrid)
-                : null;
-            this.results.activeResultPlayerHrid = summaryRow?.playerHrid || targetPlayerHrid;
-            return this.results.activeResultPlayerHrid;
-        },
-        setImportedProfileState(playerId, imported = true) {
-            const normalizedId = String(playerId || "");
-            if (!normalizedId) {
-                return false;
-            }
-            if (!this.queue.importedProfileByPlayer || typeof this.queue.importedProfileByPlayer !== "object") {
-                this.queue.importedProfileByPlayer = createImportedProfileByPlayer();
-            }
-            this.queue.importedProfileByPlayer[normalizedId] = Boolean(imported);
-            if (!imported) {
-                this.setImportedBaselineSnapshot(normalizedId, null);
-            }
-            return true;
-        },
-        setImportedBaselineSnapshot(playerId, snapshot = null) {
-            const normalizedId = String(playerId || "");
-            if (!normalizedId) {
-                return false;
-            }
-            if (!this.queue.importedBaselineByPlayer || typeof this.queue.importedBaselineByPlayer !== "object") {
-                this.queue.importedBaselineByPlayer = createImportedBaselineByPlayer();
-            }
-            this.queue.importedBaselineByPlayer[normalizedId] = isPlainObject(snapshot)
-                ? deepClone(snapshot)
-                : null;
-            return true;
-        },
-        clearOtherPlayersForSoloImport(targetPlayerId = this.activePlayerId) {
-            const normalizedTargetId = String(targetPlayerId || this.activePlayerId);
-            const hasTargetPlayer = this.players.some((player) => String(player.id) === normalizedTargetId);
-            if (!hasTargetPlayer) {
-                return false;
-            }
+    isAnyQueueRunning(state) {
+      return Object.values(state.queue.byPlayer).some((queueState) => Boolean(queueState?.isRunning));
+    },
+    detectedHardwareCoreCount() {
+      return getDetectedHardwareCoreCount();
+    },
+    queueParallelWorkerHardMax() {
+      return getParallelWorkerHardMaxForCurrentMachine();
+    },
+    queueParallelWorkerRecommended() {
+      return getRecommendedParallelWorkerLimit();
+    },
+    equipmentSetEntries(state) {
+      return Object.entries(state.equipmentSets || {})
+        .map(([name, entry]) => ({
+          name,
+          savedAt: Number(entry?.savedAt ?? 0),
+          queueChangeCount: Array.isArray(entry?.queueChanges?.items) ? entry.queueChanges.items.length : 0,
+        }))
+        .sort((a, b) => b.savedAt - a.savedAt || a.name.localeCompare(b.name));
+    },
+    playerDataSnapshotRows(state) {
+      const sourceMap = state.playerDataSnapshot?.playerDataMap || {};
+      return QUEUE_PLAYER_IDS.map((playerId) => {
+        const rawText = sourceMap[playerId];
+        const hasSnapshot = typeof rawText === 'string' && rawText.trim().length > 0;
+        const summary = hasSnapshot ? parsePlayerSnapshotSummary(rawText) : null;
+        return {
+          playerId,
+          hasSnapshot,
+          zoneHrid: summary?.zoneHrid || '',
+          dungeonHrid: summary?.dungeonHrid || '',
+          labyrinthHrid: summary?.labyrinthHrid || '',
+          zone: summary?.zone || '-',
+          dungeon: summary?.dungeon || '-',
+          difficulty: summary?.difficulty || '-',
+          simulationTime: summary?.simulationTime || '-',
+          labyrinth: summary?.labyrinth || '-',
+          roomLevel: summary?.roomLevel || '-',
+        };
+      });
+    },
+  },
+  actions: {
+    // 装备下拉的唯一入口（基础设置页等）：返回该槽位的「战斗向」选项，并把当前已装备的
+    // 被过滤项（战斗惰性护符；当前数据即生活技能护符）补回列表末尾，避免 SearchCombobox
+    // 的 displayValue 落空。
+    // 「保留已选中」例外必须查原始索引（模块常量 equipmentOptionsBySlot）——不能改读
+    // this.options.equipmentBySlot：后者已是过滤后的结果，读它会静默丢掉例外。
+    getEquipmentComboboxOptions(slotKey, selectedItemHrid = '') {
+      return resolveEquipmentComboboxItems(equipmentOptionsBySlot[slotKey] || [], selectedItemHrid);
+    },
+    // 技能槽顺序切换（首页「基础设置」技能面板的唯一写入点）：技能槽 1（index 0）是特殊技能
+    // 槽，固定在最前、不参与切换；其余槽位点箭头按钮与相邻槽位「互换占位」。
+    // 随行搬运：① 条目本身（{ abilityHrid, level } 一起走——技能等级属于技能，不属于槽位）；
+    // ② 触发器不用搬——triggerMap 以 hrid 为键，随技能走。
+    // ③ 手工覆盖的技能升级成本键（queueState.abilityUpgradeCosts）不用搬、也无从搬：键按技能锚定
+    // （`hrid|from|to`，见 queueUpgradeCost.getAbilityUpgradeCostKey），成本模型同样按 hrid 匹配基准
+    // 等级推导 from（resolveAbilityUpgradeFromLevel）⇒ 重排后同一技能在任何槽位读到的都是同一条覆盖，
+    // 键本身与槽位无关，整表无需改动。重排是纯优先级调整，不产生任何升级开销（与游戏内一致）。
+    // 槽位顺序 = 引擎的施法优先级（combatSimulator.addNextAttackEvent 按 abilities 数组顺序取
+    // 第一个就绪技能 ⇒ 顺序会改变模拟结果）；与面板既有的「下拉选技能」路径同款不做运行中禁用
+    // （G1 只封定价/设置类写入，技能槽编辑本就允许）。
+    swapActivePlayerAbilitySlots(firstIndex, secondIndex) {
+      const abilities = this.activePlayer?.abilities;
+      if (!Array.isArray(abilities)) {
+        return false;
+      }
 
-            this.players = this.players.map((player) => {
-                if (String(player.id) === normalizedTargetId) {
-                    return player;
-                }
+      // 槽位号与首页 UI 共用同一口径（utils 的 normalizeAbilitySlotIndex）：UI 侧必须用完全相同的两个
+      // 数字判断「编辑器是否正开在被交换的槽位上」，两侧各写一份归一化会在小数入参上静默分叉。
+      const first = normalizeAbilitySlotIndex(firstIndex);
+      const second = normalizeAbilitySlotIndex(secondIndex);
+      if (first <= 0 || second <= 0 || first >= abilities.length || second >= abilities.length || first === second) {
+        return false;
+      }
 
-                const clearedPlayer = createEmptyPlayerConfig(player.id);
-                clearedPlayer.selected = false;
-                return clearedPlayer;
-            });
+      const beforeHridBySlot = abilities.map((entry) => String(entry?.abilityHrid || ''));
+      const firstAbility = abilities[first];
+      abilities[first] = abilities[second];
+      abilities[second] = firstAbility;
 
-            if (!this.queue.byPlayer || typeof this.queue.byPlayer !== "object") {
-                this.queue.byPlayer = createQueueStateByPlayer(this.players);
-            }
+      // 手工覆盖的升级成本表（abilityUpgradeCosts）在此刻意不动：键按技能锚定、与槽位无关（见上方注释）。
+      const movedHrids = new Set(
+        [String(firstAbility?.abilityHrid || ''), String(beforeHridBySlot[second] || '')].filter(Boolean),
+      );
+      for (const hrid of movedHrids) {
+        this.ensureActivePlayerTriggerDefaults(hrid);
+      }
 
-            for (const player of this.players) {
-                if (String(player.id) === normalizedTargetId) {
-                    continue;
-                }
+      return true;
+    },
+    // 套用配装：配装是「装备+食物+饮品+技能+触发器」五件套快照，整体覆盖玩家当前
+    // 配置的对应五项；等级/房屋/公会增益/卷轴/制作茶槽不属于配装，保持不变。
+    // 技能等级按 hrid 从玩家当前技能配置取（配装快照不含等级），缺失时回落 1 级。
+    applyActivePlayerLoadout(loadoutId) {
+      const player = this.activePlayer;
+      const loadout = (player?.loadouts || []).find((entry) => entry.id === String(loadoutId));
+      if (!player || !loadout) {
+        return false;
+      }
 
-                this.queue.byPlayer[String(player.id)] = createQueuePlayerState(this.queue.byPlayer[String(player.id)]?.settings);
-                this.setImportedProfileState(player.id, false);
-            }
+      for (const [slot, entry] of Object.entries(loadout.equipment || {})) {
+        if (player.equipment[slot] === undefined) {
+          continue;
+        }
+        player.equipment[slot] = {
+          itemHrid: String(entry.itemHrid || ''),
+          enhancementLevel: clamp(entry.enhancementLevel, 0, 20),
+        };
+      }
 
-            this.persistPlayerAchievements();
-            return true;
-        },
-        clearPlayerSlots(playerIds = []) {
-            const normalizedIds = Array.from(new Set(
-                (Array.isArray(playerIds) ? playerIds : [])
-                    .map((playerId) => String(playerId || "").trim())
-                    .filter((playerId) => this.players.some((player) => String(player.id) === playerId))
-            ));
-            if (normalizedIds.length === 0) {
-                return false;
-            }
+      player.food = (loadout.food || []).map((itemHrid) => String(itemHrid || ''));
+      player.drinks = (loadout.drinks || []).map((itemHrid) => String(itemHrid || ''));
 
-            const targetIdSet = new Set(normalizedIds);
-            this.players = this.players.map((player) => {
-                if (!targetIdSet.has(String(player.id))) {
-                    return player;
-                }
+      // 技能等级属于技能（角色全局，不随配装走）：套用前先把当前已装备技能的等级并入
+      // 已学等级表（abilityLevels），新槽位按 hrid 从该表取（配装快照不含等级），缺失
+      // 回落 1 级——这样技能哪怕不在当前槽位 / 上个配装里，切回来也不会掉成 1 级。
+      this.rememberActivePlayerAbilityLevels(player);
+      player.abilities = (loadout.abilities || []).map((entry) => {
+        const abilityHrid = String(entry?.abilityHrid || '');
+        return {
+          abilityHrid,
+          level: abilityHrid ? this.resolveActivePlayerAbilityLevelFor(player, abilityHrid) : 1,
+        };
+      });
+      this.rememberActivePlayerAbilityLevels(player);
 
-                const clearedPlayer = createEmptyPlayerConfig(player.id);
-                clearedPlayer.selected = false;
-                return clearedPlayer;
-            });
+      player.triggerMap = sanitizeTriggerMap(deepClone(loadout.triggerMap || {}));
+      for (const entry of player.abilities) {
+        if (entry.abilityHrid) {
+          this.ensureActivePlayerTriggerDefaults(entry.abilityHrid);
+        }
+      }
+      for (const itemHrid of [...player.food, ...player.drinks]) {
+        if (itemHrid) {
+          this.ensureActivePlayerTriggerDefaults(itemHrid);
+        }
+      }
 
-            if (!this.queue.byPlayer || typeof this.queue.byPlayer !== "object") {
-                this.queue.byPlayer = createQueueStateByPlayer(this.players);
-            }
+      return true;
+    },
+    // —— 技能等级权威表（abilityLevels）——
+    // 技能（Ability）等级属于技能本身（角色全局属性，不随装备槽/配装走）；槽位上的 level
+    // 只是「当前模拟等级」。玩家配置的 abilityLevels（hrid → level）保存「已学技能等级」
+    // 权威表，套用配装与换技能都按 hrid 查表，避免「技能不在当前槽位就掉回 1 级」。
+    // 两个写入口径完全一致（共用模块级 rememberAbilityLevelInto）：只持久化「已学」等级——
+    // 槽位等级为 1 是「未学过 / 导入归一化回退」的缺省展示值，一律跳过、不新建 1 级条目；
+    // 且只升不降，槽位显示值绝不覆盖更高的已学等级。把技能等级调低做 what-if 只改槽位
+    // （当前模拟等级），权威表保持原值——否则套用配装会先按被污染的表把等级改回低值，再随
+    // 导出/导入永久固化（payload 的 abilityLevels 是表级权威证据）。需要调小已学等级时，
+    // 重新导入角色数据（主站载荷携带全量等级表）。
+    rememberActivePlayerAbilityLevels(player = this.activePlayer) {
+      if (!player || !Array.isArray(player.abilities)) {
+        return false;
+      }
+      if (!player.abilityLevels || typeof player.abilityLevels !== 'object') {
+        player.abilityLevels = {};
+      }
+      let changed = false;
+      for (const entry of player.abilities) {
+        if (rememberAbilityLevelInto(player.abilityLevels, entry?.abilityHrid, entry?.level)) {
+          changed = true;
+        }
+      }
+      return changed;
+    },
+    resolveActivePlayerAbilityLevelFor(player, abilityHrid) {
+      const known = Number(player?.abilityLevels?.[String(abilityHrid || '')]);
+      return Number.isFinite(known) && known > 0 ? clamp(Math.floor(known), 1, MAX_ABILITY_LEVEL) : 1;
+    },
+    resolveActivePlayerAbilityLevel(abilityHrid) {
+      const known = Number(this.activePlayer?.abilityLevels?.[String(abilityHrid || '')]);
+      return Number.isFinite(known) && known > 0 ? clamp(Math.floor(known), 1, MAX_ABILITY_LEVEL) : null;
+    },
+    // 单技能版：与批量版同一不变量（只升不降、跳过 1 级）。用户把等级调低做 what-if 时
+    // 只改槽位（当前模拟等级），不会污染权威表；详见上方注释与 rememberAbilityLevelInto。
+    rememberActivePlayerAbilityLevel(abilityHrid, rawLevel) {
+      const player = this.activePlayer;
+      const hrid = String(abilityHrid || '').trim();
+      if (!player || !hrid) {
+        return false;
+      }
+      if (!player.abilityLevels || typeof player.abilityLevels !== 'object') {
+        player.abilityLevels = {};
+      }
+      return rememberAbilityLevelInto(player.abilityLevels, hrid, rawLevel);
+    },
+    setActivePlayerAbilityLevel(slotIndex, rawLevel) {
+      const player = this.activePlayer;
+      const index = normalizeAbilitySlotIndex(slotIndex);
+      if (!player || !Array.isArray(player.abilities) || index < 0 || index >= player.abilities.length) {
+        return false;
+      }
+      const raw = Math.floor(Number(rawLevel));
+      if (!Number.isFinite(raw)) {
+        return false;
+      }
+      const level = clamp(raw, 1, MAX_ABILITY_LEVEL);
+      player.abilities[index].level = level;
+      this.rememberActivePlayerAbilityLevel(player.abilities[index].abilityHrid, level);
+      return true;
+    },
+    ensurePlayerConfig(player = this.activePlayer) {
+      return ensurePlayerAdvancedState(player);
+    },
+    syncActiveResultPlayerToActivePlayer(playerId = this.activePlayerId) {
+      const targetPlayerHrid = toPlayerHrid(playerId);
+      const summaryRow = Array.isArray(this.results.summaryRows)
+        ? this.results.summaryRows.find((row) => String(row?.playerHrid || '') === targetPlayerHrid)
+        : null;
+      this.results.activeResultPlayerHrid = summaryRow?.playerHrid || targetPlayerHrid;
+      return this.results.activeResultPlayerHrid;
+    },
+    clearOtherPlayersForSoloImport(targetPlayerId = this.activePlayerId) {
+      const normalizedTargetId = String(targetPlayerId || this.activePlayerId);
+      const hasTargetPlayer = this.players.some((player) => String(player.id) === normalizedTargetId);
+      if (!hasTargetPlayer) {
+        return false;
+      }
 
-            for (const playerId of normalizedIds) {
-                this.queue.byPlayer[playerId] = createQueuePlayerState(this.queue.byPlayer[playerId]?.settings);
-                this.setImportedProfileState(playerId, false);
-            }
+      this.players = this.players.map((player) => {
+        if (String(player.id) === normalizedTargetId) {
+          return player;
+        }
 
-            this.persistPlayerAchievements();
-            return true;
-        },
-        getMarketEnhancementLevelsForItem(itemHrid) {
-            const hrid = String(itemHrid || "");
-            if (!hrid) {
-                return [];
-            }
-            const levels = this.pricing?.enhancementLevelsByItem?.[hrid];
-            if (!Array.isArray(levels)) {
-                return [];
-            }
-            return Array.from(new Set(levels
-                .map((value) => Math.floor(toFiniteNumber(value, -1)))
-                .filter((value) => Number.isFinite(value) && value > 0)))
-                .sort((a, b) => a - b);
-        },
-        applyActivePlayerEquipmentEnhancementFromMarket(slotKey, enhancementLevel) {
-            const normalizedSlotKey = String(slotKey || "");
-            if (!EQUIPMENT_SLOT_KEYS.includes(normalizedSlotKey)) {
-                return false;
-            }
+        const clearedPlayer = createEmptyPlayerConfig(player.id);
+        clearedPlayer.selected = false;
+        return clearedPlayer;
+      });
 
-            const player = this.activePlayer;
-            if (!player?.equipment?.[normalizedSlotKey]) {
-                return false;
-            }
+      if (!this.queue.byPlayer || typeof this.queue.byPlayer !== 'object') {
+        this.queue.byPlayer = createQueueStateByPlayer(this.players);
+      }
 
-            player.equipment[normalizedSlotKey].enhancementLevel = clampPositiveInteger(enhancementLevel, 0);
-            return true;
-        },
-        resolveActivePlayerEquipmentUpgradeCostDraft(slotKey) {
-            const normalizedSlotKey = String(slotKey || "");
-            if (!EQUIPMENT_SLOT_KEYS.includes(normalizedSlotKey)) {
-                return null;
-            }
+      for (const player of this.players) {
+        if (String(player.id) === normalizedTargetId) {
+          continue;
+        }
 
-            const queueState = this.ensureQueueState(this.activePlayerId);
-            const baselineSnapshot = queueState?.baseline?.snapshot ?? null;
-            if (!baselineSnapshot) {
-                return null;
-            }
+        this.queue.byPlayer[String(player.id)] = createQueuePlayerState(
+          this.queue.byPlayer[String(player.id)]?.settings,
+        );
+        this.setImportedProfileState(player.id, false);
+      }
 
-            const baselineEquipment = baselineSnapshot?.equipment?.[normalizedSlotKey] ?? { itemHrid: "", enhancementLevel: 0 };
-            const currentEquipment = this.activePlayer?.equipment?.[normalizedSlotKey] ?? { itemHrid: "", enhancementLevel: 0 };
-            const beforeItemHrid = String(baselineEquipment?.itemHrid || "");
-            const afterItemHrid = String(currentEquipment?.itemHrid || "");
-            const beforeLevel = Math.max(0, Math.floor(toFiniteNumber(baselineEquipment?.enhancementLevel, 0)));
-            const afterLevel = Math.max(0, Math.floor(toFiniteNumber(currentEquipment?.enhancementLevel, 0)));
-            const hasChanged = beforeItemHrid !== afterItemHrid || beforeLevel !== afterLevel;
+      this.persistPlayerAchievements();
+      return true;
+    },
+    clearPlayerSlots(playerIds = []) {
+      const normalizedIds = Array.from(
+        new Set(
+          (Array.isArray(playerIds) ? playerIds : [])
+            .map((playerId) => String(playerId || '').trim())
+            .filter((playerId) => this.players.some((player) => String(player.id) === playerId)),
+        ),
+      );
+      if (normalizedIds.length === 0) {
+        return false;
+      }
 
-            if (!hasChanged || !afterItemHrid) {
-                return null;
-            }
+      const targetIdSet = new Set(normalizedIds);
+      this.players = this.players.map((player) => {
+        if (!targetIdSet.has(String(player.id))) {
+          return player;
+        }
 
-            const costMap = isPlainObject(queueState.enhancementUpgradeCosts) ? queueState.enhancementUpgradeCosts : {};
-            const savedCostResult = readEquipmentTransitionCostFromMap(
-                costMap,
-                normalizedSlotKey,
-                beforeItemHrid,
-                beforeLevel,
-                afterItemHrid,
-                afterLevel
+        const clearedPlayer = createEmptyPlayerConfig(player.id);
+        clearedPlayer.selected = false;
+        return clearedPlayer;
+      });
+
+      if (!this.queue.byPlayer || typeof this.queue.byPlayer !== 'object') {
+        this.queue.byPlayer = createQueueStateByPlayer(this.players);
+      }
+
+      for (const playerId of normalizedIds) {
+        this.queue.byPlayer[playerId] = createQueuePlayerState(this.queue.byPlayer[playerId]?.settings);
+        this.setImportedProfileState(playerId, false);
+      }
+
+      this.persistPlayerAchievements();
+      return true;
+    },
+    refreshPlayerDataSnapshot() {
+      this.playerDataSnapshot = createPlayerDataSnapshotState();
+      return this.playerDataSnapshot;
+    },
+    async savePlayerDataSnapshot() {
+      // ③ 动态化（2026-10-03）：序列化模块按需加载；模块加载失败（刷新页面通常可恢复）与
+      // 序列化/落盘等业务失败分开归因，各自 console.warn 留痕（不再向上抛同步异常）。
+      let exportSoloConfig;
+      try {
+        ({ exportSoloConfig } = await loadImportExportMapperModule());
+      } catch (error) {
+        console.warn('[playerSnapshot] save module load failed:', error);
+        return {
+          ok: false,
+          messageKey: 'common:settingsPage.playerSaveModuleError',
+        };
+      }
+
+      const snapshotMap = {};
+      try {
+        for (const player of this.players) {
+          const playerId = String(player.id || '');
+          if (!playerId) {
+            continue;
+          }
+          snapshotMap[playerId] = exportSoloConfig(player, this.simulationSettings);
+        }
+
+        savePlayerDataSnapshotToStorage(snapshotMap);
+        this.playerDataSnapshot = createPlayerDataSnapshotState();
+        return {
+          ok: true,
+          savedAt: this.playerDataSnapshot.savedAt,
+          messageKey: 'common:settingsPage.playerSaveSuccess',
+        };
+      } catch (error) {
+        console.warn('[playerSnapshot] save failed:', error);
+        return {
+          ok: false,
+          messageKey: 'common:settingsPage.playerSaveError',
+        };
+      }
+    },
+    async loadPlayerDataSnapshot() {
+      // 玩家配置整体替换入口（2026-10-03）：与 importSoloConfig / importGroupConfig 共用
+      // 玩家配置写入串行器——先发起者的 await 后置动作（如桥接侧 clearPlayerSlots）一定排在
+      // 后发起者的写入之前，await 窗口内落地的手动写入不再被清除动作误伤。
+      return runPlayerConfigMutationExclusive(async () => {
+        const loadResult = loadPlayerDataSnapshotFromStorage();
+        if (loadResult.status === 'not_found') {
+          this.playerDataSnapshot = createPlayerDataSnapshotState();
+          return {
+            ok: false,
+            messageKey: 'common:settingsPage.playerLoadNotFound',
+          };
+        }
+
+        if (loadResult.status !== 'ok') {
+          this.playerDataSnapshot = createPlayerDataSnapshotState();
+          return {
+            ok: false,
+            messageKey: 'common:settingsPage.playerLoadInvalid',
+          };
+        }
+
+        const loadedPlayerIds = Object.keys(loadResult.playerDataMap || {});
+        if (loadedPlayerIds.length === 0) {
+          this.playerDataSnapshot = createPlayerDataSnapshotState();
+          return {
+            ok: false,
+            messageKey: 'common:settingsPage.playerLoadInvalid',
+          };
+        }
+
+        let parseSoloImportConfig;
+        try {
+          // ③ 动态化（2026-10-03）：快照恢复同样按需加载序列化模块；模块加载失败在此单独
+          // 归因并留痕，不再与快照数据问题共用 playerLoadInvalid 反馈。
+          ({ importSoloConfig: parseSoloImportConfig } = await loadImportExportMapperModule());
+        } catch (error) {
+          console.warn('[playerSnapshot] load module load failed:', error);
+          this.playerDataSnapshot = createPlayerDataSnapshotState();
+          return {
+            ok: false,
+            messageKey: 'common:settingsPage.playerLoadModuleError',
+          };
+        }
+
+        try {
+          let nextPlayers = [...this.players];
+          let preferredSimulationSettings = null;
+          let fallbackSimulationSettings = null;
+
+          for (const playerId of loadedPlayerIds) {
+            const snapshotText = loadResult.playerDataMap[playerId];
+            const sourcePlayer =
+              nextPlayers.find((player) => String(player.id) === String(playerId)) || createEmptyPlayerConfig(playerId);
+
+            const parsed = parseSoloImportConfig(snapshotText, sourcePlayer, this.simulationSettings);
+            this.ensurePlayerConfig(parsed.player);
+            nextPlayers = nextPlayers.map((player) =>
+              String(player.id) === String(playerId) ? parsed.player : player,
             );
 
-            const costValue = savedCostResult.value != null
-                ? savedCostResult.value
-                : computeDefaultEquipmentTransitionCost(
-                    beforeItemHrid,
-                    beforeLevel,
-                    afterItemHrid,
-                    afterLevel,
-                    this.pricing
-                );
-
-            return {
-                slotKey: normalizedSlotKey,
-                transitionCostKey: savedCostResult.transitionCostKey,
-                beforeItemHrid,
-                afterItemHrid,
-                beforeLevel,
-                afterLevel,
-                cost: toFiniteNumber(costValue, 0),
-            };
-        },
-        setActivePlayerEquipmentUpgradeCost(slotKey, rawCost) {
-            const draft = this.resolveActivePlayerEquipmentUpgradeCostDraft(slotKey);
-            if (!draft) {
-                return false;
+            if (!fallbackSimulationSettings && parsed?.simulationSettings) {
+              fallbackSimulationSettings = {
+                ...parsed.simulationSettings,
+              };
+            }
+            if (String(playerId) === String(this.activePlayerId) && parsed?.simulationSettings) {
+              preferredSimulationSettings = {
+                ...parsed.simulationSettings,
+              };
             }
 
-            const queueState = this.ensureQueueState(this.activePlayerId);
-            const costMap = isPlainObject(queueState.enhancementUpgradeCosts)
-                ? { ...queueState.enhancementUpgradeCosts }
-                : {};
-
-            const normalizedCost = Math.max(0, toFiniteNumber(rawCost, 0));
-            writeEquipmentTransitionCostToMap(
-                costMap,
-                draft.slotKey,
-                draft.beforeItemHrid,
-                draft.beforeLevel,
-                draft.afterItemHrid,
-                draft.afterLevel,
-                normalizedCost
+            this.queue.byPlayer[String(playerId)] = createQueuePlayerState(
+              this.queue.byPlayer[String(playerId)]?.settings,
             );
-            queueState.enhancementUpgradeCosts = costMap;
-            return true;
-        },
-        resolveActivePlayerAbilityUpgradeCostDraft(slotIndex) {
-            const index = Math.floor(toFiniteNumber(slotIndex, -1));
-            if (!Number.isInteger(index) || index < 0 || index >= 5) {
-                return null;
-            }
-
-            // Keep draft reactive when ability XP/book reference data loads asynchronously.
-            this.abilityUpgradeReferenceVersion;
-
-            const queueState = this.ensureQueueState(this.activePlayerId);
-            const baselineSnapshot = queueState?.baseline?.snapshot ?? null;
-            if (!baselineSnapshot) {
-                return null;
-            }
-
-            const baselineAbility = baselineSnapshot?.abilities?.[index] ?? { abilityHrid: "", level: 1 };
-            const currentAbility = this.activePlayer?.abilities?.[index] ?? { abilityHrid: "", level: 1 };
-            const baselineHrid = String(baselineAbility?.abilityHrid || "");
-            const currentHrid = String(currentAbility?.abilityHrid || "");
-            const baselineLevel = Math.max(1, Math.floor(toFiniteNumber(baselineAbility?.level, 1)));
-            const currentLevel = Math.max(1, Math.floor(toFiniteNumber(currentAbility?.level, 1)));
-
-            if (!currentHrid) {
-                return null;
-            }
-
-            const fromLevel = baselineHrid && baselineHrid === currentHrid ? baselineLevel : 1;
-            if (currentLevel <= fromLevel) {
-                return null;
-            }
-
-            const costKey = getAbilityUpgradeCostKey(index, currentHrid, fromLevel, currentLevel);
-            const costMap = isPlainObject(queueState.abilityUpgradeCosts) ? queueState.abilityUpgradeCosts : {};
-            const hasSavedCost = Object.prototype.hasOwnProperty.call(costMap, costKey);
-            const cost = hasSavedCost
-                ? toFiniteNumber(costMap[costKey], 0)
-                : toFiniteNumber(computeDefaultAbilityUpgradeCost({
-                    abilityHrid: currentHrid,
-                    level: fromLevel,
-                }, currentLevel, this.pricing), 0);
-
-            return {
-                slotIndex: index,
-                costKey,
-                abilityHrid: currentHrid,
-                fromLevel,
-                toLevel: currentLevel,
-                cost,
-            };
-        },
-        setActivePlayerAbilityUpgradeCost(slotIndex, rawCost) {
-            const draft = this.resolveActivePlayerAbilityUpgradeCostDraft(slotIndex);
-            if (!draft) {
-                return false;
-            }
-
-            const queueState = this.ensureQueueState(this.activePlayerId);
-            const costMap = isPlainObject(queueState.abilityUpgradeCosts)
-                ? { ...queueState.abilityUpgradeCosts }
-                : {};
-            costMap[draft.costKey] = Math.max(0, toFiniteNumber(rawCost, 0));
-            queueState.abilityUpgradeCosts = costMap;
-            return true;
-        },
-        previewHouseRoomUpgradeCost(baseHouseRooms, targetHouseRooms) {
-            return buildHouseRoomUpgradeCostPreview(baseHouseRooms, targetHouseRooms, this.pricing);
-        },
-        validateQueueRuntimeSettingsInput(payload = {}) {
-            const performancePct = Number(payload.performancePct);
-            const stabilityPct = Number(payload.stabilityPct);
-            const costPct = Number(payload.costPct);
-            const rawCostScoreGoldPerPointMode = payload?.costScoreGoldPerPointMode;
-            const costScoreGoldPerPointMode = rawCostScoreGoldPerPointMode == null
-                ? normalizeQueueCostScoreGoldMetricMode(this.queueRuntime?.costScoreGoldPerPointMode)
-                : String(rawCostScoreGoldPerPointMode);
-
-            if (
-                !Number.isFinite(performancePct)
-                || !Number.isFinite(stabilityPct)
-                || !Number.isFinite(costPct)
-                || performancePct < 0
-                || stabilityPct < 0
-                || costPct < 0
-                || performancePct > 100
-                || stabilityPct > 100
-                || costPct > 100
-            ) {
-                return {
-                    ok: false,
-                    messageKey: "common:settingsPage.queueSaveErrorInvalidWeight",
-                };
-            }
-
-            const weightSum = performancePct + stabilityPct + costPct;
-            if (Math.abs(weightSum - 100) > QUEUE_WEIGHT_SUM_EPSILON) {
-                return {
-                    ok: false,
-                    messageKey: "common:settingsPage.queueSaveErrorWeightSum",
-                };
-            }
-
-            if (!isQueueCostScoreGoldMetricMode(costScoreGoldPerPointMode)) {
-                return {
-                    ok: false,
-                    messageKey: "common:settingsPage.queueSaveErrorCostScoreGoldMetric",
-                };
-            }
-
-            const parallelWorkerLimitRaw = Number(payload.parallelWorkerLimit);
-            const hardMaxForMachine = getParallelWorkerHardMaxForCurrentMachine();
-            if (
-                !Number.isInteger(parallelWorkerLimitRaw)
-                || parallelWorkerLimitRaw < QUEUE_PARALLEL_WORKER_LIMIT_MIN
-                || parallelWorkerLimitRaw > hardMaxForMachine
-            ) {
-                const detectedCoreCount = getDetectedHardwareCoreCount();
-                if (Number.isFinite(detectedCoreCount) && parallelWorkerLimitRaw > detectedCoreCount) {
-                    return {
-                        ok: false,
-                        messageKey: "common:settingsPage.queueSaveErrorParallelLimitByCore",
-                        messageOptions: {
-                            cores: detectedCoreCount,
-                        },
-                    };
-                }
-
-                return {
-                    ok: false,
-                    messageKey: "common:settingsPage.queueSaveErrorParallelLimit",
-                    messageOptions: {
-                        min: QUEUE_PARALLEL_WORKER_LIMIT_MIN,
-                        max: hardMaxForMachine,
-                    },
-                };
-            }
-
-            return {
-                ok: true,
-                settings: {
-                    finalWeights: {
-                        performance: performancePct / 100,
-                        stability: stabilityPct / 100,
-                        cost: costPct / 100,
-                    },
-                    costScoreGoldPerPointMode,
-                    parallelWorkerLimit: parallelWorkerLimitRaw,
-                },
-            };
-        },
-        saveQueueRuntimeSettings(payload = {}) {
-            const validated = this.validateQueueRuntimeSettingsInput(payload);
-            if (!validated.ok) {
-                return validated;
-            }
-
-            try {
-                const previousRuntimeSettings = this.queueRuntime;
-                const normalized = persistQueueRuntimeSettingsToStorage(validated.settings);
-                this.queueRuntime = normalized;
-                if (haveQueueRuntimeRankingSettingsChanged(previousRuntimeSettings, normalized)) {
-                    this.refreshStoredQueueRankingsForCurrentSettings();
-                }
-                return {
-                    ok: true,
-                    settings: normalized,
-                };
-            } catch (error) {
-                return {
-                    ok: false,
-                    messageKey: "common:settingsPage.queueSaveErrorStorage",
-                };
-            }
-        },
-        resetQueueRuntimeSettings() {
-            try {
-                const defaults = getDefaultQueueRuntimeSettings();
-                const previousRuntimeSettings = this.queueRuntime;
-                const normalized = persistQueueRuntimeSettingsToStorage(defaults);
-                this.queueRuntime = normalized;
-                if (haveQueueRuntimeRankingSettingsChanged(previousRuntimeSettings, normalized)) {
-                    this.refreshStoredQueueRankingsForCurrentSettings();
-                }
-                return {
-                    ok: true,
-                    settings: normalized,
-                };
-            } catch (error) {
-                return {
-                    ok: false,
-                    messageKey: "common:settingsPage.queueSaveErrorStorage",
-                };
-            }
-        },
-        resetQueueSettingsToDefaults() {
-            const previousRuntimeSettings = normalizeQueueRuntimeSettings(this.queueRuntime);
-
-            try {
-                const runtimeSettings = persistQueueRuntimeSettingsToStorage(getDefaultQueueRuntimeSettings());
-                let queueSettings = null;
-
-                try {
-                    queueSettings = this.updateQueueSettingsForPlayer(this.activePlayerId, getDefaultQueueRunSettings(), {
-                        persist: true,
-                        ignorePersistError: false,
-                    });
-                } catch (error) {
-                    try {
-                        persistQueueRuntimeSettingsToStorage(previousRuntimeSettings);
-                    } catch (rollbackError) {
-                        // Best effort rollback; keep the user-facing result as a failure.
-                    }
-                    return {
-                        ok: false,
-                        messageKey: "common:settingsPage.queueSaveErrorStorage",
-                    };
-                }
-
-                this.queueRuntime = runtimeSettings;
-                if (haveQueueRuntimeRankingSettingsChanged(previousRuntimeSettings, runtimeSettings)) {
-                    this.refreshStoredQueueRankingsForCurrentSettings();
-                }
-                return {
-                    ok: true,
-                    runtimeSettings,
-                    queueSettings,
-                };
-            } catch (error) {
-                return {
-                    ok: false,
-                    messageKey: "common:settingsPage.queueSaveErrorStorage",
-                };
-            }
-        },
-        refreshPlayerDataSnapshot() {
-            this.playerDataSnapshot = createPlayerDataSnapshotState();
-            return this.playerDataSnapshot;
-        },
-        savePlayerDataSnapshot() {
-            const snapshotMap = {};
-            for (const player of this.players) {
-                const playerId = String(player.id || "");
-                if (!playerId) {
-                    continue;
-                }
-                snapshotMap[playerId] = exportSoloConfig(player, this.simulationSettings);
-            }
-
-            try {
-                savePlayerDataSnapshotToStorage(snapshotMap);
-                this.playerDataSnapshot = createPlayerDataSnapshotState();
-                return {
-                    ok: true,
-                    savedAt: this.playerDataSnapshot.savedAt,
-                    messageKey: "common:settingsPage.playerSaveSuccess",
-                };
-            } catch (error) {
-                return {
-                    ok: false,
-                    messageKey: "common:settingsPage.playerSaveError",
-                };
-            }
-        },
-        loadPlayerDataSnapshot() {
-            const loadResult = loadPlayerDataSnapshotFromStorage();
-            if (loadResult.status === "not_found") {
-                this.playerDataSnapshot = createPlayerDataSnapshotState();
-                return {
-                    ok: false,
-                    messageKey: "common:settingsPage.playerLoadNotFound",
-                };
-            }
-
-            if (loadResult.status !== "ok") {
-                this.playerDataSnapshot = createPlayerDataSnapshotState();
-                return {
-                    ok: false,
-                    messageKey: "common:settingsPage.playerLoadInvalid",
-                };
-            }
-
-            const loadedPlayerIds = Object.keys(loadResult.playerDataMap || {});
-            if (loadedPlayerIds.length === 0) {
-                this.playerDataSnapshot = createPlayerDataSnapshotState();
-                return {
-                    ok: false,
-                    messageKey: "common:settingsPage.playerLoadInvalid",
-                };
-            }
-
-            try {
-                let nextPlayers = [...this.players];
-                let preferredSimulationSettings = null;
-                let fallbackSimulationSettings = null;
-
-                for (const playerId of loadedPlayerIds) {
-                    const snapshotText = loadResult.playerDataMap[playerId];
-                    const sourcePlayer = nextPlayers.find((player) => String(player.id) === String(playerId))
-                        || createEmptyPlayerConfig(playerId);
-
-                    const parsed = parseSoloImportConfig(snapshotText, sourcePlayer, this.simulationSettings);
-                    nextPlayers = nextPlayers.map((player) => (
-                        String(player.id) === String(playerId) ? parsed.player : player
-                    ));
-
-                    if (!fallbackSimulationSettings && parsed?.simulationSettings) {
-                        fallbackSimulationSettings = {
-                            ...parsed.simulationSettings,
-                        };
-                    }
-                    if (String(playerId) === String(this.activePlayerId) && parsed?.simulationSettings) {
-                        preferredSimulationSettings = {
-                            ...parsed.simulationSettings,
-                        };
-                    }
-
-                    this.queue.byPlayer[String(playerId)] = createQueuePlayerState(this.queue.byPlayer[String(playerId)]?.settings);
-                    this.setImportedProfileState(playerId, true);
-                    this.setImportedBaselineSnapshot(playerId, parsed.player);
-                }
-
-                this.players = this.players.map((player) => {
-                    const resolved = nextPlayers.find((candidate) => String(candidate.id) === String(player.id));
-                    return resolved || player;
-                });
-                this.persistPlayerAchievements();
-
-                const nextSimulationSettings = preferredSimulationSettings || fallbackSimulationSettings;
-                if (nextSimulationSettings) {
-                    this.simulationSettings = {
-                        ...this.simulationSettings,
-                        ...nextSimulationSettings,
-                    };
-                    // Restoring player data should default to regular zone view for immediate editing.
-                    this.simulationSettings.mode = "zone";
-                    this.simulationSettings.useDungeon = false;
-                    if (!this.simulationSettings.zoneHrid) {
-                        this.simulationSettings.zoneHrid = String(this.options?.zones?.[0]?.hrid || "");
-                    }
-                    this.normalizeRunScope();
-                    this.normalizeDifficulty();
-                }
-
-                this.playerDataSnapshot = {
-                    savedAt: Number(loadResult.savedAt || 0),
-                    playerDataMap: loadResult.playerDataMap || {},
-                };
-
-                return {
-                    ok: true,
-                    savedAt: this.playerDataSnapshot.savedAt,
-                    loadedPlayerIds,
-                    messageKey: "common:settingsPage.playerLoadSuccess",
-                };
-            } catch (error) {
-                this.playerDataSnapshot = createPlayerDataSnapshotState();
-                return {
-                    ok: false,
-                    messageKey: "common:settingsPage.playerLoadInvalid",
-                };
-            }
-        },
-        deleteSinglePlayerDataSnapshot(playerId) {
-            const targetPlayerId = String(playerId || "");
-            if (!targetPlayerId) {
-                return {
-                    ok: false,
-                    messageKey: "common:settingsPage.playerDeleteError",
-                };
-            }
-
-            const loadResult = loadPlayerDataSnapshotFromStorage();
-            if (loadResult.status !== "ok") {
-                this.playerDataSnapshot = createPlayerDataSnapshotState();
-                return {
-                    ok: false,
-                    messageKey: "common:settingsPage.playerLoadNotFound",
-                };
-            }
-
-            const nextPlayerDataMap = {
-                ...(loadResult.playerDataMap || {}),
-            };
-            if (!Object.prototype.hasOwnProperty.call(nextPlayerDataMap, targetPlayerId)) {
-                return {
-                    ok: false,
-                    messageKey: "common:settingsPage.playerLoadNotFound",
-                };
-            }
-
-            delete nextPlayerDataMap[targetPlayerId];
-
-            try {
-                if (Object.keys(nextPlayerDataMap).length === 0) {
-                    clearPlayerDataSnapshotFromStorage();
-                } else {
-                    upsertPlayerDataSnapshotToStorage(nextPlayerDataMap);
-                }
-
-                this.playerDataSnapshot = createPlayerDataSnapshotState();
-                return {
-                    ok: true,
-                    messageKey: "common:settingsPage.playerDeleteSingleSuccess",
-                    messageOptions: {
-                        playerId: targetPlayerId,
-                    },
-                };
-            } catch (error) {
-                return {
-                    ok: false,
-                    messageKey: "common:settingsPage.playerDeleteError",
-                };
-            }
-        },
-        deleteAllPlayerDataSnapshots() {
-            try {
-                clearPlayerDataSnapshotFromStorage();
-                this.playerDataSnapshot = createPlayerDataSnapshotState();
-                return {
-                    ok: true,
-                    messageKey: "common:settingsPage.playerDeleteAllSuccess",
-                };
-            } catch (error) {
-                return {
-                    ok: false,
-                    messageKey: "common:settingsPage.playerDeleteError",
-                };
-            }
-        },
-        persistPlayerAchievements() {
-            persistPlayerAchievementsToStorage(this.players);
-        },
-        clearPersistedPlayerAchievements() {
-            clearPlayerAchievementsFromStorage();
-        },
-        ensureActivePlayerTriggerDefaults(targetHrid) {
-            const hrid = String(targetHrid || "");
-            if (!hrid) {
-                return [];
-            }
-
-            const player = this.activePlayer;
-            if (!player) {
-                return [];
-            }
-
-            if (!isPlainObject(player.triggerMap)) {
-                player.triggerMap = {};
-            }
-
-            const triggers = ensureTriggerMapEntry(player.triggerMap, hrid);
-            player.triggerMap[hrid] = sanitizeTriggerList(triggers);
-            return deepClone(player.triggerMap[hrid]);
-        },
-        getActivePlayerTriggers(targetHrid) {
-            const hrid = String(targetHrid || "");
-            if (!hrid) {
-                return [];
-            }
-
-            const triggerMap = isPlainObject(this.activePlayer?.triggerMap) ? this.activePlayer.triggerMap : {};
-            return deepClone(sanitizeTriggerList(triggerMap[hrid]));
-        },
-        setActivePlayerTriggers(targetHrid, triggerList) {
-            const hrid = String(targetHrid || "");
-            if (!hrid) {
-                return [];
-            }
-
-            const player = this.activePlayer;
-            if (!player) {
-                return [];
-            }
-
-            if (!isPlainObject(player.triggerMap)) {
-                player.triggerMap = {};
-            }
-
-            player.triggerMap[hrid] = sanitizeTriggerList(triggerList);
-            return deepClone(player.triggerMap[hrid]);
-        },
-        resetActivePlayerTriggersToDefault(targetHrid) {
-            const hrid = String(targetHrid || "");
-            if (!hrid) {
-                return [];
-            }
-
-            const player = this.activePlayer;
-            if (!player) {
-                return [];
-            }
-
-            if (!isPlainObject(player.triggerMap)) {
-                player.triggerMap = {};
-            }
-
-            player.triggerMap[hrid] = sanitizeTriggerList(getDefaultTriggerDtosForHrid(hrid));
-            return deepClone(player.triggerMap[hrid]);
-        },
-        refreshEquipmentSets() {
-            this.equipmentSets = loadEquipmentSetsFromStorage();
-            return this.equipmentSetEntries;
-        },
-        saveEquipmentSet(name, playerId = this.activePlayerId) {
-            const setName = String(name || "").trim();
-            if (!setName) {
-                throw new Error("Equipment set name is empty.");
-            }
-
-            const normalizedPlayerId = String(playerId || this.activePlayerId);
-            const queueState = this.ensureQueueState(normalizedPlayerId);
-            if (queueStateHasUnsupportedEquipmentSetQueueChanges(queueState)) {
-                throw new Error("common:settingsPage.queueSaveErrorUnsupportedTriggerChange");
-            }
-            const queueChanges = normalizeEquipmentSetQueueChanges(
-                buildEquipmentSetQueueChangesFromQueueState(queueState)
-            );
-
-            this.equipmentSets = {
-                ...this.equipmentSets,
-                [setName]: {
-                    savedAt: Date.now(),
-                    queueChanges,
-                },
-            };
-            persistEquipmentSetsToStorage(this.equipmentSets);
-            return this.equipmentSets[setName];
-        },
-        loadEquipmentSet() {
-            return false;
-        },
-        importEquipmentSetQueueChanges(name, playerId = this.activePlayerId) {
-            const setName = String(name || "").trim();
-            if (!setName) {
-                return {
-                    ok: false,
-                    importedCount: 0,
-                    messageKey: "common:vue.settings.msgQueueChangesImportFailed",
-                };
-            }
-
-            const entry = this.equipmentSets?.[setName];
-            if (!entry) {
-                return {
-                    ok: false,
-                    importedCount: 0,
-                    messageKey: "common:vue.settings.msgQueueChangesImportFailed",
-                };
-            }
-
-            const normalizedPlayerId = String(playerId || this.activePlayerId);
-            const sourcePlayer = this.players.find((player) => String(player.id) === normalizedPlayerId);
-            if (!sourcePlayer) {
-                return {
-                    ok: false,
-                    importedCount: 0,
-                    messageKey: "common:vue.settings.msgQueueChangesImportFailed",
-                };
-            }
-
-            const queueChanges = normalizeEquipmentSetQueueChanges(entry.queueChanges);
-            if (!Array.isArray(queueChanges.items) || queueChanges.items.length <= 0) {
-                return {
-                    ok: false,
-                    importedCount: 0,
-                    messageKey: "common:vue.settings.msgQueueChangesImportEmpty",
-                };
-            }
-
-            const currentBaselineSnapshot = createEquipmentSetSnapshotFromPlayer(sourcePlayer);
-            const importedItems = buildQueueItemsFromQueueChangeTemplates(currentBaselineSnapshot, queueChanges.items);
-            if (importedItems.length <= 0) {
-                return {
-                    ok: false,
-                    importedCount: 0,
-                    messageKey: "common:vue.settings.msgQueueChangesImportEmpty",
-                };
-            }
-
-            const queueState = this.ensureQueueState(normalizedPlayerId);
-            queueState.baseline = createQueueBaselineRecord(
-                currentBaselineSnapshot,
-                null,
-                buildQueueBaselineSettings(this.simulationSettings, queueState.settings)
-            );
-            queueState.items = importedItems;
-            queueState.results = [];
-            queueState.rawRuns = [];
-            queueState.ranking = [];
-            queueState.enhancementUpgradeCosts = {};
-            queueState.abilityUpgradeCosts = {};
-            queueState.isRunning = false;
-            queueState.progress = 0;
-            queueState.error = "";
-            queueState.lastRunAt = 0;
-
-            return {
-                ok: true,
-                importedCount: importedItems.length,
-                messageKey: "common:vue.settings.msgQueueChangesImported",
-            };
-        },
-        deleteEquipmentSet(name) {
-            const setName = String(name || "").trim();
-            if (!setName || !this.equipmentSets?.[setName]) {
-                return false;
-            }
-
-            const nextSets = { ...this.equipmentSets };
-            delete nextSets[setName];
-            this.equipmentSets = nextSets;
-            persistEquipmentSetsToStorage(this.equipmentSets);
-            return true;
-        },
-        buildSingleSimulationPayload(playersToSim) {
-            this.normalizeDifficulty();
-
-            const simulationTimeHours = Math.max(1, Number(this.simulationSettings.simulationTimeHours || 24));
-            const simulationTimeLimit = simulationTimeHours * ONE_HOUR;
-            const extra = buildSimulationExtra(this.simulationSettings);
-
-            let zone = null;
-            let labyrinth = null;
-
-            if (this.simulationSettings.mode === "labyrinth") {
-                labyrinth = {
-                    labyrinthHrid: this.simulationSettings.labyrinthHrid,
-                    roomLevel: Math.max(20, Number(this.simulationSettings.roomLevel || 100)),
-                    crates: this.getActiveLabyrinthCrates(),
-                };
-            } else {
-                const zoneHrid = this.simulationSettings.useDungeon
-                    ? this.simulationSettings.dungeonHrid
-                    : this.simulationSettings.zoneHrid;
-
-                zone = {
-                    zoneHrid,
-                    difficultyTier: Number(this.simulationSettings.difficultyTier || 0),
-                };
-            }
-
-            return {
-                type: "start_simulation",
-                workerId: Math.floor(Math.random() * 1e9).toString(),
-                players: playersToSim,
-                zone,
-                labyrinth,
-                simulationTimeLimit,
-                extra,
-            };
-        },
-        runSingleSimulationPayload(payload, onProgress = () => {}) {
-            return runSharedSingleSimulationPayload(payload, onProgress);
-        },
-        runSingleSimulationPayloadWithDedicatedWorker(payload, onProgress = () => {}, options = {}) {
-            return runSingleSimulationPayloadWithDedicatedWorker(payload, onProgress, options);
-        },
-        async setQueueBaselineForActivePlayer(options = {}) {
-            const queueState = this.ensureQueueState(this.activePlayerId);
-
-            const shouldRunSimulation = options?.runSimulation === true;
-            const preserveQueueItems = options?.preserveQueueItems !== false;
-            const activePlayerId = String(this.activePlayerId);
-            const activePlayer = this.players.find((player) => String(player.id) === activePlayerId) ?? this.activePlayer;
-            const partySnapshot = createQueuePartySnapshot(this.players, activePlayerId);
-            const preservedQueueItems = preserveQueueItems && Array.isArray(queueState.items)
-                ? queueState.items.slice()
-                : [];
-
-            if (!activePlayer) {
-                throw new Error("Active player is missing.");
-            }
-
-            if (!shouldRunSimulation) {
-                queueState.baseline = createQueueBaselineRecord(
-                    this.activePlayer,
-                    partySnapshot,
-                    buildQueueBaselineSettings(this.simulationSettings, queueState.settings)
-                );
-                queueState.items = preserveQueueItems ? preservedQueueItems : [];
-                queueState.results = [];
-                queueState.rawRuns = [];
-                queueState.ranking = [];
-                queueState.enhancementUpgradeCosts = {};
-                queueState.abilityUpgradeCosts = {};
-                queueState.error = "";
-                queueState.progress = 0;
-                queueState.lastRunStatus = "idle";
-                queueState.cancelRequested = false;
-                return queueState.baseline;
-            }
-
-            if (this.queue.importedProfileByPlayer?.[activePlayerId] !== true) {
-                throw new Error("common:queue.requireImportBeforeBaseline");
-            }
-
-            if (this.runtime.isRunning || this.isAnyQueueRunning || this.advisor.runtime?.isRunning) {
-                throw new Error("Another simulation is already running.");
-            }
-
-            if (this.simulationSettings.runScope !== RUN_SCOPE_SINGLE) {
-                throw new Error("Queue baseline requires run scope to be Single target.");
-            }
-
-            if (this.simulationSettings.mode === "labyrinth") {
-                throw new Error("Queue baseline does not support labyrinth mode yet.");
-            }
-
-            const queueSettings = normalizeQueueSettings(queueState.settings);
-            queueState.settings = queueSettings;
-            const baselineRoundCount = queueSettings.baselineRounds;
-            const executionMode = queueSettings.executionMode === "parallel" ? "parallel" : "serial";
-            const baselineSettings = buildQueueBaselineSettings(this.simulationSettings, queueSettings);
-            const baselineSnapshot = deepClone(activePlayer);
-            const scenarioPlayers = partySnapshot.selectedPlayers.map((player) => ({
-                ...deepClone(player),
-                selected: true,
-            }));
-            const { buildPlayersForSimulation } = await loadPlayerMapperModule();
-            const playersToSim = buildPlayersForSimulation(scenarioPlayers);
-            if (playersToSim.length === 0) {
-                throw new Error("Unable to build player simulation data.");
-            }
-
-            const selectedPlayersSnapshot = [{ id: activePlayerId, name: activePlayer?.name || `Player ${activePlayerId}` }];
-            const pricingOptions = createProfitPricingOptions(this.pricing);
-            const startedAt = Date.now();
-
-            queueState.isRunning = true;
-            queueState.cancelRequested = false;
-            queueState.progress = 0;
-            queueState.error = "";
-            this.runtime.isRunning = true;
-            this.runtime.progress = 0;
-            this.runtime.error = "";
-            this.runtime.startedAt = startedAt;
-            this.runtime.elapsedSeconds = 0;
-            this.runtime.workerMode = executionMode === "parallel" ? "multi" : "single";
-
-            try {
-                let completedRounds = 0;
-                const runProgressByRunKey = new Map();
-                const roundResults = [];
-                const sampleMetadata = [];
-                let representativeSimResult = null;
-                const queueParallelWorkerLimit = executionMode === "parallel"
-                    ? Math.max(
-                        1,
-                        Math.min(
-                            normalizeParallelWorkerLimit(this.queueRuntime?.parallelWorkerLimit, this.queueParallelWorkerHardMax),
-                            this.queueParallelWorkerHardMax
-                        )
-                    )
-                    : 1;
-
-                const isBaselineRunActive = () => queueState.cancelRequested !== true;
-                const ensureBaselineRunNotCancelled = () => {
-                    if (!isBaselineRunActive()) {
-                        throw createWorkerRunCancellationError("Queue baseline cancelled.");
-                    }
-                };
-                const updateBaselineRunProgress = () => {
-                    const inProgress = Array.from(runProgressByRunKey.values())
-                        .reduce((sum, value) => sum + clamp(Number(value || 0), 0, 1), 0);
-                    const overall = (completedRounds + inProgress) / Math.max(1, baselineRoundCount);
-                    queueState.progress = clamp(overall, 0, 1);
-                    this.runtime.progress = queueState.progress;
-                    this.runtime.elapsedSeconds = (Date.now() - startedAt) / 1000;
-                };
-                const runBaselineRound = async (roundIndex) => {
-                    ensureBaselineRunNotCancelled();
-                    const runKey = `baseline-${roundIndex + 1}`;
-                    const runSingle = executionMode === "parallel"
-                        ? this.runSingleSimulationPayloadWithDedicatedWorker
-                        : this.runSingleSimulationPayload;
-                    runProgressByRunKey.set(runKey, 0);
-                    updateBaselineRunProgress();
-                    let completedSuccessfully = false;
-
-                    try {
-                        const payload = this.buildSingleSimulationPayload(playersToSim);
-                        const simResult = await runSingle(payload, (data) => {
-                            if (!isBaselineRunActive()) {
-                                return;
-                            }
-                            runProgressByRunKey.set(runKey, clamp(Number(data.progress || 0), 0, 1));
-                            updateBaselineRunProgress();
-                        });
-
-                        ensureBaselineRunNotCancelled();
-                        const summaryRow = summarizeResult(simResult, selectedPlayersSnapshot, pricingOptions)[0] || null;
-                        const summaryMetrics = summarizeQueueBaselineMetrics(summaryRow);
-                        const queueMetrics = computeQueueMetrics(simResult, activePlayerId, pricingOptions);
-                        roundResults.push({
-                            round: roundIndex + 1,
-                            metrics: {
-                                ...summaryMetrics,
-                                ...queueMetrics,
-                            },
-                        });
-                        sampleMetadata.push({
-                            round: roundIndex + 1,
-                            simulatedTime: toFiniteNumber(simResult?.simulatedTime, 0),
-                            zoneHrid: String(simResult?.zoneHrid || simResult?.zoneName || ""),
-                            difficultyTier: Math.max(0, Math.floor(toFiniteNumber(simResult?.difficultyTier, 0))),
-                        });
-                        representativeSimResult ??= simResult;
-                        completedSuccessfully = true;
-                    } finally {
-                        runProgressByRunKey.delete(runKey);
-                        if (completedSuccessfully) {
-                            completedRounds += 1;
-                        }
-                        updateBaselineRunProgress();
-                    }
-                };
-
-                if (executionMode === "parallel" && baselineRoundCount > 1) {
-                    let nextRoundIndex = 0;
-                    const workerCount = Math.max(1, Math.min(queueParallelWorkerLimit, baselineRoundCount));
-                    const workerLoop = async () => {
-                        while (nextRoundIndex < baselineRoundCount) {
-                            ensureBaselineRunNotCancelled();
-                            const currentRoundIndex = nextRoundIndex;
-                            nextRoundIndex += 1;
-                            // eslint-disable-next-line no-await-in-loop
-                            await runBaselineRound(currentRoundIndex);
-                        }
-                    };
-                    await Promise.all(Array.from({ length: workerCount }, () => workerLoop()));
-                } else {
-                    for (let roundIndex = 0; roundIndex < baselineRoundCount; roundIndex += 1) {
-                        ensureBaselineRunNotCancelled();
-                        // eslint-disable-next-line no-await-in-loop
-                        await runBaselineRound(roundIndex);
-                    }
-                }
-
-                ensureBaselineRunNotCancelled();
-                const sortedRoundResults = roundResults.slice().sort((left, right) => left.round - right.round);
-                const baselineAggregate = buildQueueBaselineAggregate(sortedRoundResults, queueSettings.medianBlend);
-                queueState.baseline = createQueueBaselineRecord(
-                    baselineSnapshot,
-                    partySnapshot,
-                    baselineSettings,
-                    {
-                        metrics: baselineAggregate.metrics,
-                        simResult: representativeSimResult,
-                        completedRounds: sortedRoundResults.length,
-                        metricSummary: baselineAggregate.metricSummary,
-                        sampleMetadata: sampleMetadata.slice().sort((left, right) => left.round - right.round),
-                    }
-                );
-                queueState.items = preserveQueueItems ? preservedQueueItems : [];
-                queueState.results = [];
-                queueState.rawRuns = [];
-                queueState.ranking = [];
-                queueState.enhancementUpgradeCosts = {};
-                queueState.abilityUpgradeCosts = {};
-                queueState.progress = 1;
-                queueState.lastRunStatus = "idle";
-                this.runtime.progress = 1;
-                return queueState.baseline;
-            } catch (error) {
-                if (isWorkerRunCancelledError(error)) {
-                    queueState.error = "";
-                    this.runtime.error = "";
-                    throw error;
-                }
-                const errorMessage = typeof error === "string" ? error : (error?.message || JSON.stringify(error));
-                queueState.error = errorMessage;
-                throw new Error(errorMessage);
-            } finally {
-                queueState.isRunning = false;
-                queueState.cancelRequested = false;
-                this.runtime.isRunning = false;
-                this.runtime.elapsedSeconds = (Date.now() - startedAt) / 1000;
-                workerClient.stopSimulation();
-                stopQueueWorkerClients();
-            }
-        },
-        addActivePlayerToQueue() {
-            const queueState = this.ensureQueueState(this.activePlayerId);
-            if (this.activeQueuePartyStatus?.hasMismatch) {
-                queueState.error = this.activeQueuePartyStatus.messageKey || "common:queue.partyChangedSinceBaseline";
-                return [];
-            }
-            if (!queueState.baseline?.snapshot) {
-                return [];
-            }
-
-            const snapshot = deepClone(this.activePlayer);
-            const changeSummary = computeQueueChangeSummary(queueState.baseline.snapshot, snapshot);
-            if (changeSummary.count === 0) {
-                return [];
-            }
-
-            const variants = buildQueueVariantSnapshotsFromChanges(queueState.baseline.snapshot, snapshot, changeSummary);
-            if (variants.length === 0) {
-                return [];
-            }
-
-            const appendedItems = variants.map((variant) => {
-                const fallbackName = `Variant ${queueState.items.length + 1}`;
-                const nextItem = {
-                    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-                    name: String(variant?.name || fallbackName),
-                    snapshot: deepClone(variant.snapshot),
-                    changes: Array.isArray(variant.labels) ? variant.labels : [],
-                    changeDetails: Array.isArray(variant.changeDetails) ? deepClone(variant.changeDetails) : [],
-                    createdAt: Date.now(),
-                };
-                queueState.items.push(nextItem);
-                return nextItem;
-            });
-
-            // Keep parity with legacy flow: after queueing current diff, return editor state to baseline.
-            const baselineSnapshot = queueState.baseline?.snapshot ?? null;
-            if (baselineSnapshot) {
-                const currentActive = this.players.find((player) => String(player.id) === this.activePlayerId);
-                const currentSelected = currentActive?.selected ?? true;
-                const activePlayerId = String(this.activePlayerId);
-                this.players = this.players.map((player) => {
-                    if (String(player.id) !== activePlayerId) {
-                        return player;
-                    }
-                    return {
-                        ...deepClone(baselineSnapshot),
-                        id: activePlayerId,
-                        selected: currentSelected,
-                    };
-                });
-            }
-            queueState.results = [];
-            queueState.rawRuns = [];
-            queueState.ranking = [];
-            queueState.error = "";
-            queueState.lastRunStatus = "idle";
-            return appendedItems;
-        },
-        updateActiveQueueSettings(partialSettings = {}) {
-            return this.updateQueueSettingsForPlayer(this.activePlayerId, partialSettings, {
-                persist: true,
-                ignorePersistError: true,
-            });
-        },
-        updateQueueSettingsForPlayer(playerId = this.activePlayerId, partialSettings = {}, options = {}) {
-            const normalizedPlayerId = String(playerId || this.activePlayerId);
-            const queueState = this.ensureQueueState(normalizedPlayerId);
-            const previousSettings = normalizeQueueSettings(queueState.settings);
-            const nextSettings = normalizeQueueSettings({
-                ...queueState.settings,
-                ...partialSettings,
-            });
-
-            if (options?.persist !== false) {
-                const queueStateByPlayerForPersist = {};
-                for (const queuePlayerId of QUEUE_PLAYER_IDS) {
-                    queueStateByPlayerForPersist[queuePlayerId] = {
-                        settings: String(queuePlayerId) === normalizedPlayerId
-                            ? nextSettings
-                            : this.queue.byPlayer?.[queuePlayerId]?.settings,
-                    };
-                }
-
-                try {
-                    persistQueueRunSettingsByPlayerToStorage(queueStateByPlayerForPersist);
-                } catch (error) {
-                    if (options?.ignorePersistError !== true) {
-                        throw error;
-                    }
-                }
-            }
-
-            queueState.settings = nextSettings;
-            const rankingSettingsChanged = haveQueueRunRankingSettingsChanged(previousSettings, queueState.settings);
-            if (rankingSettingsChanged && queueState?.baseline) {
-                const refreshedBaselineMetrics = resolveQueueBaselineMetricsForSettings(queueState.baseline, queueState.settings);
-                if (isPlainObject(refreshedBaselineMetrics)) {
-                    queueState.baseline.metrics = {
-                        ...(isPlainObject(queueState.baseline.metrics) ? queueState.baseline.metrics : {}),
-                        ...refreshedBaselineMetrics,
-                    };
-                }
-            }
-            if (rankingSettingsChanged && Array.isArray(queueState?.rawRuns) && queueState.rawRuns.length > 0) {
-                this.refreshQueueResultsFromRawRuns({
-                    playerId: normalizedPlayerId,
-                    includeEmptyEntries: queueState?.isRunning !== true && queueState?.lastRunStatus === "completed",
-                    allowReferenceLoad: false,
-                    sortRawRuns: false,
-                    updateLastRunAt: false,
-                });
-            }
-            return queueState.settings;
-        },
-        resetActiveQueueSettings() {
-            return this.updateActiveQueueSettings(getDefaultQueueRunSettings());
-        },
-        removeQueueItem(itemId) {
-            const queueState = this.ensureQueueState(this.activePlayerId);
-            queueState.items = queueState.items.filter((item) => item.id !== itemId);
-        },
-        clearActiveQueue() {
-            const queueState = this.ensureQueueState(this.activePlayerId);
-            queueState.items = [];
-            queueState.results = [];
-            queueState.rawRuns = [];
-            queueState.ranking = [];
-            queueState.progress = 0;
-            queueState.error = "";
-            queueState.lastRunStatus = "idle";
-        },
-        loadQueueSnapshotToActivePlayer(snapshotId) {
-            const queueState = this.ensureQueueState(this.activePlayerId);
-            const activePlayerId = String(this.activePlayerId);
-            const currentActive = this.players.find((player) => String(player.id) === activePlayerId);
-            const currentSelected = currentActive?.selected ?? true;
-
-            const normalizedSnapshotId = String(snapshotId || "").trim();
-            if (!normalizedSnapshotId) {
-                return false;
-            }
-            const targetSnapshot = queueState.items.find((item) => item.id === normalizedSnapshotId)?.snapshot ?? null;
-
-            if (!targetSnapshot) {
-                return false;
-            }
-
-            this.players = this.players.map((player) => {
-                if (String(player.id) !== activePlayerId) {
-                    return player;
-                }
-                return {
-                    ...deepClone(targetSnapshot),
-                    id: activePlayerId,
-                    selected: currentSelected,
-                };
-            });
-            this.persistPlayerAchievements();
-
-            return true;
-        },
-        async refreshQueueResultsFromRawRuns(options = {}) {
-            const playerId = String(options?.playerId || this.activePlayerId);
-            const queueState = this.ensureQueueState(playerId);
-            const entries = buildQueueEntriesFromState(queueState);
-            const entrySortIndexById = new Map(entries.map((entry, index) => [entry.id, index]));
-            const includeEmptyEntries = options?.includeEmptyEntries === true;
-            const allowReferenceLoad = options?.allowReferenceLoad !== false;
-
-            if (entries.length === 0) {
-                queueState.results = [];
-                queueState.ranking = [];
-                if (options?.sortRawRuns !== false) {
-                    queueState.rawRuns = [];
-                }
-                return [];
-            }
-
-            if (
-                allowReferenceLoad
-                && queueEntriesNeedAbilityUpgradeReference(entries)
-                && !hasAbilityUpgradeReferenceDataLoaded()
-            ) {
-                await this.ensureAbilityUpgradeReferenceDataLoaded();
-            }
-
-            const queueSettings = normalizeQueueSettings(queueState.settings);
-            queueState.settings = queueSettings;
-            const baselineMetrics = resolveQueueBaselineMetricsForSettings(queueState?.baseline, queueSettings);
-            if (queueState?.baseline && isPlainObject(baselineMetrics)) {
-                queueState.baseline.metrics = {
-                    ...(isPlainObject(queueState.baseline.metrics) ? queueState.baseline.metrics : {}),
-                    ...baselineMetrics,
-                };
-            }
-            syncQueueRawRunDeltas(queueState.rawRuns, isPlainObject(baselineMetrics) ? baselineMetrics : {});
-            const rankedRows = buildQueueRankedRowsFromSampleState({
-                entries,
-                rawRuns: queueState.rawRuns,
-                queueSettings,
-                queueState,
-                baselineMetrics: isPlainObject(baselineMetrics) ? baselineMetrics : {},
-                pricingState: this.pricing,
-                queueRuntimeSettings: this.queueRuntime,
-                includeEmptyEntries,
-            });
-
-            queueState.results = rankedRows;
-            queueState.ranking = rankedRows;
-            if (options?.sortRawRuns !== false) {
-                queueState.rawRuns = sortQueueRawRuns(queueState.rawRuns, entrySortIndexById);
-            }
-            if (options?.updateLastRunAt === true) {
-                queueState.lastRunAt = Date.now();
-            }
-
-            return rankedRows;
-        },
-        refreshStoredQueueRankingsForCurrentSettings() {
-            for (const [playerId, queueState] of Object.entries(this.queue?.byPlayer || {})) {
-                if (!Array.isArray(queueState?.rawRuns) || queueState.rawRuns.length <= 0) {
-                    continue;
-                }
-
-                this.refreshQueueResultsFromRawRuns({
-                    playerId,
-                    includeEmptyEntries: queueState?.isRunning !== true && queueState?.lastRunStatus === "completed",
-                    allowReferenceLoad: false,
-                    sortRawRuns: false,
-                    updateLastRunAt: false,
-                });
-            }
-        },
-        async runActiveQueue() {
-            const queueState = this.ensureQueueState(this.activePlayerId);
-            queueState.error = "";
-
-            if (this.runtime.isRunning || this.isAnyQueueRunning || this.advisor.runtime?.isRunning) {
-                queueState.error = "Another simulation is already running.";
-                return [];
-            }
-
-            if (this.simulationSettings.runScope !== RUN_SCOPE_SINGLE) {
-                queueState.error = "Queue run requires run scope to be Single target.";
-                return [];
-            }
-
-            if (!queueState.baseline?.snapshot) {
-                queueState.error = "Set baseline first.";
-                return [];
-            }
-
-            if (this.activeQueuePartyStatus?.hasMismatch) {
-                queueState.error = this.activeQueuePartyStatus.messageKey || "common:queue.partyChangedSinceBaseline";
-                return [];
-            }
-
-            if (queueState.items.length === 0) {
-                queueState.error = "Queue is empty.";
-                return [];
-            }
-
-            const queueSettings = normalizeQueueSettings(queueState.settings);
-            queueState.settings = queueSettings;
-            const executionMode = queueSettings.executionMode === "parallel" ? "parallel" : "serial";
-
-            const activePlayerId = String(this.activePlayerId);
-            const basePlayer = this.players.find((player) => String(player.id) === activePlayerId) ?? this.activePlayer;
-            const selectedPlayersSnapshot = [{ id: activePlayerId, name: basePlayer?.name || `Player ${activePlayerId}` }];
-            const pricingOptions = createProfitPricingOptions(this.pricing);
-            const queueRunId = Number(queueState.runId || 0) + 1;
-            const startedAt = Date.now();
-            const aggregatedBaselineMetrics = resolveQueueBaselineMetricsForSettings(queueState?.baseline, queueSettings);
-            const recomputedBaselineMetrics = !isPlainObject(aggregatedBaselineMetrics) && !hasAggregatedQueueBaselineMetrics(queueState?.baseline) && queueState?.baseline?.simResult
-                ? computeQueueMetrics(queueState.baseline.simResult, activePlayerId, pricingOptions)
-                : null;
-
-            if (queueState?.baseline && (isPlainObject(aggregatedBaselineMetrics) || isPlainObject(recomputedBaselineMetrics))) {
-                queueState.baseline.metrics = {
-                    ...(isPlainObject(queueState.baseline.metrics) ? queueState.baseline.metrics : {}),
-                    ...(isPlainObject(aggregatedBaselineMetrics) ? aggregatedBaselineMetrics : {}),
-                    ...(isPlainObject(recomputedBaselineMetrics) ? recomputedBaselineMetrics : {}),
-                };
-            }
-            const baselineMetrics = isPlainObject(queueState?.baseline?.metrics) ? queueState.baseline.metrics : {};
-
-            const entries = buildQueueEntriesFromState(queueState);
-
-            queueState.isRunning = true;
-            queueState.runId = queueRunId;
-            queueState.cancelRequested = false;
-            queueState.progress = 0;
-            queueState.results = [];
-            queueState.rawRuns = [];
-            queueState.ranking = [];
-            queueState.lastRunStatus = "running";
-            this.runtime.isRunning = true;
-            this.runtime.progress = 0;
-            this.runtime.error = "";
-            this.runtime.startedAt = startedAt;
-            this.runtime.elapsedSeconds = 0;
-            this.runtime.workerMode = "single";
-
-            const roundCount = queueSettings.rounds;
-            const totalRuns = entries.length * roundCount;
-            let completedRuns = 0;
-            const runProgressByRunKey = new Map();
-            const isCurrentQueueRun = () => Number(queueState.runId || 0) === queueRunId;
-            const isActiveQueueRun = () => isCurrentQueueRun() && queueState.cancelRequested !== true;
-            const ensureCurrentQueueRun = () => {
-                if (!isCurrentQueueRun()) {
-                    throw createWorkerRunCancellationError("Queue run cancelled.");
-                }
-            };
-            const ensureQueueRunNotCancelled = () => {
-                if (!isActiveQueueRun()) {
-                    throw createWorkerRunCancellationError("Queue run cancelled.");
-                }
-            };
-            const queueParallelWorkerLimit = executionMode === "parallel"
-                ? Math.max(
-                    1,
-                    Math.min(
-                        normalizeParallelWorkerLimit(this.queueRuntime?.parallelWorkerLimit, this.queueParallelWorkerHardMax),
-                        entries.length
-                    )
-                )
-                : 1;
-
-            const REALTIME_RANKING_THROTTLE_MS = 250;
-            let lastRealtimeRankingAt = 0;
-            const updateQueueRunProgress = () => {
-                if (!isCurrentQueueRun()) {
-                    return;
-                }
-                const inProgress = Array.from(runProgressByRunKey.values())
-                    .reduce((sum, value) => sum + clamp(Number(value || 0), 0, 1), 0);
-                const overall = (completedRuns + inProgress) / totalRuns;
-                queueState.progress = clamp(overall, 0, 1);
-                this.runtime.progress = queueState.progress;
-                this.runtime.elapsedSeconds = (Date.now() - startedAt) / 1000;
-            };
-            const updateRealtimeRanking = (force = false) => {
-                if (!isCurrentQueueRun()) {
-                    return;
-                }
-                const now = Date.now();
-                if (!force && now - lastRealtimeRankingAt < REALTIME_RANKING_THROTTLE_MS) {
-                    return;
-                }
-                const currentQueueSettings = normalizeQueueSettings(queueState.settings);
-                queueState.settings = currentQueueSettings;
-                const currentBaselineMetrics = resolveQueueBaselineMetricsForSettings(queueState?.baseline, currentQueueSettings);
-                if (queueState?.baseline && isPlainObject(currentBaselineMetrics)) {
-                    queueState.baseline.metrics = {
-                        ...(isPlainObject(queueState.baseline.metrics) ? queueState.baseline.metrics : {}),
-                        ...currentBaselineMetrics,
-                    };
-                }
-                syncQueueRawRunDeltas(queueState.rawRuns, isPlainObject(currentBaselineMetrics) ? currentBaselineMetrics : {});
-                const realtimeRows = buildQueueRankedRowsFromSampleState({
-                    entries,
-                    rawRuns: queueState.rawRuns,
-                    queueSettings: currentQueueSettings,
-                    queueState,
-                    baselineMetrics: isPlainObject(currentBaselineMetrics) ? currentBaselineMetrics : {},
-                    pricingState: this.pricing,
-                    queueRuntimeSettings: this.queueRuntime,
-                    includeEmptyEntries: false,
-                });
-                if (realtimeRows.length <= 0) {
-                    return;
-                }
-                queueState.results = realtimeRows;
-                queueState.ranking = realtimeRows;
-                lastRealtimeRankingAt = now;
-            };
-
-            const buildScenarioPlayers = (entrySnapshot) => {
-                const basePartyPlayers = Array.isArray(queueState?.baseline?.partySnapshot?.selectedPlayers)
-                    && queueState.baseline.partySnapshot.selectedPlayers.length > 0
-                    ? queueState.baseline.partySnapshot.selectedPlayers
-                    : buildQueuePartySelectedPlayers(this.players, activePlayerId);
-                const scenarioPlayers = basePartyPlayers.map((player) => ({
-                    ...deepClone(player),
-                    selected: true,
-                }));
-
-                const activeIndex = scenarioPlayers.findIndex((player) => String(player.id) === activePlayerId);
-                if (activeIndex === -1) {
-                    throw new Error("Unable to locate active player for queue run.");
-                }
-
-                scenarioPlayers[activeIndex] = {
-                    ...deepClone(entrySnapshot),
-                    id: activePlayerId,
-                    selected: true,
-                    name: entrySnapshot?.name || selectedPlayersSnapshot[0].name,
-                };
-
-                return scenarioPlayers;
-            };
-
-            const runEntryRound = async (entry, roundIndex) => {
-                ensureQueueRunNotCancelled();
-                const runKey = `${entry.id}-${roundIndex + 1}`;
-                runProgressByRunKey.set(runKey, 0);
-                updateQueueRunProgress();
-                let completedSuccessfully = false;
-
-                try {
-                    const { buildPlayersForSimulation } = await loadPlayerMapperModule();
-                    const playersToSim = buildPlayersForSimulation(buildScenarioPlayers(entry.snapshot));
-                    const payload = this.buildSingleSimulationPayload(playersToSim);
-                    const runSingle = executionMode === "parallel"
-                        ? this.runSingleSimulationPayloadWithDedicatedWorker
-                        : this.runSingleSimulationPayload;
-
-                    const simResult = await runSingle(payload, (data) => {
-                        if (!isActiveQueueRun()) {
-                            return;
-                        }
-                        runProgressByRunKey.set(runKey, clamp(Number(data.progress || 0), 0, 1));
-                        updateQueueRunProgress();
-                    });
-
-                    ensureCurrentQueueRun();
-                    const summary = summarizeResult(simResult, selectedPlayersSnapshot, pricingOptions)[0] || {};
-                    const metrics = computeQueueMetrics(simResult, activePlayerId, pricingOptions);
-                    const deltas = computeQueueMetricDeltas(metrics, baselineMetrics);
-
-                    const sampleRow = {
-                        id: entry.id,
-                        label: entry.label,
-                        changes: Array.isArray(entry.changes) ? [...entry.changes] : [],
-                        changeDetails: Array.isArray(entry.changeDetails) ? deepClone(entry.changeDetails) : [],
-                        round: roundIndex + 1,
-                        metrics,
-                        deltas,
-                        ...summary,
-                    };
-                    queueState.rawRuns.push(sampleRow);
-                    completedSuccessfully = true;
-                    updateRealtimeRanking(false);
-                } finally {
-                    runProgressByRunKey.delete(runKey);
-                    if (completedSuccessfully) {
-                        completedRuns += 1;
-                    }
-                    updateQueueRunProgress();
-                }
-            };
-
-            try {
-                for (let roundIndex = 0; roundIndex < roundCount; roundIndex++) {
-                    ensureQueueRunNotCancelled();
-                    if (executionMode === "parallel" && entries.length > 1) {
-                        let nextEntryIndex = 0;
-                        const workerCount = Math.max(1, Math.min(queueParallelWorkerLimit, entries.length));
-                        const workerLoop = async () => {
-                            while (nextEntryIndex < entries.length) {
-                                ensureQueueRunNotCancelled();
-                                const currentEntryIndex = nextEntryIndex;
-                                nextEntryIndex += 1;
-                                const entry = entries[currentEntryIndex];
-                                // eslint-disable-next-line no-await-in-loop
-                                await runEntryRound(entry, roundIndex);
-                            }
-                        };
-                        await Promise.all(Array.from({ length: workerCount }, () => workerLoop()));
-                        continue;
-                    }
-
-                    for (const entry of entries) {
-                        ensureQueueRunNotCancelled();
-                        // eslint-disable-next-line no-await-in-loop
-                        await runEntryRound(entry, roundIndex);
-                    }
-                }
-
-                ensureQueueRunNotCancelled();
-                const rankedRows = await this.refreshQueueResultsFromRawRuns({
-                    playerId: activePlayerId,
-                    includeEmptyEntries: true,
-                    allowReferenceLoad: true,
-                    sortRawRuns: true,
-                    updateLastRunAt: true,
-                });
-                queueState.lastRunStatus = "completed";
-                return rankedRows;
-            } catch (error) {
-                if (isWorkerRunCancelledError(error)) {
-                    queueState.error = "";
-                    this.runtime.error = "";
-                    queueState.lastRunStatus = "cancelled";
-                    if (queueState.rawRuns.length > 0) {
-                        try {
-                            return await this.refreshQueueResultsFromRawRuns({
-                                playerId: activePlayerId,
-                                includeEmptyEntries: false,
-                                allowReferenceLoad: false,
-                                sortRawRuns: true,
-                                updateLastRunAt: false,
-                            });
-                        } catch (refreshError) {
-                            // keep the best partial ranking we already have if cancelled refresh fails
-                        }
-                    }
-                    return Array.isArray(queueState.ranking) ? queueState.ranking : [];
-                }
-                queueState.lastRunStatus = "failed";
-                queueState.error = typeof error === "string" ? error : (error?.message || JSON.stringify(error));
-                return [];
-            } finally {
-                if (isCurrentQueueRun()) {
-                    queueState.isRunning = false;
-                    queueState.cancelRequested = false;
-                }
-                this.runtime.isRunning = false;
-                this.runtime.elapsedSeconds = (Date.now() - startedAt) / 1000;
-                workerClient.stopSimulation();
-                stopQueueWorkerClients();
-            }
-        },
-        setActivePlayer(id) {
-            this.activePlayerId = String(id);
-            this.ensureQueueState(this.activePlayerId);
-            if (!Object.prototype.hasOwnProperty.call(this.queue.importedProfileByPlayer, this.activePlayerId)) {
-                this.setImportedProfileState(this.activePlayerId, false);
-            }
-            const player = this.activePlayer;
-            if (player && !isPlainObject(player.triggerMap)) {
-                player.triggerMap = {};
-            }
-            this.syncActiveResultPlayerToActivePlayer(this.activePlayerId);
-        },
-        setConsumablePriceMode(mode) {
-            this.pricing.consumableMode = normalizePriceMode(mode, PRICE_MODE_ASK);
-            persistPricingSettingsToStorage(this.pricing);
-        },
-        setDropPriceMode(mode) {
-            this.pricing.dropMode = normalizePriceMode(mode, PRICE_MODE_BID);
-            persistPricingSettingsToStorage(this.pricing);
-        },
-        setPriceOverride(itemHrid, patch) {
-            const hrid = String(itemHrid || "");
-            const sourcePatch = isPlainObject(patch) ? patch : {};
-            const hasAskPatch = Object.prototype.hasOwnProperty.call(sourcePatch, "ask");
-            const hasBidPatch = Object.prototype.hasOwnProperty.call(sourcePatch, "bid");
-            if (!hrid || (!hasAskPatch && !hasBidPatch)) {
-                return false;
-            }
-
-            const nextOverrides = {
-                ...normalizePriceOverrideMap(this.pricing.overrides),
-            };
-            const nextEntry = {
-                ...(nextOverrides[hrid] || {}),
-            };
-
-            if (Object.prototype.hasOwnProperty.call(sourcePatch, "ask")) {
-                const normalizedAsk = normalizePriceOverrideValue(sourcePatch.ask);
-                if (normalizedAsk === null) {
-                    delete nextEntry.ask;
-                } else {
-                    nextEntry.ask = normalizedAsk;
-                }
-            }
-
-            if (Object.prototype.hasOwnProperty.call(sourcePatch, "bid")) {
-                const normalizedBid = normalizePriceOverrideValue(sourcePatch.bid);
-                if (normalizedBid === null) {
-                    delete nextEntry.bid;
-                } else {
-                    nextEntry.bid = normalizedBid;
-                }
-            }
-
-            if (Object.keys(nextEntry).length > 0) {
-                nextOverrides[hrid] = nextEntry;
-            } else {
-                delete nextOverrides[hrid];
-            }
-
-            this.pricing.overrides = nextOverrides;
-            rehydratePricingTable(this.pricing);
-            persistPricingSettingsToStorage(this.pricing);
-            return true;
-        },
-        resetPriceOverride(itemHrid) {
-            const hrid = String(itemHrid || "");
-            const currentOverrides = this.pricing.overrides || {};
-            if (!hrid || !Object.prototype.hasOwnProperty.call(currentOverrides, hrid)) {
-                return false;
-            }
-
-            const nextOverrides = {
-                ...normalizePriceOverrideMap(currentOverrides),
-            };
-            delete nextOverrides[hrid];
-
-            this.pricing.overrides = nextOverrides;
-            rehydratePricingTable(this.pricing);
-            persistPricingSettingsToStorage(this.pricing);
-            return true;
-        },
-        resetAllPriceOverrides() {
-            if (Object.keys(this.pricing.overrides || {}).length === 0) {
-                return false;
-            }
-
-            this.pricing.overrides = {};
-            rehydratePricingTable(this.pricing);
-            persistPricingSettingsToStorage(this.pricing);
-            return true;
-        },
-        async fetchMarketPrices() {
-            if (this.pricing.isLoading) {
-                return null;
-            }
-
-            this.pricing.isLoading = true;
-            this.pricing.error = "";
-
-            try {
-                const result = await fetchMarketPriceTable();
-                this.pricing.basePriceTable = cloneBasePriceTable(result.priceTable);
-                this.pricing.enhancementQuotesByItem = normalizeEnhancementQuotesByItem(result.enhancementQuotesByItem);
-                this.pricing.enhancementLevelsByItem = normalizeEnhancementLevelsByItem(result.enhancementLevelsByItem);
-                rehydratePricingTable(this.pricing);
-                this.pricing.lastFetchedAt = Number(result.fetchedAt || Date.now());
-                this.pricing.sourceUrl = String(result.sourceUrl || "");
-                persistMarketCacheToStorage({
-                    basePriceTable: this.pricing.basePriceTable,
-                    enhancementQuotesByItem: this.pricing.enhancementQuotesByItem,
-                    enhancementLevelsByItem: this.pricing.enhancementLevelsByItem,
-                    lastFetchedAt: this.pricing.lastFetchedAt,
-                    sourceUrl: this.pricing.sourceUrl,
-                });
-                return {
-                    sourceUrl: this.pricing.sourceUrl,
-                    lastFetchedAt: this.pricing.lastFetchedAt,
-                };
-            } catch (error) {
-                this.pricing.error = typeof error === "string" ? error : (error?.message || "Fetch market prices failed.");
-                throw error;
-            } finally {
-                this.pricing.isLoading = false;
-            }
-        },
-        resetPricesToVendorDefaults() {
-            this.pricing.basePriceTable = createDefaultPriceTable();
-            this.pricing.enhancementQuotesByItem = {};
-            this.pricing.enhancementLevelsByItem = {};
-            rehydratePricingTable(this.pricing);
-            this.pricing.lastFetchedAt = 0;
-            this.pricing.sourceUrl = "";
-            this.pricing.error = "";
-            clearMarketCacheFromStorage();
-        },
-        async ensureMarketPricesLoaded(forceRefresh = false) {
-            if (this.pricing.isLoading) {
-                return null;
-            }
-
-            if (forceRefresh) {
-                try {
-                    return await this.fetchMarketPrices();
-                } catch (error) {
-                    return null;
-                }
-            }
-
-            const hasEnhancementQuotes = Object.keys(this.pricing?.enhancementQuotesByItem || {}).length > 0;
-            const hasEnhancementLevels = Object.keys(this.pricing?.enhancementLevelsByItem || {}).length > 0;
-            const hasEnhancementData = hasEnhancementQuotes || hasEnhancementLevels;
-            const hasCachedPriceTable = this.pricing.lastFetchedAt > 0 || Boolean(this.pricing.sourceUrl);
-
-            // Legacy cache may contain only level-0 price table without enhancement-level quotes.
-            if (hasCachedPriceTable && hasEnhancementData) {
-                return null;
-            }
-
-            try {
-                return await this.fetchMarketPrices();
-            } catch (error) {
-                return null;
-            }
-        },
-        async ensureAbilityUpgradeReferenceDataLoaded(forceRefresh = false) {
-            const globalRef = ensureAbilityUpgradeReferenceGlobals();
-            const hasCachedAbilityXp = hasAbilityUpgradeReferenceDataLoaded();
-            const hasCachedSpellBookXp = globalRef.jigsSpellBookXpByName
-                && typeof globalRef.jigsSpellBookXpByName === "object"
-                && Object.keys(globalRef.jigsSpellBookXpByName).length > 0;
-            const hasCachedReference = hasCachedAbilityXp && (hasCachedSpellBookXp || Object.keys(abilityBookInfoByAbilityHrid).length > 0);
-
-            if (hasCachedReference && !forceRefresh) {
-                return {
-                    loaded: true,
-                    source: "cache",
-                };
-            }
-
-            if (abilityUpgradeReferenceLoadPromise && !forceRefresh) {
-                return abilityUpgradeReferenceLoadPromise;
-            }
-
-            const loadTask = (async () => {
-                try {
-                    const bundledLevelExperienceTable = Array.isArray(levelExperienceTable)
-                        ? levelExperienceTable.map((value) => toFiniteNumber(value, 0))
-                        : [];
-                    if (bundledLevelExperienceTable.length <= 1) {
-                        return {
-                            loaded: false,
-                            source: "bundle",
-                            error: "Bundled level experience table is missing or invalid.",
-                        };
-                    }
-
-                    globalRef.jigsLevelExperienceTable = bundledLevelExperienceTable;
-                    this.abilityUpgradeReferenceVersion = Date.now();
-                    const queueStates = Object.entries(this.queue?.byPlayer || {})
-                        .filter(([, queueState]) => Array.isArray(queueState?.rawRuns) && queueState.rawRuns.length > 0);
-
-                    await Promise.all(queueStates.map(async ([playerId, queueState]) => {
-                        await this.refreshQueueResultsFromRawRuns({
-                            playerId,
-                            includeEmptyEntries: queueState?.isRunning !== true && queueState?.lastRunStatus === "completed",
-                            allowReferenceLoad: false,
-                            sortRawRuns: false,
-                            updateLastRunAt: false,
-                        });
-                    }));
-
-                    return {
-                        loaded: true,
-                        source: "bundle",
-                    };
-                } catch (error) {
-                    return {
-                        loaded: false,
-                        source: "bundle",
-                        error: typeof error === "string" ? error : (error?.message || "Failed to load ability upgrade references."),
-                    };
-                } finally {
-                    abilityUpgradeReferenceLoadPromise = null;
-                }
-            })();
-
-            abilityUpgradeReferenceLoadPromise = loadTask;
-            return loadTask;
-        },
-        setLanguage(language) {
-            this.ui.language = language === "zh" ? "zh" : "en";
-        },
-        exportGroupConfig() {
-            return exportGroupConfig(this.players, this.simulationSettings);
-        },
-        exportSoloConfig(playerId) {
-            const targetId = String(playerId || this.activePlayerId);
-            const targetPlayer = this.players.find((player) => player.id === targetId) || this.activePlayer;
-            return exportSoloConfig(targetPlayer, this.simulationSettings);
-        },
-        importGroupConfig(text) {
-            const result = parseGroupImportConfig(text, this.players, this.simulationSettings);
-            const byId = Object.fromEntries(result.players.map((player) => [String(player.id), player]));
-            this.players = this.players.map((player) => byId[String(player.id)] || player);
-            this.persistPlayerAchievements();
-            result.players.forEach((player) => {
-                this.setImportedProfileState(player.id, true);
-                this.setImportedBaselineSnapshot(player.id, player);
-            });
+            this.setImportedProfileState(playerId, true);
+            this.setImportedBaselineSnapshot(playerId, parsed.player);
+          }
+
+          this.players = this.players.map((player) => {
+            const resolved = nextPlayers.find((candidate) => String(candidate.id) === String(player.id));
+            return resolved || player;
+          });
+          this.persistPlayerAchievements();
+          // 快照恢复同样整体替换玩家配置，触发器/预算优化结果随之失效。
+          this.resetTriggerOptimizerResults();
+          this.resetBudgetOptimizerResults();
+
+          const nextSimulationSettings = preferredSimulationSettings || fallbackSimulationSettings;
+          if (nextSimulationSettings) {
             this.simulationSettings = {
-                ...this.simulationSettings,
-                ...result.simulationSettings,
+              ...this.simulationSettings,
+              ...nextSimulationSettings,
             };
-            this.normalizeRunScope();
-            this.normalizeDifficulty();
-            return result;
-        },
-        importSoloConfig(text, playerId) {
-            const targetId = String(playerId || this.activePlayerId);
-            const currentPlayer = this.players.find((player) => player.id === targetId) || this.activePlayer;
-            const result = parseSoloImportConfig(text, currentPlayer, this.simulationSettings);
-
-            this.players = this.players.map((player) => (player.id === targetId ? result.player : player));
-            this.persistPlayerAchievements();
-            this.setImportedProfileState(targetId, true);
-            this.setImportedBaselineSnapshot(targetId, result.player);
-            this.simulationSettings = {
-                ...this.simulationSettings,
-                ...result.simulationSettings,
-            };
-            this.normalizeRunScope();
-            this.normalizeDifficulty();
-            return result;
-        },
-        setImportedCombatLoadouts(rawEntries) {
-            const loadouts = sanitizeImportedCombatLoadouts(rawEntries);
-            this.importedCombatLoadouts = loadouts;
-            if (typeof localStorage !== "undefined") {
-                try {
-                    localStorage.setItem(COMBAT_LOADOUT_IMPORTS_STORAGE_KEY, JSON.stringify({
-                        version: COMBAT_LOADOUT_IMPORTS_STORAGE_VERSION,
-                        loadouts,
-                    }));
-                } catch (error) {
-                    // 儲存空間不足時僅保留記憶體內的清單，功能仍可用
-                }
-            }
-            return loadouts.length;
-        },
-        applyImportedCombatLoadout(loadoutId, playerId) {
-            const numericLoadoutId = toFiniteNumber(loadoutId, Number.NaN);
-            const entry = this.importedCombatLoadouts.find((loadout) => loadout.loadoutId === numericLoadoutId);
-            if (!entry) {
-                return null;
-            }
-            return this.importSoloConfig(JSON.stringify(entry.payload), playerId || this.activePlayerId);
-        },
-        setSimulationMode(mode) {
-            this.simulationSettings.mode = mode === "labyrinth" ? "labyrinth" : "zone";
-            this.normalizeRunScope();
-            this.normalizeDifficulty();
-        },
-        setRunScope(scope) {
-            this.simulationSettings.runScope = String(scope || RUN_SCOPE_SINGLE);
-            this.normalizeRunScope();
-        },
-        normalizeBatchSelections() {
-            const groupHrids = this.groupZoneOptions.map((zone) => String(zone.hrid || ""));
-            const soloHrids = this.soloZoneOptions.map((zone) => String(zone.hrid || ""));
-            this.simulationSettings.selectedGroupZoneHrids = normalizeZoneSelection(
-                this.simulationSettings.selectedGroupZoneHrids,
-                groupHrids
-            );
-            this.simulationSettings.selectedSoloZoneHrids = normalizeZoneSelection(
-                this.simulationSettings.selectedSoloZoneHrids,
-                soloHrids
-            );
-            this.simulationSettings.labyrinthCrates = normalizeLabyrinthCrates(this.simulationSettings.labyrinthCrates);
-        },
-        setSelectedGroupZoneHrids(hrids = []) {
-            const allHrids = this.groupZoneOptions.map((zone) => String(zone.hrid || ""));
-            this.simulationSettings.selectedGroupZoneHrids = normalizeZoneSelection(hrids, allHrids);
-        },
-        setSelectedSoloZoneHrids(hrids = []) {
-            const allHrids = this.soloZoneOptions.map((zone) => String(zone.hrid || ""));
-            this.simulationSettings.selectedSoloZoneHrids = normalizeZoneSelection(hrids, allHrids);
-        },
-        toggleSelectedGroupZoneHrid(zoneHrid, checked) {
-            const hrid = String(zoneHrid || "");
-            if (!hrid) {
-                return;
-            }
-            const current = new Set(this.simulationSettings.selectedGroupZoneHrids || []);
-            if (checked) {
-                current.add(hrid);
-            } else {
-                current.delete(hrid);
-            }
-            this.setSelectedGroupZoneHrids(Array.from(current));
-        },
-        toggleSelectedSoloZoneHrid(zoneHrid, checked) {
-            const hrid = String(zoneHrid || "");
-            if (!hrid) {
-                return;
-            }
-            const current = new Set(this.simulationSettings.selectedSoloZoneHrids || []);
-            if (checked) {
-                current.add(hrid);
-            } else {
-                current.delete(hrid);
-            }
-            this.setSelectedSoloZoneHrids(Array.from(current));
-        },
-        setLabyrinthCrate(crateType, itemHrid) {
-            const normalized = normalizeLabyrinthCrates({
-                ...this.simulationSettings.labyrinthCrates,
-                [crateType]: itemHrid,
-            });
-            this.simulationSettings.labyrinthCrates = normalized;
-        },
-        getActiveLabyrinthCrates() {
-            const crates = this.simulationSettings.labyrinthCrates || {};
-            const values = [String(crates.coffee || ""), String(crates.food || ""), String(crates.tea || "")].filter(Boolean);
-            return Array.from(new Set(values));
-        },
-        normalizeSimulationBuffLevels() {
-            this.simulationSettings.comExp = clamp(Math.floor(toFiniteNumber(this.simulationSettings.comExp, 20)), 1, 99);
-            this.simulationSettings.comDrop = clamp(Math.floor(toFiniteNumber(this.simulationSettings.comDrop, 20)), 1, 99);
-        },
-        persistSimulationUiSettings() {
-            this.normalizeSimulationBuffLevels();
-            persistSimulationUiSettingsToStorage(this.simulationSettings);
-        },
-        setCombatScrollEnabled(personalBuffTypeHrid, enabled) {
-            const current = new Set(this.simulationSettings.combatScrolls || []);
-            if (enabled) {
-                current.add(String(personalBuffTypeHrid || ""));
-            } else {
-                current.delete(String(personalBuffTypeHrid || ""));
-            }
-            this.simulationSettings.combatScrolls = normalizeCombatScrollHrids(Array.from(current));
-        },
-        normalizeRunScope() {
-            const scope = this.simulationSettings.runScope;
-            this.normalizeBatchSelections();
-
-            if (this.simulationSettings.mode === "labyrinth") {
-                if (scope !== RUN_SCOPE_SINGLE && scope !== RUN_SCOPE_ALL_LABYRINTHS) {
-                    this.simulationSettings.runScope = RUN_SCOPE_SINGLE;
-                }
-                this.simulationSettings.useDungeon = false;
-                return;
-            }
-
-            if (
-                scope !== RUN_SCOPE_SINGLE
-                && scope !== RUN_SCOPE_ALL_GROUP_ZONES
-                && scope !== RUN_SCOPE_ALL_SOLO_ZONES
-            ) {
-                this.simulationSettings.runScope = RUN_SCOPE_SINGLE;
-            }
-
-            if (this.simulationSettings.runScope !== RUN_SCOPE_SINGLE) {
-                this.simulationSettings.useDungeon = false;
-            }
-        },
-        normalizeDifficulty() {
-            const maxDifficulty = Math.min(5, this.currentMaxDifficulty);
-            this.simulationSettings.difficultyTier = clamp(Number(this.simulationSettings.difficultyTier || 0), 0, maxDifficulty);
-        },
-        resetResultsForRun() {
-            this.results.simResult = null;
-            this.results.simResults = [];
-            this.results.summaryRows = [];
-            this.results.batchRows = [];
-            this.results.batchResultType = "";
-            this.results.timeSeriesData = null;
-            this.syncActiveResultPlayerToActivePlayer(this.activePlayerId);
-        },
-        resetAdvisorState() {
-            this.advisor = createAdvisorState();
-            return this.advisor;
-        },
-        rerankAdvisorResults(options = {}) {
-            const normalizedGoalPreset = normalizeAdvisorGoalPreset(options.goalPreset ?? this.advisor.goalPreset);
-            const normalizedCustomWeights = normalizeAdvisorWeights(
-                options.customWeights ?? this.advisor.customWeights,
-                ADVISOR_GOAL_PRESET_BALANCED
-            );
-            const quickRowsSource = Array.isArray(options.quickRows) ? options.quickRows : this.advisor.quickRows;
-            const refinedRowsSource = Array.isArray(options.refinedRows) ? options.refinedRows : this.advisor.refinedRows;
-            const rankedQuickRows = rankAdvisorRows(quickRowsSource, {
-                goalPreset: normalizedGoalPreset,
-                customWeights: normalizedCustomWeights,
-            });
-            const quickRankById = new Map(rankedQuickRows.map((row, index) => [row.id, index + 1]));
-            const rankedRefinedRows = rankAdvisorRows(refinedRowsSource, {
-                goalPreset: normalizedGoalPreset,
-                customWeights: normalizedCustomWeights,
-                quickRankById,
-            });
-            const activeRows = rankedRefinedRows.length > 0 ? rankedRefinedRows : rankedQuickRows;
-
-            this.advisor.goalPreset = normalizedGoalPreset;
-            this.advisor.customWeights = normalizedCustomWeights;
-            this.advisor.quickRows = rankedQuickRows;
-            this.advisor.refinedRows = rankedRefinedRows;
-            this.advisor.topCards = buildAdvisorTopCards(activeRows);
-            return activeRows;
-        },
-        async runAdvisorScan() {
-            this.advisor.error = "";
-
-            if (this.runtime.isRunning || this.isAnyQueueRunning || this.advisor.runtime?.isRunning) {
-                this.advisor.error = "Another simulation is already running.";
-                return [];
-            }
-
-            const selectedPlayersSnapshot = this.selectedPlayers.map((player) => ({ id: player.id, name: player.name }));
-            if (selectedPlayersSnapshot.length === 0) {
-                this.advisor.error = "Please select at least one player.";
-                return [];
-            }
-
-            const { buildPlayersForSimulation } = await loadPlayerMapperModule();
-            const playersToSim = buildPlayersForSimulation(this.players);
-            if (playersToSim.length === 0) {
-                this.advisor.error = "Unable to build player simulation data.";
-                return [];
-            }
-
-            const normalizedFilters = normalizeAdvisorFilters(this.advisor.filters);
-            const normalizedGoalPreset = normalizeAdvisorGoalPreset(this.advisor.goalPreset);
-            const normalizedCustomWeights = normalizeAdvisorWeights(this.advisor.customWeights, ADVISOR_GOAL_PRESET_BALANCED);
-            const candidates = buildAdvisorCandidates(normalizedFilters);
-            const metricPlayer = resolveAdvisorMetricPlayer(selectedPlayersSnapshot, this.activePlayerId);
-
-            // 刷圖推薦頁直接編輯 advisor.filters；存一份獨立副本，掃描中改設定才不會影響正在跑的 normalizedFilters
-            this.advisor.filters = normalizeAdvisorFilters(normalizedFilters);
-            this.advisor.goalPreset = normalizedGoalPreset;
-            this.advisor.customWeights = normalizedCustomWeights;
-            this.advisor.quickRows = [];
-            this.advisor.refinedRows = [];
-            this.advisor.topCards = [];
-            this.advisor.metricPlayerId = metricPlayer.id;
-            this.advisor.metricPlayerName = metricPlayer.name;
-
-            if (candidates.length === 0) {
-                this.advisor.error = "No advisor targets available for the current filters.";
-                return [];
-            }
-
-            const simulationTimeHours = Math.max(1, Number(this.simulationSettings.simulationTimeHours || 24));
-            const simulationTimeLimit = simulationTimeHours * ONE_HOUR;
-            const extra = {
-                ...buildSimulationExtra(this.simulationSettings),
-                enableHpMpVisualization: false,
-            };
-            const pricingOptions = createProfitPricingOptions(this.pricing);
-            const refineTopCount = normalizedFilters.refineTopEnabled
-                ? Math.min(normalizedFilters.refineTopCount, candidates.length)
-                : 0;
-            let quickRoundsTotal = candidates.length * normalizedFilters.quickRounds;
-            const refineTotal = refineTopCount * normalizedFilters.refineRounds;
-            let totalWorkUnits = Math.max(1, quickRoundsTotal + refineTotal);
-            const startedAt = Date.now();
-            const runId = Number(this.advisor.runtime?.runId || 0) + 1;
-            let quickCompleted = 0;
-            let refineCompleted = 0;
-            const errorMessages = [];
-            const quickRowsById = new Map();
-            const quickSamplesById = new Map();
-            const refinedRowsById = new Map();
-
-            this.advisor.runtime.runId = runId;
-            this.advisor.runtime.cancelRequested = false;
-            // 進度顯示用：快掃/複核的「目標數」（totals 是輪數，兩者單位不同）
-            this.advisor.runtime.quickTargetCount = candidates.length;
-            this.advisor.runtime.refineTargetCount = refineTopCount;
-            // 進入終態（完成/取消/錯誤）後設為 true，讓晚到的進度回呼不再改動 runtime，
-            // 避免 isRunning 被重新設回 true 造成永久卡住
-            let runFinalized = false;
-
-            const isCurrentAdvisorRun = () => Number(this.advisor.runtime?.runId || 0) === runId;
-            const isActiveAdvisorRun = () => isCurrentAdvisorRun() && this.advisor.runtime?.cancelRequested !== true;
-            const getAdvisorRowsForReturn = () => (
-                Array.isArray(this.advisor.refinedRows) && this.advisor.refinedRows.length > 0
-                    ? this.advisor.refinedRows
-                    : this.advisor.quickRows
-            );
-            const ensureActiveAdvisorRun = () => {
-                if (!isActiveAdvisorRun()) {
-                    throw createWorkerRunCancellationError("Advisor scan cancelled.");
-                }
-            };
-
-            const updateAdvisorRuntime = (phase, quickFraction = 0, refineFraction = 0) => {
-                if (runFinalized || !isActiveAdvisorRun()) {
-                    return;
-                }
-
-                this.advisor.runtime.isRunning = true;
-                this.advisor.runtime.phase = phase;
-                this.advisor.runtime.startedAt = startedAt;
-                this.advisor.runtime.elapsedSeconds = (Date.now() - startedAt) / 1000;
-                this.advisor.runtime.quickCompleted = quickCompleted;
-                this.advisor.runtime.quickTotal = quickRoundsTotal;
-                this.advisor.runtime.refineCompleted = refineCompleted;
-                this.advisor.runtime.refineTotal = refineTotal;
-                this.advisor.runtime.runId = runId;
-                this.advisor.runtime.cancelRequested = false;
-                const completedUnits = quickCompleted + quickFraction + refineCompleted + refineFraction;
-                this.advisor.runtime.progress = clamp(completedUnits / totalWorkUnits, 0, 1);
-            };
-
-            const rerankLiveQuickRows = () => {
-                if (!isActiveAdvisorRun()) {
-                    return;
-                }
-
-                this.rerankAdvisorResults({
-                    goalPreset: normalizedGoalPreset,
-                    customWeights: normalizedCustomWeights,
-                    quickRows: Array.from(quickRowsById.values()),
-                    refinedRows: [],
-                });
-            };
-
-            const rerankLiveRefinedRows = () => {
-                if (!isActiveAdvisorRun()) {
-                    return;
-                }
-
-                const mergedRows = this.advisor.quickRows.map((row) => refinedRowsById.get(row.id) || row);
-                this.rerankAdvisorResults({
-                    goalPreset: normalizedGoalPreset,
-                    customWeights: normalizedCustomWeights,
-                    quickRows: this.advisor.quickRows,
-                    refinedRows: mergedRows,
-                });
-            };
-
-            const storeQuickResult = (candidate, simResult, roundIndex) => {
-                if (!candidate || !simResult) {
-                    return false;
-                }
-
-                const samples = quickSamplesById.get(candidate.id) || [];
-                if (samples.length > roundIndex) {
-                    return false;
-                }
-
-                const sample = summarizeAdvisorTargetResult(simResult, selectedPlayersSnapshot, metricPlayer.id, pricingOptions);
-                samples.push(sample);
-                quickSamplesById.set(candidate.id, samples);
-                quickRowsById.set(candidate.id, buildAdvisorRowFromRoundMetrics(candidate, samples, {
-                    isRefined: false,
-                    refineRounds: 0,
-                }));
-                quickCompleted += 1;
-                updateAdvisorRuntime("quick_scan", 0, 0);
-                rerankLiveQuickRows();
-                return true;
-            };
-
-            const hasSampleForRound = (candidateId, roundIndex) => {
-                const samples = quickSamplesById.get(candidateId);
-                return Array.isArray(samples) && samples.length > roundIndex;
-            };
-
-            const collectQuickRows = async (batchCandidates, payloadBuilder, stageLabel, roundIndex) => {
-                if (batchCandidates.length === 0) {
-                    return;
-                }
-
-                const baselineCompleted = quickCompleted;
-
-                try {
-                    await runMultiSimulationPayloadWithDedicatedWorker(
-                        payloadBuilder(),
-                        (data) => {
-                            if (!isActiveAdvisorRun()) {
-                                return;
-                            }
-
-                            const completedUnits = clamp(Number(data?.progress || 0), 0, 1) * batchCandidates.length;
-                            const partialUnits = Math.max(0, completedUnits - (quickCompleted - baselineCompleted));
-                            updateAdvisorRuntime("quick_scan", partialUnits, 0);
-                        },
-                        {
-                            scope: DEDICATED_WORKER_SCOPE_ADVISOR,
-                            onItemResult: (data) => {
-                                ensureActiveAdvisorRun();
-                                const candidate = batchCandidates[Number(data?.index)];
-                                if (!candidate) {
-                                    return;
-                                }
-                                storeQuickResult(candidate, data?.simResult, roundIndex);
-                            },
-                        }
-                    );
-                } catch (batchError) {
-                    if (isWorkerRunCancelledError(batchError)) {
-                        throw batchError;
-                    }
-
-                    const failedCandidates = [];
-                    for (const candidate of batchCandidates) {
-                        if (hasSampleForRound(candidate.id, roundIndex)) {
-                            continue;
-                        }
-
-                        try {
-                            const simResult = await runSingleSimulationPayloadWithDedicatedWorker(
-                                createAdvisorSimulationPayload(candidate, playersToSim, simulationTimeLimit, extra),
-                                (data) => {
-                                    if (!isActiveAdvisorRun()) {
-                                        return;
-                                    }
-
-                                    updateAdvisorRuntime("quick_scan", clamp(Number(data?.progress || 0), 0, 1), 0);
-                                },
-                                { scope: DEDICATED_WORKER_SCOPE_ADVISOR }
-                            );
-                            ensureActiveAdvisorRun();
-                            storeQuickResult(candidate, simResult, roundIndex);
-                        } catch (error) {
-                            if (isWorkerRunCancelledError(error)) {
-                                throw error;
-                            }
-                            failedCandidates.push(candidate);
-                        } finally {
-                            if (!hasSampleForRound(candidate.id, roundIndex)) {
-                                quickCompleted += 1;
-                                updateAdvisorRuntime("quick_scan", 0, 0);
-                            }
-                        }
-                    }
-                    const partialError = buildAdvisorPartialErrorText(stageLabel, failedCandidates);
-                    if (partialError) {
-                        errorMessages.push(partialError);
-                    }
-                }
-            };
-
-            try {
-                updateAdvisorRuntime("quick_scan", 0, 0);
-                for (let quickRoundIndex = 0; quickRoundIndex < normalizedFilters.quickRounds; quickRoundIndex += 1) {
-                    const roundCandidates = quickRoundIndex === 0
-                        ? candidates
-                        : candidates.filter((candidate) => quickRowsById.has(candidate.id));
-                    if (roundCandidates.length === 0) {
-                        break;
-                    }
-                    if (quickRoundIndex === 1 && roundCandidates.length < candidates.length) {
-                        const surviving = roundCandidates.length;
-                        quickRoundsTotal = candidates.length + surviving * (normalizedFilters.quickRounds - 1);
-                        totalWorkUnits = Math.max(1, quickRoundsTotal + refineTotal);
-                    }
-                    // eslint-disable-next-line no-await-in-loop
-                    await collectQuickRows(
-                        roundCandidates,
-                        () => ({
-                            type: "start_simulation_all_zones",
-                            players: playersToSim,
-                            zones: roundCandidates.map((candidate) => ({
-                                zoneHrid: candidate.targetHrid,
-                                difficultyTier: candidate.difficultyTier,
-                            })),
-                            simulationTimeLimit,
-                            extra,
-                        }),
-                        "quick scan",
-                        quickRoundIndex
-                    );
-                    ensureActiveAdvisorRun();
-                }
-
-                if (quickRowsById.size === 0) {
-                    throw new Error(errorMessages[0] || "Advisor scan did not produce any successful result.");
-                }
-
-                ensureActiveAdvisorRun();
-                rerankLiveQuickRows();
-
-                if (normalizedFilters.refineTopEnabled && refineTopCount > 0) {
-                    updateAdvisorRuntime("refine_top", 0, 0);
-                    const quickRowsForRefine = this.advisor.quickRows.slice(0, refineTopCount);
-                    this.advisor.runtime.refineTargetCount = quickRowsForRefine.length;
-                    const roundMetricsById = new Map(quickRowsForRefine.map((row) => [row.id, []]));
-                    const refineParallelWorkerLimit = Math.max(
-                        1,
-                        Math.min(
-                            normalizeParallelWorkerLimit(this.queueRuntime?.parallelWorkerLimit, this.queueParallelWorkerHardMax),
-                            quickRowsForRefine.length
-                        )
-                    );
-
-                    const runRefineRoundForRow = async (row) => {
-                        try {
-                            const simResult = await runSingleSimulationPayloadWithDedicatedWorker(
-                                createAdvisorSimulationPayload(row, playersToSim, simulationTimeLimit, extra),
-                                () => {},
-                                { scope: DEDICATED_WORKER_SCOPE_ADVISOR }
-                            );
-                            ensureActiveAdvisorRun();
-                            const roundMetrics = roundMetricsById.get(row.id) || [];
-                            roundMetrics.push(summarizeAdvisorTargetResult(simResult, selectedPlayersSnapshot, metricPlayer.id, pricingOptions));
-                            roundMetricsById.set(row.id, roundMetrics);
-                            if (roundMetrics.length >= normalizedFilters.refineRounds) {
-                                refinedRowsById.set(row.id, buildAdvisorRowFromRoundMetrics(row, roundMetrics, {
-                                    isRefined: true,
-                                    refineRounds: normalizedFilters.refineRounds,
-                                }));
-                                rerankLiveRefinedRows();
-                            }
-                        } catch (error) {
-                            if (isWorkerRunCancelledError(error)) {
-                                throw error;
-                            }
-                            // keep best-effort quick result if refinement partially fails
-                        } finally {
-                            refineCompleted += 1;
-                            updateAdvisorRuntime("refine_top", 0, 0);
-                        }
-                    };
-
-                    for (let roundIndex = 0; roundIndex < normalizedFilters.refineRounds; roundIndex += 1) {
-                        if (refineParallelWorkerLimit > 1 && quickRowsForRefine.length > 1) {
-                            let nextRowIndex = 0;
-                            const workerLoop = async () => {
-                                while (nextRowIndex < quickRowsForRefine.length) {
-                                    const currentRowIndex = nextRowIndex;
-                                    nextRowIndex += 1;
-                                    const row = quickRowsForRefine[currentRowIndex];
-                                    // eslint-disable-next-line no-await-in-loop
-                                    await runRefineRoundForRow(row);
-                                }
-                            };
-                            await Promise.all(Array.from({ length: refineParallelWorkerLimit }, () => workerLoop()));
-                            continue;
-                        }
-
-                        for (const row of quickRowsForRefine) {
-                            // eslint-disable-next-line no-await-in-loop
-                            await runRefineRoundForRow(row);
-                        }
-                    }
-
-                    const refinedFailures = quickRowsForRefine.filter((row) => !refinedRowsById.has(row.id));
-                    const refinePartialError = buildAdvisorPartialErrorText("refine step", refinedFailures);
-                    if (refinePartialError) {
-                        errorMessages.push(refinePartialError);
-                    }
-
-                    ensureActiveAdvisorRun();
-                    rerankLiveRefinedRows();
-                }
-
-                ensureActiveAdvisorRun();
-                runFinalized = true;
-                this.advisor.error = errorMessages.join(" ").trim();
-                this.advisor.runtime.isRunning = false;
-                this.advisor.runtime.phase = "done";
-                this.advisor.runtime.progress = 1;
-                this.advisor.runtime.elapsedSeconds = (Date.now() - startedAt) / 1000;
-                this.advisor.runtime.lastRunAt = Date.now();
-                this.advisor.runtime.cancelRequested = false;
-                this.advisor.runtime.quickCompleted = quickCompleted;
-                this.advisor.runtime.quickTotal = quickRoundsTotal;
-                this.advisor.runtime.refineCompleted = refineCompleted;
-                this.advisor.runtime.refineTotal = refineTotal;
-                return getAdvisorRowsForReturn();
-            } catch (error) {
-                if (!isCurrentAdvisorRun()) {
-                    return [];
-                }
-
-                if (isWorkerRunCancelledError(error) || this.advisor.runtime?.cancelRequested === true) {
-                    runFinalized = true;
-                    this.advisor.error = "";
-                    this.advisor.runtime.isRunning = false;
-                    this.advisor.runtime.phase = "cancelled";
-                    this.advisor.runtime.elapsedSeconds = (Date.now() - startedAt) / 1000;
-                    this.advisor.runtime.quickCompleted = quickCompleted;
-                    this.advisor.runtime.quickTotal = quickRoundsTotal;
-                    this.advisor.runtime.refineCompleted = refineCompleted;
-                    this.advisor.runtime.refineTotal = refineTotal;
-                    return getAdvisorRowsForReturn();
-                }
-
-                runFinalized = true;
-                this.advisor.error = typeof error === "string"
-                    ? error
-                    : (error?.message || JSON.stringify(error));
-                this.advisor.runtime.isRunning = false;
-                this.advisor.runtime.phase = "idle";
-                this.advisor.runtime.progress = 0;
-                this.advisor.runtime.elapsedSeconds = (Date.now() - startedAt) / 1000;
-                this.advisor.runtime.cancelRequested = false;
-                return [];
-            }
-        },
-        stopAdvisorScan() {
-            if (!this.advisor.runtime?.isRunning) {
-                return false;
-            }
-
-            this.advisor.error = "";
-            this.advisor.runtime.cancelRequested = true;
-            this.advisor.runtime.isRunning = false;
-            this.advisor.runtime.phase = "cancelled";
-            this.advisor.runtime.elapsedSeconds = this.advisor.runtime.startedAt > 0
-                ? (Date.now() - this.advisor.runtime.startedAt) / 1000
-                : 0;
-            stopAdvisorWorkerRuns();
-            return true;
-        },
-        applyAdvisorTarget(row) {
-            const targetType = String(row?.targetType || "zone");
-            if (targetType !== "zone") {
-                return false;
-            }
-
-            this.simulationSettings.mode = "zone";
-            this.simulationSettings.runScope = RUN_SCOPE_SINGLE;
+            // 恢复角色数据时应默认回到常规区域视图，便于立即编辑。
+            this.simulationSettings.mode = 'zone';
             this.simulationSettings.useDungeon = false;
-            this.simulationSettings.zoneHrid = String(row?.targetHrid || this.simulationSettings.zoneHrid || "");
-            this.simulationSettings.difficultyTier = Math.max(0, Math.floor(toFiniteNumber(row?.difficultyTier, this.simulationSettings.difficultyTier || 0)));
-            this.normalizeDifficulty();
-            return true;
-        },
-        stopSimulation() {
-            const queueRunInProgress = this.isAnyQueueRunning;
-            const advisorRunInProgress = Boolean(this.advisor.runtime?.isRunning);
-            const manualRunInProgress = Boolean(this.runtime.isRunning && !queueRunInProgress && !advisorRunInProgress);
-
-            for (const queueState of Object.values(this.queue.byPlayer)) {
-                if (queueState?.isRunning) {
-                    queueState.cancelRequested = true;
-                }
+            if (!this.simulationSettings.zoneHrid) {
+              this.simulationSettings.zoneHrid = String(this.options?.zones?.[0]?.hrid || '');
             }
-            cancelSharedWorkerRun();
-            workerClient.stopSimulation();
-            stopQueueWorkerClients();
-            if (manualRunInProgress) {
-                this.runtime.isRunning = false;
-                this.runtime.progress = 0;
-                this.runtime.startedAt = 0;
-                this.runtime.elapsedSeconds = 0;
-                this.runtime.workerMode = "single";
-            }
-            if (advisorRunInProgress) {
-                this.stopAdvisorScan();
-            }
-        },
-        async startSimulation() {
-            this.runtime.error = "";
             this.normalizeRunScope();
-
-            if (this.isAnyQueueRunning) {
-                this.runtime.error = "Queue run is in progress. Stop queue run before starting a manual simulation.";
-                return;
-            }
-
-            if (this.advisor.runtime?.isRunning) {
-                this.runtime.error = "Advisor scan is in progress. Stop the advisor scan before starting a manual simulation.";
-                return;
-            }
-
-            const selectedPlayersSnapshot = this.selectedPlayers.map((player) => ({ id: player.id, name: player.name }));
-
-            if (selectedPlayersSnapshot.length === 0) {
-                this.runtime.error = "Please select at least one player.";
-                return;
-            }
-
-            const { buildPlayersForSimulation } = await loadPlayerMapperModule();
-            const playersToSim = buildPlayersForSimulation(this.players);
-            if (playersToSim.length === 0) {
-                this.runtime.error = "Unable to build player simulation data.";
-                return;
-            }
-
             this.normalizeDifficulty();
+            // 导入合并携带的 UI 级字段（含主站带回的迷宫升级等级）随之落盘，防止刷新后
+            // 回落到上次持久化值；persist 只写 8 字段白名单，mode/zone 等会话级字段不入存储。
+            this.persistSimulationUiSettings();
+          }
 
-            const simulationTimeHours = Math.max(1, Number(this.simulationSettings.simulationTimeHours || 24));
-            const simulationTimeLimit = simulationTimeHours * ONE_HOUR;
-            const extra = buildSimulationExtra(this.simulationSettings);
-            const runScope = this.simulationSettings.runScope;
-            const parallelWorkerLimit = normalizeParallelWorkerLimit(
-                this.queueRuntime?.parallelWorkerLimit,
-                this.queueParallelWorkerHardMax
-            );
-            const pricingOptions = createProfitPricingOptions(this.pricing);
-            const startedAt = Date.now();
+          this.playerDataSnapshot = {
+            savedAt: Number(loadResult.savedAt || 0),
+            playerDataMap: loadResult.playerDataMap || {},
+          };
 
-            this.runtime.isRunning = true;
-            this.runtime.progress = 0;
-            this.runtime.startedAt = startedAt;
-            this.runtime.elapsedSeconds = 0;
-            this.runtime.workerMode = runScope === RUN_SCOPE_SINGLE ? "single" : "multi";
-            this.resetResultsForRun();
-
-            const onProgress = (data) => {
-                this.runtime.progress = clamp(Number(data.progress || 0), 0, 1);
-                this.runtime.elapsedSeconds = (Date.now() - startedAt) / 1000;
-                if (data.timeSeriesData) {
-                    this.results.timeSeriesData = data.timeSeriesData;
-                }
-            };
-
-            const onError = (error) => {
-                this.runtime.isRunning = false;
-                this.runtime.error = typeof error === "string" ? error : JSON.stringify(error);
-            };
-
-            if (runScope === RUN_SCOPE_SINGLE) {
-                let zone = null;
-                let labyrinth = null;
-
-                if (this.simulationSettings.mode === "labyrinth") {
-                    labyrinth = {
-                        labyrinthHrid: this.simulationSettings.labyrinthHrid,
-                        roomLevel: Math.max(20, Number(this.simulationSettings.roomLevel || 100)),
-                        crates: this.getActiveLabyrinthCrates(),
-                    };
-                } else {
-                    const zoneHrid = this.simulationSettings.useDungeon
-                        ? this.simulationSettings.dungeonHrid
-                        : this.simulationSettings.zoneHrid;
-
-                    zone = {
-                        zoneHrid,
-                        difficultyTier: Number(this.simulationSettings.difficultyTier || 0),
-                    };
-                }
-
-                workerClient.startSimulation(
-                    {
-                        type: "start_simulation",
-                        workerId: Math.floor(Math.random() * 1e9).toString(),
-                        players: playersToSim,
-                        zone,
-                        labyrinth,
-                        simulationTimeLimit,
-                        extra,
-                    },
-                    {
-                        onProgress,
-                        onResult: (simResult) => {
-                            this.runtime.progress = 1;
-                            this.runtime.isRunning = false;
-                            this.runtime.elapsedSeconds = (Date.now() - startedAt) / 1000;
-                            this.results.simResult = simResult;
-                            this.results.timeSeriesData = simResult?.timeSeriesData ?? this.results.timeSeriesData;
-                            this.results.summaryRows = summarizeResult(simResult, selectedPlayersSnapshot, pricingOptions);
-                            this.syncActiveResultPlayerToActivePlayer(this.activePlayerId);
-                            this.runtime.completionNoticeId += 1;
-                        },
-                        onError,
-                    }
-                );
-
-                return;
-            }
-
-            if (runScope === RUN_SCOPE_ALL_LABYRINTHS) {
-                const labyrinths = buildAllLabyrinthTargets(this.getActiveLabyrinthCrates());
-                if (labyrinths.length === 0) {
-                    this.runtime.isRunning = false;
-                    this.runtime.error = "No labyrinth targets available.";
-                    return;
-                }
-
-                workerClient.startMultiSimulation(
-                    {
-                        type: "start_simulation_all_labyrinths",
-                        players: playersToSim,
-                        labyrinths,
-                        parallelWorkerLimit,
-                        simulationTimeLimit,
-                        extra,
-                    },
-                    {
-                        onProgress,
-                        onBatchResult: (simResults, batchResultType) => {
-                            this.runtime.progress = 1;
-                            this.runtime.isRunning = false;
-                            this.runtime.elapsedSeconds = (Date.now() - startedAt) / 1000;
-                            this.results.simResults = simResults;
-                            this.results.batchRows = summarizeBatchResults(simResults, selectedPlayersSnapshot, pricingOptions);
-                            this.results.batchResultType = batchResultType || "simulation_result_allLabyrinths";
-                            this.runtime.completionNoticeId += 1;
-                        },
-                        onError,
-                    }
-                );
-
-                return;
-            }
-
-            const selectedZoneHrids = runScope === RUN_SCOPE_ALL_GROUP_ZONES
-                ? this.simulationSettings.selectedGroupZoneHrids
-                : this.simulationSettings.selectedSoloZoneHrids;
-            const zones = buildZoneTargetsByScope(runScope, selectedZoneHrids);
-            if (zones.length === 0) {
-                this.runtime.isRunning = false;
-                this.runtime.error = "No zone targets available for current run scope.";
-                return;
-            }
-
-            workerClient.startMultiSimulation(
-                {
-                    type: "start_simulation_all_zones",
-                    players: playersToSim,
-                    zones,
-                    parallelWorkerLimit,
-                    simulationTimeLimit,
-                    extra,
-                },
-                {
-                    onProgress,
-                    onBatchResult: (simResults, batchResultType) => {
-                        this.runtime.progress = 1;
-                        this.runtime.isRunning = false;
-                        this.runtime.elapsedSeconds = (Date.now() - startedAt) / 1000;
-                        this.results.simResults = simResults;
-                        this.results.batchRows = summarizeBatchResults(simResults, selectedPlayersSnapshot, pricingOptions);
-                        this.results.batchResultType = batchResultType || "simulation_result_allZones";
-                        this.runtime.completionNoticeId += 1;
-                    },
-                    onError,
-                }
-            );
-        },
+          return {
+            ok: true,
+            savedAt: this.playerDataSnapshot.savedAt,
+            loadedPlayerIds,
+            messageKey: 'common:settingsPage.playerLoadSuccess',
+          };
+        } catch (error) {
+          console.warn('[playerSnapshot] load failed:', error);
+          this.playerDataSnapshot = createPlayerDataSnapshotState();
+          return {
+            ok: false,
+            messageKey: 'common:settingsPage.playerLoadInvalid',
+          };
+        }
+      });
     },
+    deleteSinglePlayerDataSnapshot(playerId) {
+      const targetPlayerId = String(playerId || '');
+      if (!targetPlayerId) {
+        return {
+          ok: false,
+          messageKey: 'common:settingsPage.playerDeleteError',
+        };
+      }
+
+      const loadResult = loadPlayerDataSnapshotFromStorage();
+      if (loadResult.status !== 'ok') {
+        this.playerDataSnapshot = createPlayerDataSnapshotState();
+        return {
+          ok: false,
+          messageKey: 'common:settingsPage.playerLoadNotFound',
+        };
+      }
+
+      const nextPlayerDataMap = {
+        ...(loadResult.playerDataMap || {}),
+      };
+      if (!Object.prototype.hasOwnProperty.call(nextPlayerDataMap, targetPlayerId)) {
+        return {
+          ok: false,
+          messageKey: 'common:settingsPage.playerLoadNotFound',
+        };
+      }
+
+      delete nextPlayerDataMap[targetPlayerId];
+
+      try {
+        if (Object.keys(nextPlayerDataMap).length === 0) {
+          clearPlayerDataSnapshotFromStorage();
+        } else {
+          upsertPlayerDataSnapshotToStorage(nextPlayerDataMap);
+        }
+
+        this.playerDataSnapshot = createPlayerDataSnapshotState();
+        return {
+          ok: true,
+          messageKey: 'common:settingsPage.playerDeleteSingleSuccess',
+          messageOptions: {
+            playerId: targetPlayerId,
+          },
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          messageKey: 'common:settingsPage.playerDeleteError',
+        };
+      }
+    },
+    deleteAllPlayerDataSnapshots() {
+      try {
+        clearPlayerDataSnapshotFromStorage();
+        this.playerDataSnapshot = createPlayerDataSnapshotState();
+        return {
+          ok: true,
+          messageKey: 'common:settingsPage.playerDeleteAllSuccess',
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          messageKey: 'common:settingsPage.playerDeleteError',
+        };
+      }
+    },
+    persistPlayerAchievements() {
+      persistPlayerAchievementsToStorage(this.players);
+    },
+    clearPersistedPlayerAchievements() {
+      clearPlayerAchievementsFromStorage();
+    },
+    ensureActivePlayerTriggerDefaults(targetHrid) {
+      const hrid = String(targetHrid || '');
+      if (!hrid) {
+        return [];
+      }
+
+      const player = this.activePlayer;
+      if (!player) {
+        return [];
+      }
+
+      if (!isPlainObject(player.triggerMap)) {
+        player.triggerMap = {};
+      }
+
+      const triggers = ensureTriggerMapEntry(player.triggerMap, hrid);
+      player.triggerMap[hrid] = sanitizeTriggerList(triggers);
+      return deepClone(player.triggerMap[hrid]);
+    },
+    getActivePlayerTriggers(targetHrid) {
+      const hrid = String(targetHrid || '');
+      if (!hrid) {
+        return [];
+      }
+
+      const triggerMap = isPlainObject(this.activePlayer?.triggerMap) ? this.activePlayer.triggerMap : {};
+      return deepClone(sanitizeTriggerList(triggerMap[hrid]));
+    },
+    setActivePlayerTriggers(targetHrid, triggerList) {
+      const hrid = String(targetHrid || '');
+      if (!hrid) {
+        return [];
+      }
+
+      const player = this.activePlayer;
+      if (!player) {
+        return [];
+      }
+
+      if (!isPlainObject(player.triggerMap)) {
+        player.triggerMap = {};
+      }
+
+      player.triggerMap[hrid] = sanitizeTriggerList(triggerList);
+      return deepClone(player.triggerMap[hrid]);
+    },
+    resetActivePlayerTriggersToDefault(targetHrid) {
+      const hrid = String(targetHrid || '');
+      if (!hrid) {
+        return [];
+      }
+
+      const player = this.activePlayer;
+      if (!player) {
+        return [];
+      }
+
+      if (!isPlainObject(player.triggerMap)) {
+        player.triggerMap = {};
+      }
+
+      player.triggerMap[hrid] = sanitizeTriggerList(getDefaultTriggerDtosForHrid(hrid));
+      return deepClone(player.triggerMap[hrid]);
+    },
+    refreshEquipmentSets() {
+      this.equipmentSets = loadEquipmentSetsFromStorage();
+      return this.equipmentSetEntries;
+    },
+    saveEquipmentSet(name, playerId = this.activePlayerId) {
+      const setName = String(name || '').trim();
+      if (!setName) {
+        throw new Error('Equipment set name is empty.');
+      }
+
+      const normalizedPlayerId = String(playerId || this.activePlayerId);
+      const queueState = this.ensureQueueState(normalizedPlayerId);
+      if (queueStateHasUnsupportedEquipmentSetQueueChanges(queueState)) {
+        throw new Error('common:settingsPage.queueSaveErrorUnsupportedTriggerChange');
+      }
+      const queueChanges = normalizeEquipmentSetQueueChanges(buildEquipmentSetQueueChangesFromQueueState(queueState));
+
+      this.equipmentSets = {
+        ...this.equipmentSets,
+        [setName]: {
+          savedAt: Date.now(),
+          queueChanges,
+        },
+      };
+      persistEquipmentSetsToStorage(this.equipmentSets);
+      return this.equipmentSets[setName];
+    },
+    /**
+     * @deprecated 装备套装现在存储队列变更模板。请改用
+     * importEquipmentSetQueueChanges(name, playerId) 来应用已保存的套装。
+     */
+    loadEquipmentSet() {
+      return false;
+    },
+    importEquipmentSetQueueChanges(name, playerId = this.activePlayerId) {
+      const setName = String(name || '').trim();
+      if (!setName) {
+        return {
+          ok: false,
+          importedCount: 0,
+          messageKey: 'common:vue.settings.msgQueueChangesImportFailed',
+        };
+      }
+
+      const entry = this.equipmentSets?.[setName];
+      if (!entry) {
+        return {
+          ok: false,
+          importedCount: 0,
+          messageKey: 'common:vue.settings.msgQueueChangesImportFailed',
+        };
+      }
+
+      const normalizedPlayerId = String(playerId || this.activePlayerId);
+      const sourcePlayer = this.players.find((player) => String(player.id) === normalizedPlayerId);
+      if (!sourcePlayer) {
+        return {
+          ok: false,
+          importedCount: 0,
+          messageKey: 'common:vue.settings.msgQueueChangesImportFailed',
+        };
+      }
+
+      const queueChanges = normalizeEquipmentSetQueueChanges(entry.queueChanges);
+      if (!Array.isArray(queueChanges.items) || queueChanges.items.length <= 0) {
+        return {
+          ok: false,
+          importedCount: 0,
+          messageKey: 'common:vue.settings.msgQueueChangesImportEmpty',
+        };
+      }
+
+      const currentBaselineSnapshot = createEquipmentSetSnapshotFromPlayer(sourcePlayer);
+      const importedItems = buildQueueItemsFromQueueChangeTemplates(currentBaselineSnapshot, queueChanges.items);
+      if (importedItems.length <= 0) {
+        return {
+          ok: false,
+          importedCount: 0,
+          messageKey: 'common:vue.settings.msgQueueChangesImportEmpty',
+        };
+      }
+
+      const queueState = this.ensureQueueState(normalizedPlayerId);
+      queueState.baseline = createQueueBaselineRecord(
+        currentBaselineSnapshot,
+        null,
+        buildQueueBaselineSettings(this.simulationSettings, queueState.settings),
+      );
+      queueState.items = importedItems;
+      queueState.results = [];
+      queueState.rawRuns = [];
+      queueState.ranking = [];
+      queueState.abilityUpgradeCosts = {};
+      queueState.isRunning = false;
+      queueState.progress = 0;
+      queueState.error = '';
+      queueState.lastRunAt = 0;
+
+      return {
+        ok: true,
+        importedCount: importedItems.length,
+        messageKey: 'common:vue.settings.msgQueueChangesImported',
+      };
+    },
+    deleteEquipmentSet(name) {
+      const setName = String(name || '').trim();
+      if (!setName || !this.equipmentSets?.[setName]) {
+        return false;
+      }
+
+      const nextSets = { ...this.equipmentSets };
+      delete nextSets[setName];
+      this.equipmentSets = nextSets;
+      persistEquipmentSetsToStorage(this.equipmentSets);
+      return true;
+    },
+    setActivePlayer(id) {
+      this.activePlayerId = String(id);
+      this.ensurePlayerConfig(this.activePlayer);
+      this.ensureQueueState(this.activePlayerId);
+      if (!Object.prototype.hasOwnProperty.call(this.queue.importedProfileByPlayer, this.activePlayerId)) {
+        this.setImportedProfileState(this.activePlayerId, false);
+      }
+      const player = this.activePlayer;
+      if (player && !isPlainObject(player.triggerMap)) {
+        player.triggerMap = {};
+      }
+      this.syncActiveResultPlayerToActivePlayer(this.activePlayerId);
+    },
+    setLanguage(language) {
+      this.ui.language = language === 'zh' ? 'zh' : 'en';
+    },
+    // 全局游戏模式切换：归一化后写入 state 并立即落盘（persistGameModeToStorage
+    // 返回归一化值，非法输入回落标准模式）。
+    setGameMode(mode) {
+      this.gameMode = persistGameModeToStorage(mode);
+    },
+    async exportGroupConfig() {
+      // 备忘录 0364491149911703552（2026-10-03）：导出前刷新失败不阻断导出，但置位 runtime
+      // 标记供反馈面区分「已导出但资产分未刷新」；标记为会话内瞬态（runtime 不落盘），
+      // 每次导出开始时重置为未失败，刷新失败的 catch 中置位（并发导出以最后一次写入为准）。
+      this.runtime.assetScoreRefreshFailedOnExport = false;
+      // ③ 动态化（2026-10-03）：显式导入导出入口共用按需加载的序列化模块。
+      const { exportGroupConfig: buildGroupExport } = await loadImportExportMapperModule();
+      // 导出前刷新资产分快照，保证导出 JSON 携带的分数与当前配置/行情一致。
+      // 候选 A：刷新链路为按需加载（异步）；失败降级 + 控制台告警——不阻断导出，
+      // 载荷携带旧快照、下次触发/调用自动重试，仅 console.warn 留痕。
+      await this.refreshAssetScores().catch((error) => {
+        console.warn('[assetScore] refresh failed (before group export):', error);
+        this.runtime.assetScoreRefreshFailedOnExport = true;
+      });
+      return buildGroupExport(this.players, this.simulationSettings);
+    },
+    async exportSoloConfig(playerId) {
+      // 同 exportGroupConfig：标记为会话内瞬态，每次导出开始时重置为未失败。
+      this.runtime.assetScoreRefreshFailedOnExport = false;
+      const { exportSoloConfig: buildSoloExport } = await loadImportExportMapperModule();
+      const targetId = String(playerId || this.activePlayerId);
+      const targetPlayer = this.players.find((player) => player.id === targetId) || this.activePlayer;
+      // 导出前刷新（单人）：失败降级 + 控制台告警，不阻断导出。
+      await this.refreshAssetScores([targetPlayer.id]).catch((error) => {
+        console.warn('[assetScore] refresh failed (before solo export):', error);
+        this.runtime.assetScoreRefreshFailedOnExport = true;
+      });
+      return buildSoloExport(targetPlayer, this.simulationSettings);
+    },
+    async importGroupConfig(text) {
+      // 玩家配置整体替换入口（2026-10-03）：与 importSoloConfig / loadPlayerDataSnapshot 共用
+      // 玩家配置写入串行器，语义见 playerConfigMutationQueue 注释。
+      return runPlayerConfigMutationExclusive(async () => {
+        const { importGroupConfig: parseGroupImportConfig } = await loadImportExportMapperModule();
+        const result = parseGroupImportConfig(text, this.players, this.simulationSettings);
+        if (result.marketItemValues) {
+          this.applyImportedMarketItemValues(
+            result.marketItemValues,
+            result.marketEstimateSource,
+            result.syntheticItemHrids,
+            result.syntheticLevelKeys,
+          );
+        }
+        result.players.forEach((player) => this.ensurePlayerConfig(player));
+        const byId = Object.fromEntries(result.players.map((player) => [String(player.id), player]));
+        this.players = this.players.map((player) => byId[String(player.id)] || player);
+        this.persistPlayerAchievements();
+        result.players.forEach((player) => {
+          this.setImportedProfileState(player.id, true);
+          this.setImportedBaselineSnapshot(player.id, player);
+        });
+        // 玩家配置被整体替换，既有触发器/预算优化结果不再对应任何当前输入。
+        this.resetTriggerOptimizerResults();
+        this.resetBudgetOptimizerResults();
+        this.simulationSettings = {
+          ...this.simulationSettings,
+          ...result.simulationSettings,
+        };
+        this.normalizeRunScope();
+        this.normalizeDifficulty();
+        // 导入合并携带的 UI 级字段（含迷宫升级等级）随之落盘（白名单口径同快照恢复分支）。
+        this.persistSimulationUiSettings();
+        // 导入完成后刷新资产分快照：失败降级 + 控制台告警，不阻断导入；保持
+        // await resolve 语义（主站桥接的 await 后置动作时序不变）。
+        await this.refreshAssetScores().catch((error) => {
+          console.warn('[assetScore] refresh failed (after group import):', error);
+        });
+        return result;
+      });
+    },
+    async importSoloConfig(text, playerId) {
+      // 玩家配置整体替换入口（2026-10-03）：与 importGroupConfig / loadPlayerDataSnapshot 共用
+      // 玩家配置写入串行器。主站桥接在 await 之后才执行 clearPlayerSlots 等后置动作，该动作的
+      // 先后顺序依赖本队列（见 tampermonkeyImportBridge 的顺序不变量注释）。
+      return runPlayerConfigMutationExclusive(async () => {
+        const { importSoloConfig: parseSoloImportConfig } = await loadImportExportMapperModule();
+        const targetId = String(playerId || this.activePlayerId);
+        const currentPlayer = this.players.find((player) => player.id === targetId) || this.activePlayer;
+        const result = parseSoloImportConfig(text, currentPlayer, this.simulationSettings);
+        // Solo 导入是「替换目标槽位配置」而非「身份迁移」：sanitizePlayerConfig 是
+        // 导出/group/快照恢复共用的清洗函数，通用 id 语义（source.id || fallback.id）
+        // 的 source.id 优先只在「载荷 id 与目标 id 分歧」时改变结果——solo 的目标由
+        // 入参 playerId 决定、载荷 id 无槽位路由职责（group 按载荷 id 路由槽位，匹配
+        // 后 source.id 与 fallback.id 恒同值），任由载荷 id 胜出会让携带 id 的 native
+        // solo 载荷（modern-solo / modern-player-only；原生导出经 buildExportPlayer
+        // 恒携带 id）在顶替目标槽位后带着来源 id——目标 id 从玩家列表消失，此后按
+        // 玩家 id 过滤的即时资产分刷新落空（只能等 App.vue 250ms 防抖兜底；导入配置
+        // 与槽位原配置签名一致时 watch 不触发，载荷携带的跨会话行情快照将无限期
+        // 滞留），imported 标记 / 基线快照 / 桥接 selectAfterImport 全部挂错 id，且
+        // 来源 id 撞上其他现有玩家时产生重复 id。与 share-profile /
+        // main-site-current-character 分支恒用 fallback.id（= 目标 id）的既有语义
+        // 对齐：写入前归一为目标槽位 id。不影响快照保留守卫：configSignature 不含
+        // id（equipment/houseRooms/abilities/guildBuffs/工匠茶）；group 导入与快照
+        // 恢复按 id 合并的路径不经此处，零影响。
+        result.player.id = targetId;
+        if (result.marketItemValues) {
+          this.applyImportedMarketItemValues(
+            result.marketItemValues,
+            result.marketEstimateSource,
+            result.syntheticItemHrids,
+            result.syntheticLevelKeys,
+          );
+        }
+        this.ensurePlayerConfig(result.player);
+
+        this.players = this.players.map((player) => (player.id === targetId ? result.player : player));
+        this.persistPlayerAchievements();
+        this.setImportedProfileState(targetId, true);
+        this.setImportedBaselineSnapshot(targetId, result.player);
+        // 玩家配置被替换，既有触发器/预算优化结果不再对应任何当前输入。
+        this.resetTriggerOptimizerResults();
+        this.resetBudgetOptimizerResults();
+        this.simulationSettings = {
+          ...this.simulationSettings,
+          ...result.simulationSettings,
+        };
+        this.normalizeRunScope();
+        this.normalizeDifficulty();
+        // 导入合并携带的 UI 级字段（含主站桥带回的迷宫升级等级）随之落盘
+        // （白名单口径同快照恢复分支），防止刷新后回落。
+        this.persistSimulationUiSettings();
+        // 导入完成后刷新资产分快照（单人）：失败降级 + 控制台告警，不阻断导入。
+        await this.refreshAssetScores([targetId]).catch((error) => {
+          console.warn('[assetScore] refresh failed (after solo import):', error);
+        });
+        return result;
+      });
+    },
+    // 资产分（Gear Score）重算：市场数据不可用且玩家已有快照时的保留语义——
+    // 快照仅在「仍与当前配置对应」时保留（导入携带语义的兜底：快照带 configSignature，
+    // 与当前配置签名一致，或旧格式快照无签名时向后兼容维持旧行为）；
+    // 签名不一致（导入后改配置 / 旧行情快照遇行情重置后改配置）则视为过时，
+    // 按当前配置 + 取价链重算（无行情时降级为 vendor/成本法口径，tooltip 来源标记可见）。
+    // 值未变化时不写回（App.vue 的资产分 watch 源只跟踪配置签名与行情引用、
+    // 不跟踪快照本身；等值守卫同时避免
+    // 无谓的引用替换与 UI 重渲染）。
+    async refreshAssetScores(playerIds = null) {
+      const targets = Array.isArray(playerIds) ? new Set(playerIds.map((id) => String(id))) : null;
+      // 候选 A（2026-10-03）：重计算链按需加载（首次经 loadAssetScoreModule 拉取，
+      // 此后命中缓存）；加载失败向上抛，调用方以 .catch 兜底为「本次不刷新」+
+      // console.warn 留痕（App.vue 与导出/导入调用点，统一 [assetScore] 前缀）。
+      const { computePlayerAssetScore, isPricingDataAvailableForAssetScore } = await loadAssetScoreModule();
+      const pricingReady = isPricingDataAvailableForAssetScore(this.pricing);
+      for (const player of this.players) {
+        if (targets && !targets.has(String(player.id))) {
+          continue;
+        }
+        // 保留分支前置短路：行情不可用且已有快照时，仅凭签名比对即可判定保留，
+        // 不必先全量 compute 再只为拿 computed.configSignature（该结果在保留时整体丢弃；
+        // 记忆化只覆盖装备成本，冷缓存与房屋/技能书/神龛估值每次现算）。
+        // 快照无签名（旧格式）时短路在前，不触发签名计算。
+        if (!pricingReady && player.assetScore) {
+          const snapshotSignature = String(player.assetScore?.configSignature || '');
+          // computePlayerAssetScore 写入的 configSignature 即 computeAssetScoreConfigSignature(player)
+          //（服务内同一函数、同一 player 归一化），此处直算签名与旧比对严格同值：
+          // 与快照签名一致（或快照无签名）才保留，否则视为过时走下方重算。
+          if (!snapshotSignature || snapshotSignature === computeAssetScoreConfigSignature(player)) {
+            continue;
+          }
+        }
+        const computed = computePlayerAssetScore(player, this.pricing);
+        if (computed === null) {
+          if (!assetScoreEquals(player.assetScore, null)) {
+            player.assetScore = null;
+          }
+          continue;
+        }
+        if (!assetScoreEquals(player.assetScore, computed)) {
+          player.assetScore = computed;
+        }
+      }
+    },
+    ...createPricingActions(),
+    ...createFoodOptimizerActions({ loadPlayerMapperModule }),
+    ...createTriggerOptimizerActions({ loadPlayerMapperModule }),
+    ...createBudgetOptimizerActions({ loadPlayerMapperModule }),
+    ...createAdvisorActions({
+      loadPlayerMapperModule,
+    }),
+    ...createSimulationActions({
+      loadPlayerMapperModule,
+      workerClient,
+    }),
+    ...createQueueActions({
+      ensureQueueMarketPriceSnapshot,
+      loadPlayerMapperModule,
+      workerClient,
+    }),
+  },
 });
