@@ -6880,7 +6880,8 @@ export const useSimulatorStore = defineStore("simulator", {
             const candidates = buildAdvisorCandidates(normalizedFilters);
             const metricPlayer = resolveAdvisorMetricPlayer(selectedPlayersSnapshot, this.activePlayerId);
 
-            this.advisor.filters = normalizedFilters;
+            // 刷圖推薦頁直接編輯 advisor.filters；存一份獨立副本，掃描中改設定才不會影響正在跑的 normalizedFilters
+            this.advisor.filters = normalizeAdvisorFilters(normalizedFilters);
             this.advisor.goalPreset = normalizedGoalPreset;
             this.advisor.customWeights = normalizedCustomWeights;
             this.advisor.quickRows = [];

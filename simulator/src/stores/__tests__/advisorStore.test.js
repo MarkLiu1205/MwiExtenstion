@@ -636,6 +636,43 @@ describe("advisor store", () => {
         expect(simulator.advisor.quickRows).toHaveLength(partialRowsBeforeStop);
     });
 
+    it("keeps filter edits made during a scan without leaking them into the running scan", async () => {
+        const { simulator, mockWorkerState } = createStoreWithMocks();
+        const smellyPlanet = "/actions/combat/smelly_planet";
+        simulator.advisor.filters = {
+            ...simulator.advisor.filters,
+            includeGroupZones: true,
+            includeSoloZones: false,
+            refineTopEnabled: false,
+            quickRounds: 2,
+            selectedZoneHrids: [smellyPlanet],
+        };
+        mockWorkerState.deferMultiCompletion = true;
+
+        const deferredRunPromise = mockWorkerState.waitForDeferredMultiRun();
+        const runPromise = simulator.runAdvisorScan();
+        const deferredRun = await deferredRunPromise;
+
+        // 刷圖推薦頁直接編輯 store 的 filters（模擬掃描中勾選區域、改輪數）
+        simulator.advisor.filters.quickRounds = 5;
+        simulator.advisor.filters.includeSoloZones = true;
+        simulator.advisor.filters.selectedZoneHrids.push("/actions/combat/swamp_planet");
+
+        mockWorkerState.deferMultiCompletion = false;
+        deferredRun.complete();
+        await runPromise;
+
+        // 正在跑的掃描維持開始時的設定
+        expect(mockWorkerState.multiCalls).toHaveLength(2);
+        for (const payload of mockWorkerState.multiCalls) {
+            expect(payload.zones.every((zone) => zone.zoneHrid === smellyPlanet)).toBe(true);
+        }
+        // 掃描結束後不會把使用者在掃描中改的勾選蓋回去
+        expect(simulator.advisor.filters.quickRounds).toBe(5);
+        expect(simulator.advisor.filters.includeSoloZones).toBe(true);
+        expect(simulator.advisor.filters.selectedZoneHrids).toEqual([smellyPlanet, "/actions/combat/swamp_planet"]);
+    });
+
     it("surfaces streaming callback failures as advisor errors", async () => {
         const { simulator, mockWorkerState } = createStoreWithMocks();
         simulator.advisor.filters = {

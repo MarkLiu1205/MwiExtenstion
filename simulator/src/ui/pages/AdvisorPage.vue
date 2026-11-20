@@ -124,15 +124,15 @@
           <div class="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
             <div class="grid gap-3 sm:grid-cols-2">
               <label class="flex items-center gap-2 rounded-xl border border-white/10 bg-slate-950/40 px-3 py-2 text-sm text-slate-200">
-                <input v-model="filterDraft.includeSoloZones" type="checkbox" class="accent-amber-300" />
+                <input v-model="filters.includeSoloZones" type="checkbox" class="accent-amber-300" />
                 <span>{{ t("common:advisor.includeSolo", "Solo zones") }}</span>
               </label>
               <label class="flex items-center gap-2 rounded-xl border border-white/10 bg-slate-950/40 px-3 py-2 text-sm text-slate-200">
-                <input v-model="filterDraft.includeGroupZones" type="checkbox" class="accent-amber-300" />
+                <input v-model="filters.includeGroupZones" type="checkbox" class="accent-amber-300" />
                 <span>{{ t("common:advisor.includeGroup", "Group zones") }}</span>
               </label>
               <label class="flex items-center gap-2 rounded-xl border border-white/10 bg-slate-950/40 px-3 py-2 text-sm text-slate-200">
-                <input v-model="filterDraft.refineTopEnabled" type="checkbox" class="accent-amber-300" />
+                <input v-model="filters.refineTopEnabled" type="checkbox" class="accent-amber-300" />
                 <span>{{ t("common:advisor.refineTop", "Refine Top 8") }}</span>
               </label>
             </div>
@@ -140,15 +140,15 @@
             <div class="grid gap-3 sm:grid-cols-2">
               <label class="block">
                 <span class="field-label">{{ t("common:advisor.refineCount", "Refine Count") }}</span>
-                <input v-model.number="filterDraft.refineTopCount" type="number" min="1" max="32" class="field-input" />
+                <input v-model.number="filters.refineTopCount" type="number" min="1" max="32" class="field-input" />
               </label>
               <label class="block">
                 <span class="field-label">{{ t("common:advisor.refineRounds", "Refine Rounds") }}</span>
-                <input v-model.number="filterDraft.refineRounds" type="number" min="1" max="30" class="field-input" />
+                <input v-model.number="filters.refineRounds" type="number" min="1" max="30" class="field-input" />
               </label>
               <label class="block">
                 <span class="field-label">{{ t("common:advisor.quickRounds", "Quick Rounds") }}</span>
-                <input v-model.number="filterDraft.quickRounds" type="number" min="1" max="10" class="field-input" />
+                <input v-model.number="filters.quickRounds" type="number" min="1" max="10" class="field-input" />
               </label>
               <div class="block sm:col-span-2">
                 <span class="field-label">{{ t("common:advisor.tierFilterLabel", "Difficulty tiers (checked = scanned)") }}</span>
@@ -457,65 +457,56 @@ const summaryWeightFields = computed(() => [
 const groupZoneHridSet = new Set(groupZoneHrids);
 const allZoneHrids = zoneOptions.map((zone) => String(zone.hrid || "")).filter(Boolean);
 
-const filterDraft = reactive({
-  includeSoloZones: false,
-  includeGroupZones: true,
-  refineTopEnabled: true,
-  refineTopCount: 8,
-  refineRounds: 20,
-  quickRounds: 3,
-  selectedDifficultyTiers: [0, 1, 2, 3, 4, 5],
-  selectedZoneHrids: [...allZoneHrids],
-});
+// 篩選條件直接讀寫 store（不留頁面內草稿）：切頁、套用到首頁、掃描結束都不會把勾選蓋回舊值
+const filters = computed(() => simulator.advisor.filters);
 
 const DIFFICULTY_TIER_OPTIONS = [0, 1, 2, 3, 4, 5];
 
+function toggleListValue(list, value) {
+  const index = list.indexOf(value);
+  if (index >= 0) {
+    list.splice(index, 1);
+  } else {
+    list.push(value);
+  }
+}
+
 function isTierSelected(tier) {
-  return filterDraft.selectedDifficultyTiers.includes(tier);
+  return filters.value.selectedDifficultyTiers.includes(tier);
 }
 
 function toggleTierSelection(tier) {
-  const index = filterDraft.selectedDifficultyTiers.indexOf(tier);
-  if (index >= 0) {
-    filterDraft.selectedDifficultyTiers.splice(index, 1);
-  } else {
-    filterDraft.selectedDifficultyTiers.push(tier);
-  }
+  toggleListValue(filters.value.selectedDifficultyTiers, tier);
 }
 
 // 只列出目前掃描範圍（單人/組隊勾選）內的區域，避免清單被用不到的區域塞滿
 const zoneFilterOptions = computed(() => zoneOptions
   .slice()
   .sort((a, b) => Number(a.sortIndex ?? 0) - Number(b.sortIndex ?? 0))
-  .filter((zone) => (groupZoneHridSet.has(zone.hrid) ? filterDraft.includeGroupZones : filterDraft.includeSoloZones))
+  .filter((zone) => (groupZoneHridSet.has(zone.hrid) ? filters.value.includeGroupZones : filters.value.includeSoloZones))
   .map((zone) => ({
     hrid: zone.hrid,
     label: getActionName(zone.hrid, zone.name),
     isGroup: groupZoneHridSet.has(zone.hrid),
   })));
 const selectedZoneCount = computed(() => (
-  zoneFilterOptions.value.filter((zone) => filterDraft.selectedZoneHrids.includes(zone.hrid)).length
+  zoneFilterOptions.value.filter((zone) => filters.value.selectedZoneHrids.includes(zone.hrid)).length
 ));
 
 function isZoneSelected(zoneHrid) {
-  return filterDraft.selectedZoneHrids.includes(zoneHrid);
+  return filters.value.selectedZoneHrids.includes(zoneHrid);
 }
 
 function toggleZoneSelection(zoneHrid) {
-  const index = filterDraft.selectedZoneHrids.indexOf(zoneHrid);
-  if (index >= 0) {
-    filterDraft.selectedZoneHrids.splice(index, 1);
-  } else {
-    filterDraft.selectedZoneHrids.push(zoneHrid);
-  }
+  toggleListValue(filters.value.selectedZoneHrids, zoneHrid);
 }
 
 function selectAllZones() {
-  filterDraft.selectedZoneHrids.splice(0, filterDraft.selectedZoneHrids.length, ...allZoneHrids);
+  filters.value.selectedZoneHrids = [...allZoneHrids];
 }
 
 function clearZoneSelection() {
-  filterDraft.selectedZoneHrids.splice(0, filterDraft.selectedZoneHrids.length);
+  filters.value.selectedZoneHrids = [];
 }
 
  const customWeightDraft = reactive({
@@ -539,30 +530,6 @@ function syncCustomWeightDraft(source) {
   const safetyValue = Number(safeSource.safety ?? customWeightDraft.safety ?? 0.1);
   customWeightDraft.safety = Number.isFinite(safetyValue) ? safetyValue : 0.1;
 }
-
-function syncFilterDraft(source) {
-  const safeSource = source || {};
-  filterDraft.includeSoloZones = Boolean(safeSource.includeSoloZones);
-  filterDraft.includeGroupZones = safeSource.includeGroupZones !== false;
-  filterDraft.refineTopEnabled = safeSource.refineTopEnabled !== false;
-  filterDraft.refineTopCount = Number(safeSource.refineTopCount ?? filterDraft.refineTopCount);
-  filterDraft.refineRounds = Number(safeSource.refineRounds ?? filterDraft.refineRounds);
-  filterDraft.quickRounds = Number(safeSource.quickRounds ?? filterDraft.quickRounds);
-  if (Array.isArray(safeSource.selectedDifficultyTiers)) {
-    filterDraft.selectedDifficultyTiers.splice(0, filterDraft.selectedDifficultyTiers.length, ...safeSource.selectedDifficultyTiers);
-  }
-  if (Array.isArray(safeSource.selectedZoneHrids)) {
-    filterDraft.selectedZoneHrids.splice(0, filterDraft.selectedZoneHrids.length, ...safeSource.selectedZoneHrids);
-  }
-}
-
- watch(
-   () => simulator.advisor.filters,
-   (value) => {
-     syncFilterDraft(value);
-   },
-  { deep: true, immediate: true }
-);
 
  watch(
    () => simulator.advisor.customWeights,
@@ -795,9 +762,7 @@ function setPreset(preset) {
 
  async function runAdvisor() {
    applyStatus.value = "";
-   simulator.advisor.filters = { ...filterDraft };
    await simulator.runAdvisorScan();
-   syncFilterDraft(simulator.advisor.filters);
    syncCustomWeightDraft(simulator.advisor.customWeights);
  }
 
