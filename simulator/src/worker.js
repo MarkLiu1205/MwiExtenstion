@@ -7,7 +7,8 @@ import { buildSimulationExtraBuffs } from "./shared/simulationExtraBuffs.js";
 onmessage = async function (event) {
     switch (event.data.type) {
         case "start_simulation":
-            let extraBuffs = buildSimulationExtraBuffs(event.data.extra);
+            // 卷軸在迷宮內無效
+            let extraBuffs = buildSimulationExtraBuffs(event.data.extra, { inLabyrinth: Boolean(event.data.labyrinth) });
 
             let playersData = event.data.players;
             let players = [];

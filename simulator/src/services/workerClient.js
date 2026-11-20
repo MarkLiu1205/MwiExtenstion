@@ -6,7 +6,7 @@
  * @property {{ zoneHrid: string, difficultyTier: number } | null} zone
  * @property {{ labyrinthHrid: string, roomLevel: number, crates: string[] } | null} labyrinth
  * @property {number} simulationTimeLimit
- * @property {{ mooPass: boolean, comExp: number, comDrop: number, enableHpMpVisualization: boolean }} extra
+ * @property {{ mooPass: boolean, comExp: number, comDrop: number, scrolls?: string[], enableHpMpVisualization: boolean }} extra
  */
 
 /**
@@ -16,7 +16,7 @@
  * @property {Array<{ zoneHrid: string, difficultyTier: number }>} zones
  * @property {number} [parallelWorkerLimit]
  * @property {number} simulationTimeLimit
- * @property {{ mooPass: boolean, comExp: number, comDrop: number, enableHpMpVisualization: boolean }} extra
+ * @property {{ mooPass: boolean, comExp: number, comDrop: number, scrolls?: string[], enableHpMpVisualization: boolean }} extra
  */
 
 /**
@@ -26,7 +26,7 @@
  * @property {Array<{ labyrinthHrid: string, roomLevel: number, crates: string[] }>} labyrinths
  * @property {number} [parallelWorkerLimit]
  * @property {number} simulationTimeLimit
- * @property {{ mooPass: boolean, comExp: number, comDrop: number, enableHpMpVisualization: boolean }} extra
+ * @property {{ mooPass: boolean, comExp: number, comDrop: number, scrolls?: string[], enableHpMpVisualization: boolean }} extra
  */
 
 export class WorkerClient {

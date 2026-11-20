@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { buildSimulationExtraBuffs } from "../simulationExtraBuffs.js";
+import { buildSimulationExtraBuffs, normalizeCombatScrollHrids } from "../simulationExtraBuffs.js";
 
 afterEach(() => {
     vi.resetModules();
@@ -47,6 +47,47 @@ describe("simulationExtraBuffs", () => {
             .reduce((sum, buff) => sum + Number(buff.flatBoost || 0), 0);
 
         expect(totalWisdomBoost).toBeCloseTo(0.345, 6);
+    });
+
+    it("builds combat scroll buffs from the official personal buff data as permanent buffs", () => {
+        const buffs = buildSimulationExtraBuffs({
+            scrolls: ["/personal_buff_types/wisdom", "/personal_buff_types/damage", "/personal_buff_types/attack_speed"],
+        });
+
+        expect(buffs).toHaveLength(3);
+        const byType = Object.fromEntries(buffs.map((buff) => [buff.typeHrid, buff]));
+        expect(byType["/buff_types/wisdom"]).toMatchObject({ uniqueHrid: "/buff_uniques/personal_wisdom", flatBoost: 0.2, ratioBoost: 0, duration: 0 });
+        expect(byType["/buff_types/damage"]).toMatchObject({ ratioBoost: 0.08, flatBoost: 0, duration: 0 });
+        expect(byType["/buff_types/attack_speed"]).toMatchObject({ ratioBoost: 0.15, flatBoost: 0, duration: 0 });
+    });
+
+    it("stacks the wisdom scroll on top of moo pass and community exp", () => {
+        const buffs = buildSimulationExtraBuffs({ mooPass: true, comExp: 20, scrolls: ["/personal_buff_types/wisdom"] });
+        const totalWisdomBoost = buffs
+            .filter((buff) => buff.typeHrid === "/buff_types/wisdom")
+            .reduce((sum, buff) => sum + Number(buff.flatBoost || 0), 0);
+
+        expect(totalWisdomBoost).toBeCloseTo(0.545, 6);
+    });
+
+    it("ignores scrolls that are not usable in combat, unknown or duplicated", () => {
+        expect(normalizeCombatScrollHrids([
+            "/personal_buff_types/efficiency",
+            "/personal_buff_types/not_a_scroll",
+            "/personal_buff_types/wisdom",
+            "/personal_buff_types/wisdom",
+            "/personal_buff_types/combat_drop",
+        ])).toEqual(["/personal_buff_types/combat_drop", "/personal_buff_types/wisdom"]);
+    });
+
+    it("drops scroll buffs inside the labyrinth but keeps other extra buffs", () => {
+        const buffs = buildSimulationExtraBuffs(
+            { mooPass: true, scrolls: ["/personal_buff_types/wisdom"] },
+            { inLabyrinth: true },
+        );
+
+        expect(buffs).toHaveLength(1);
+        expect(buffs[0].uniqueHrid).toBe("/buff_uniques/experience_moo_pass_buff");
     });
 
     it("falls back to the legacy formula when the community buff template is unavailable", async () => {

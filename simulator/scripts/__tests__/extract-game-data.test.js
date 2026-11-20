@@ -49,6 +49,11 @@ const BASE_CLIENT_DATA = {
             loot: [],
         },
     },
+    personalBuffTypeDetailMap: {
+        "/personal_buff_types/test": {
+            hrid: "/personal_buff_types/test",
+        },
+    },
     abilitySlotsLevelRequirementList: [
         {
             level: 1,
@@ -202,6 +207,7 @@ const EXPECTED_OUTPUT_FILES = [
     "itemLocationDetailMap.json",
     "labyrinthCrateDetailMap.json",
     "openableLootDropMap.json",
+    "personalBuffTypeDetailMap.json",
     "skillDetailMap.json",
 ].sort();
 

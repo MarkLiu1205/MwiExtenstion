@@ -1,6 +1,8 @@
 import communityBuffTypeDetailMap from "../combatsimulator/data/communityBuffTypeDetailMap.json";
+import personalBuffTypeDetailMap from "../combatsimulator/data/personalBuffTypeDetailMap.json";
 
 const DEFAULT_START_TIME = "0001-01-01T00:00:00Z";
+const COMBAT_ACTION_TYPE_HRID = "/action_types/combat";
 const COMMUNITY_EXPERIENCE_HRID = "/community_buff_types/experience";
 const COMMUNITY_COMBAT_DROP_HRID = "/community_buff_types/combat_drop_quantity";
 
@@ -101,17 +103,49 @@ function buildCommunityBuff(communityBuffHrid, level) {
     return buildBuffFromTemplate(resolveCommunityBuffTemplate(communityBuffHrid), level);
 }
 
+function resolveCombatScrollDetail(personalBuffTypeHrid) {
+    const detail = personalBuffTypeDetailMap?.[personalBuffTypeHrid];
+    if (detail?.usableInActionTypeMap?.[COMBAT_ACTION_TYPE_HRID] !== true || !hasBuffTemplateShape(detail.buff)) {
+        return null;
+    }
+    return detail;
+}
+
+// 只保留戰鬥可用的卷軸（個人加成類型 hrid），去重並依遊戲排序
+export function normalizeCombatScrollHrids(rawHrids) {
+    const source = Array.isArray(rawHrids) ? rawHrids : [];
+    const unique = Array.from(new Set(source.map((hrid) => String(hrid || ""))))
+        .filter((hrid) => resolveCombatScrollDetail(hrid));
+    return unique.sort((left, right) => (
+        toFiniteNumber(personalBuffTypeDetailMap[left]?.sortIndex, 0)
+        - toFiniteNumber(personalBuffTypeDetailMap[right]?.sortIndex, 0)
+    ));
+}
+
 export function normalizeSimulationExtra(extra = {}) {
     return {
         mooPass: Boolean(extra?.mooPass),
         comExp: toNonNegativeNumber(extra?.comExp),
         comDrop: toNonNegativeNumber(extra?.comDrop),
+        scrolls: normalizeCombatScrollHrids(extra?.scrolls),
     };
 }
 
-export function buildSimulationExtraBuffs(extra = {}) {
+/**
+ * @param {object} extra - mooPass / comExp / comDrop / scrolls（卷軸個人加成類型 hrid）
+ * @param {{ inLabyrinth?: boolean }} [options] - 卷軸在迷宮內無效，迷宮模擬不套用
+ */
+export function buildSimulationExtraBuffs(extra = {}, options = {}) {
     const normalizedExtra = normalizeSimulationExtra(extra);
     const extraBuffs = [];
+
+    if (!options?.inLabyrinth) {
+        for (const scrollHrid of normalizedExtra.scrolls) {
+            const scrollBuff = buildBuffFromTemplate(resolveCombatScrollDetail(scrollHrid).buff, 1);
+            // 遊戲裡一張卷軸 30 分鐘；模擬視為整段時間都有續開
+            extraBuffs.push({ ...scrollBuff, duration: 0 });
+        }
+    }
 
     if (normalizedExtra.mooPass) {
         extraBuffs.push(buildBuffFromTemplate(MOO_PASS_BUFF_TEMPLATE, 1));

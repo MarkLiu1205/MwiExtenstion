@@ -17,6 +17,7 @@ export const skillDetailIndex = skillDetailMap || {};
 export const itemCategoryDetailIndex = itemCategoryDetailMap || {};
 
 export const levelExperienceTable = Array.isArray(gameDataIndex?.levelExperienceTable) ? gameDataIndex.levelExperienceTable : [];
+export const combatScrollOptions = Array.isArray(gameDataIndex?.combatScrollOptions) ? gameDataIndex.combatScrollOptions : [];
 export const abilityBookInfoByAbilityHrid = gameDataIndex?.abilityBookInfoByAbilityHrid || {};
 
 export const equipmentOptionsBySlot = gameDataIndex?.equipmentBySlot || {};

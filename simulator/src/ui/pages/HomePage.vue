@@ -324,6 +324,28 @@
           </label>
         </div>
 
+        <div v-if="combatScrollChoices.length > 0" class="mb-4">
+          <p class="field-label">{{ t("common:vue.home.combatScrolls", "Scrolls") }}</p>
+          <div class="flex flex-wrap gap-2">
+            <label
+              v-for="scroll in combatScrollChoices"
+              :key="scroll.hrid"
+              class="badge flex items-center gap-2 text-sm"
+            >
+              <input
+                type="checkbox"
+                :checked="scroll.checked"
+                @change="simulator.setCombatScrollEnabled(scroll.hrid, $event.target.checked)"
+              />
+              {{ scroll.label }}
+              <span class="text-xs text-slate-400">{{ scroll.valueText }}</span>
+            </label>
+          </div>
+          <p class="mt-1 text-xs text-slate-400">
+            {{ t("common:vue.home.combatScrollsHint", "Treated as active for the whole simulation (30 minutes per scroll in game); no effect inside the Labyrinth.") }}
+          </p>
+        </div>
+
         <div class="flex flex-wrap gap-2" data-tm-import-anchor="simulator-home-actions">
           <button type="button" class="action-button-primary" :disabled="simulator.runtime.isRunning" @click="simulator.startSimulation()">
             {{ t("common:controls.startSimulation", "Start Simulation") }}
@@ -1133,6 +1155,7 @@ import combatStyleDetailMap from "../../combatsimulator/data/combatStyleDetailMa
 import damageTypeDetailMap from "../../combatsimulator/data/damageTypeDetailMap.json";
 import {
   abilityDetailIndex as abilityDetailMap,
+  combatScrollOptions,
   houseRoomDetailIndex as houseRoomDetailMap,
   itemDetailIndex as itemDetailMap,
 } from "../../shared/gameDataIndex.js";
@@ -1916,7 +1939,18 @@ const combatPreviewExtra = computed(() => ({
   mooPass: Boolean(simulator.simulationSettings.mooPass),
   comExp: simulator.simulationSettings.comExpEnabled ? Number(simulator.simulationSettings.comExp || 20) : 0,
   comDrop: simulator.simulationSettings.comDropEnabled ? Number(simulator.simulationSettings.comDrop || 20) : 0,
+  scrolls: simulator.simulationSettings.combatScrolls || [],
 }));
+// 戰鬥可用卷軸：顯示遊戲物品名稱與加成數值（damage/攻速是 ratio，其餘是 flat，都是百分比）
+const combatScrollChoices = computed(() => {
+  const enabled = new Set(simulator.simulationSettings.combatScrolls || []);
+  return combatScrollOptions.map((option) => ({
+    hrid: option.personalBuffTypeHrid,
+    label: getItemName(option.itemHrid),
+    valueText: `+${formatPercent(Number(option.buff?.ratioBoost || 0) + Number(option.buff?.flatBoost || 0), 0)}`,
+    checked: enabled.has(option.personalBuffTypeHrid),
+  }));
+});
 const combatPreviewContext = computed(() => {
   if (simulator.simulationSettings.mode === "labyrinth") {
     const labyrinthHrid = String(simulator.simulationSettings.labyrinthHrid || "");
@@ -2770,6 +2804,7 @@ async function runExperimentalBatch() {
           mooPass: Boolean(entry?.extra?.mooPass),
           comExp: Number(entry?.extra?.comExp || 0),
           comDrop: Number(entry?.extra?.comDrop || 0),
+          scrolls: Array.isArray(entry?.extra?.scrolls) ? entry.extra.scrolls : [],
           enableHpMpVisualization: Boolean(entry?.extra?.enableHpMpVisualization),
           dungeonStartWaveEnabled: Boolean(experimentalDungeonStartWaveEnabled.value),
           dungeonStartWave: Number(experimentalDungeonStartWave.value || 1),
@@ -3097,6 +3132,7 @@ watch(
     simulator.simulationSettings.comExp,
     simulator.simulationSettings.comDropEnabled,
     simulator.simulationSettings.comDrop,
+    (simulator.simulationSettings.combatScrolls || []).join("|"),
   ]),
   () => {
     simulator.persistSimulationUiSettings();

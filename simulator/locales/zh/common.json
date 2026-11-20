@@ -484,6 +484,8 @@
             "communityDrop": "社群掉落",
             "expLevel": "EXP 等級",
             "dropLevel": "掉落等級",
+            "combatScrolls": "卷軸",
+            "combatScrollsHint": "視為整段模擬時間都有開（遊戲內一張 30 分鐘）；迷宮內無效。",
             "levelShort": "Lv",
             "enhancement": "強化",
             "marketEnhancements": "市場強化",

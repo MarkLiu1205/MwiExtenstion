@@ -39,6 +39,7 @@ const DEFAULT_TRACKED_GAME_DATA_FILES = Object.freeze([
     "itemLocationDetailMap.json",
     "labyrinthCrateDetailMap.json",
     "openableLootDropMap.json",
+    "personalBuffTypeDetailMap.json",
     "skillDetailMap.json",
 ]);
 

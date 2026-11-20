@@ -369,6 +369,25 @@ describe("simulatorStore", () => {
         expect(simulator.simulationSettings.comDrop).toBe(18);
     });
 
+    it("persists enabled combat scrolls and drops scrolls unusable in combat", () => {
+        const simulator = useSimulatorStore();
+        expect(simulator.simulationSettings.combatScrolls).toEqual([]);
+
+        simulator.setCombatScrollEnabled("/personal_buff_types/wisdom", true);
+        simulator.setCombatScrollEnabled("/personal_buff_types/efficiency", true);
+        simulator.persistSimulationUiSettings();
+
+        const stored = JSON.parse(global.localStorage.getItem("mwi.simulation.ui.v1"));
+        expect(stored.combatScrolls).toEqual(["/personal_buff_types/wisdom"]);
+
+        setActivePinia(createPinia());
+        const reloaded = useSimulatorStore();
+        expect(reloaded.simulationSettings.combatScrolls).toEqual(["/personal_buff_types/wisdom"]);
+
+        reloaded.setCombatScrollEnabled("/personal_buff_types/wisdom", false);
+        expect(reloaded.simulationSettings.combatScrolls).toEqual([]);
+    });
+
     it("sorts food options by restore type and duration", () => {
         const simulator = useSimulatorStore();
 

@@ -346,6 +346,22 @@ describe("advisor store", () => {
         );
     });
 
+    it("sends the enabled combat scrolls to the simulation worker", async () => {
+        const { simulator, mockWorkerState } = createStoreWithMocks();
+        simulator.setCombatScrollEnabled("/personal_buff_types/wisdom", true);
+        simulator.advisor.filters = {
+            ...simulator.advisor.filters,
+            refineTopEnabled: false,
+            quickRounds: 1,
+            selectedZoneHrids: ["/actions/combat/smelly_planet"],
+        };
+
+        await simulator.runAdvisorScan();
+
+        expect(mockWorkerState.multiCalls).toHaveLength(1);
+        expect(mockWorkerState.multiCalls[0].extra.scrolls).toEqual(["/personal_buff_types/wisdom"]);
+    });
+
     it("uses the active player metrics instead of summing selected party members", async () => {
         const { simulator, mockWorkerState } = createStoreWithMocks();
         simulator.players[1].selected = true;

@@ -68,6 +68,7 @@ import {
     rankAdvisorRows,
 } from "../services/advisorScoring.js";
 import { resolveQueuePerformanceSubweights } from "../shared/queuePerformanceWeights.js";
+import { normalizeCombatScrollHrids } from "../shared/simulationExtraBuffs.js";
 
 const ONE_SECOND = 1e9;
 const ONE_HOUR = 60 * 60 * ONE_SECOND;
@@ -649,6 +650,7 @@ function buildSimulationExtra(simulationSettings) {
         mooPass: Boolean(simulationSettings.mooPass),
         comExp: simulationSettings.comExpEnabled ? Number(simulationSettings.comExp || 20) : 0,
         comDrop: simulationSettings.comDropEnabled ? Number(simulationSettings.comDrop || 20) : 0,
+        scrolls: normalizeCombatScrollHrids(simulationSettings.combatScrolls),
         enableHpMpVisualization: Boolean(simulationSettings.enableHpMpVisualization),
     };
 }
@@ -703,6 +705,8 @@ function normalizeSimulationUiSettings(rawSettings) {
         comExp: clamp(Math.floor(toFiniteNumber(source.comExp, 20)), 1, 99),
         comDropEnabled: Boolean(source.comDropEnabled),
         comDrop: clamp(Math.floor(toFiniteNumber(source.comDrop, 20)), 1, 99),
+        // 開啟中的戰鬥卷軸（個人加成類型 hrid）
+        combatScrolls: normalizeCombatScrollHrids(source.combatScrolls),
     };
 }
 
@@ -4606,6 +4610,7 @@ export const useSimulatorStore = defineStore("simulator", {
                 comExp: simulationUiSettings.comExp,
                 comDropEnabled: simulationUiSettings.comDropEnabled,
                 comDrop: simulationUiSettings.comDrop,
+                combatScrolls: simulationUiSettings.combatScrolls,
                 enableHpMpVisualization: true,
                 selectedGroupZoneHrids: initialGroupZoneHrids,
                 selectedSoloZoneHrids: initialSoloZoneHrids,
@@ -6784,6 +6789,15 @@ export const useSimulatorStore = defineStore("simulator", {
         persistSimulationUiSettings() {
             this.normalizeSimulationBuffLevels();
             persistSimulationUiSettingsToStorage(this.simulationSettings);
+        },
+        setCombatScrollEnabled(personalBuffTypeHrid, enabled) {
+            const current = new Set(this.simulationSettings.combatScrolls || []);
+            if (enabled) {
+                current.add(String(personalBuffTypeHrid || ""));
+            } else {
+                current.delete(String(personalBuffTypeHrid || ""));
+            }
+            this.simulationSettings.combatScrolls = normalizeCombatScrollHrids(Array.from(current));
         },
         normalizeRunScope() {
             const scope = this.simulationSettings.runScope;

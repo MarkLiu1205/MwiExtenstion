@@ -685,7 +685,7 @@ function normalizePreviewPlayer(player, previewExtra = null, previewEnvironment 
         ? cloneCombatPreviewBuffs(previewEnvironment.zoneBuffs)
         : cloneCombatPreviewBuffs(player.zoneBuffs);
     const existingExtraBuffs = Array.isArray(player.extraBuffs) ? player.extraBuffs : [];
-    const previewExtraBuffs = buildSimulationExtraBuffs(previewExtra);
+    const previewExtraBuffs = buildSimulationExtraBuffs(previewExtra, { inLabyrinth: Boolean(previewEnvironment?.inLabyrinth) });
     player.extraBuffs = [...existingExtraBuffs, ...previewExtraBuffs];
     player.generatePermanentBuffs();
     player.reset(0);
@@ -877,6 +877,7 @@ function buildCombatPreviewEnvironment(previewContext = null) {
             return {
                 zoneBuffs: cloneCombatPreviewBuffs(previewLabyrinth.buffs),
                 enemies: enemies.length > 0 ? enemies : fallbackEnemies,
+                inLabyrinth: true,
             };
         }
 

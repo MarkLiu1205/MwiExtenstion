@@ -17,6 +17,7 @@ const LABYRINTH_FOOD_CRATE_HRIDS = ["/items/basic_food_crate", "/items/advanced_
 const LABYRINTH_TEA_CRATE_HRIDS = ["/items/basic_tea_crate", "/items/advanced_tea_crate", "/items/expert_tea_crate"];
 const WEAPON_EQUIPMENT_TYPE_HRIDS = new Set(["/equipment_types/main_hand", "/equipment_types/two_hand"]);
 const ENHANCING_ACTION_TYPE_HRID = "/action_types/enhancing";
+const COMBAT_ACTION_TYPE_HRID = "/action_types/combat";
 const ENHANCEMENT_ACTION_BASE_SECONDS = 12;
 const NANOSECONDS_PER_SECOND = 1_000_000_000;
 const ENHANCEMENT_DRINK_BUFF_TYPE_HRIDS = new Set([
@@ -611,6 +612,30 @@ function createBuffSummary(buff) {
     };
 }
 
+// 戰鬥可用的卷軸（迷宮掉落、開啟後給個人加成）：物品 → 個人加成類型，供模擬器勾選與顯示數值
+function createCombatScrollOptions(itemDetailMap, personalBuffTypeDetailMap) {
+    return Object.values(itemDetailMap || {})
+        .map((item) => {
+            const personalBuffTypeHrid = String(item?.scrollDetail?.personalBuffTypeHrid || "");
+            const detail = personalBuffTypeDetailMap?.[personalBuffTypeHrid];
+            if (detail?.usableInActionTypeMap?.[COMBAT_ACTION_TYPE_HRID] !== true) {
+                return null;
+            }
+            const buff = createBuffSummary(detail.buff);
+            if (!buff) {
+                return null;
+            }
+            return {
+                itemHrid: String(item.hrid || ""),
+                personalBuffTypeHrid,
+                sortIndex: Number(detail.sortIndex ?? 0),
+                buff,
+            };
+        })
+        .filter((entry) => entry?.itemHrid)
+        .sort((left, right) => left.sortIndex - right.sortIndex || left.itemHrid.localeCompare(right.itemHrid));
+}
+
 function normalizeBuffs(buffs) {
     const source = Array.isArray(buffs) ? buffs : (buffs && typeof buffs === "object" ? [buffs] : []);
     return source.map(createBuffSummary).filter(Boolean);
@@ -948,6 +973,7 @@ async function main() {
         houseRoomDetailMap,
         itemDetailMap,
         openableLootDropMap,
+        personalBuffTypeDetailMap,
     ] = await Promise.all([
         readJsonFile("abilityDetailMap.json"),
         readJsonFile("achievementTierDetailMap.json"),
@@ -961,6 +987,7 @@ async function main() {
         readJsonFile("houseRoomDetailMap.json"),
         readJsonFile("itemDetailMap.json"),
         readJsonFile("openableLootDropMap.json"),
+        readJsonFile("personalBuffTypeDetailMap.json"),
     ]);
 
     const itemIndex = createItemIndex(itemDetailMap, equipmentTypeDetailMap);
@@ -996,6 +1023,7 @@ async function main() {
         ...monsterIndex,
         ...houseRoomIndex,
         levelExperienceTable: Array.isArray(levelExperienceTable) ? levelExperienceTable : [],
+        combatScrollOptions: createCombatScrollOptions(itemDetailMap, personalBuffTypeDetailMap),
         enhancementData,
         skillingData,
     };

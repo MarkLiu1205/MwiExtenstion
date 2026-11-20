@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generatedAt": "2026-07-16T04:55:25.440Z",
+    "generatedAt": "2026-11-20T02:35:13.129Z",
     "levelKeys": [
       "stamina",
       "intelligence",
@@ -63930,6 +63930,99 @@
     84860719814,
     92125192822,
     100000000000
+  ],
+  "combatScrollOptions": [
+    {
+      "itemHrid": "/items/seal_of_combat_drop",
+      "personalBuffTypeHrid": "/personal_buff_types/combat_drop",
+      "sortIndex": 6,
+      "buff": {
+        "uniqueHrid": "/buff_uniques/personal_combat_drop",
+        "typeHrid": "/buff_types/combat_drop_quantity",
+        "ratioBoost": 0,
+        "ratioBoostLevelBonus": 0,
+        "flatBoost": 0.15,
+        "flatBoostLevelBonus": 0
+      }
+    },
+    {
+      "itemHrid": "/items/seal_of_attack_speed",
+      "personalBuffTypeHrid": "/personal_buff_types/attack_speed",
+      "sortIndex": 7,
+      "buff": {
+        "uniqueHrid": "/buff_uniques/personal_attack_speed",
+        "typeHrid": "/buff_types/attack_speed",
+        "ratioBoost": 0.15,
+        "ratioBoostLevelBonus": 0,
+        "flatBoost": 0,
+        "flatBoostLevelBonus": 0
+      }
+    },
+    {
+      "itemHrid": "/items/seal_of_cast_speed",
+      "personalBuffTypeHrid": "/personal_buff_types/cast_speed",
+      "sortIndex": 8,
+      "buff": {
+        "uniqueHrid": "/buff_uniques/personal_cast_speed",
+        "typeHrid": "/buff_types/cast_speed",
+        "ratioBoost": 0,
+        "ratioBoostLevelBonus": 0,
+        "flatBoost": 0.15,
+        "flatBoostLevelBonus": 0
+      }
+    },
+    {
+      "itemHrid": "/items/seal_of_damage",
+      "personalBuffTypeHrid": "/personal_buff_types/damage",
+      "sortIndex": 9,
+      "buff": {
+        "uniqueHrid": "/buff_uniques/personal_damage",
+        "typeHrid": "/buff_types/damage",
+        "ratioBoost": 0.08,
+        "ratioBoostLevelBonus": 0,
+        "flatBoost": 0,
+        "flatBoostLevelBonus": 0
+      }
+    },
+    {
+      "itemHrid": "/items/seal_of_critical_rate",
+      "personalBuffTypeHrid": "/personal_buff_types/critical_rate",
+      "sortIndex": 10,
+      "buff": {
+        "uniqueHrid": "/buff_uniques/personal_critical_rate",
+        "typeHrid": "/buff_types/critical_rate",
+        "ratioBoost": 0,
+        "ratioBoostLevelBonus": 0,
+        "flatBoost": 0.1,
+        "flatBoostLevelBonus": 0
+      }
+    },
+    {
+      "itemHrid": "/items/seal_of_wisdom",
+      "personalBuffTypeHrid": "/personal_buff_types/wisdom",
+      "sortIndex": 11,
+      "buff": {
+        "uniqueHrid": "/buff_uniques/personal_wisdom",
+        "typeHrid": "/buff_types/wisdom",
+        "ratioBoost": 0,
+        "ratioBoostLevelBonus": 0,
+        "flatBoost": 0.2,
+        "flatBoostLevelBonus": 0
+      }
+    },
+    {
+      "itemHrid": "/items/seal_of_rare_find",
+      "personalBuffTypeHrid": "/personal_buff_types/rare_find",
+      "sortIndex": 12,
+      "buff": {
+        "uniqueHrid": "/buff_uniques/personal_rare_find",
+        "typeHrid": "/buff_types/rare_find",
+        "ratioBoost": 0,
+        "ratioBoostLevelBonus": 0,
+        "flatBoost": 0.6,
+        "flatBoostLevelBonus": 0
+      }
+    }
   ],
   "enhancementData": {
     "successRates": [

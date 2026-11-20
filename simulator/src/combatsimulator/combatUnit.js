@@ -399,7 +399,8 @@ class CombatUnit {
             this.permanentBuffs[buff.typeHrid].flatBoost += buff.flatBoost;
             this.permanentBuffs[buff.typeHrid].ratioBoost += buff.ratioBoost;
         } else {
-            this.permanentBuffs[buff.typeHrid] = buff;
+            // 存副本：同類加成之後會用 += 疊上來，直接存原物件會改到隊友共用的 extraBuffs / zoneBuffs
+            this.permanentBuffs[buff.typeHrid] = { ...buff };
         }
     }
 

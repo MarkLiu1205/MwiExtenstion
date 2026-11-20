@@ -39,6 +39,7 @@
 - `itemLocationDetailMap.json`
 - `labyrinthCrateDetailMap.json`
 - `openableLootDropMap.json`
+- `personalBuffTypeDetailMap.json`（卷轴个人加成；战斗模拟的卷轴选项使用）
 
 如果某个已维护文件对应的 key 当前不在 `init_client_data` 载荷里，脚本会跳过该文件并输出提示，不会因为单个缺失字段而整体失败。
 

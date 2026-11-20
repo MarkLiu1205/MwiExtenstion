@@ -485,6 +485,8 @@
             "communityDrop": "Community Drop",
             "expLevel": "EXP Level",
             "dropLevel": "Drop Level",
+            "combatScrolls": "Scrolls",
+            "combatScrollsHint": "Treated as active for the whole simulation (30 minutes per scroll in game); no effect inside the Labyrinth.",
             "levelShort": "Lv",
             "enhancement": "Enhancement",
             "marketEnhancements": "Market Enhancements",
